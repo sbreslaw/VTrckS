@@ -3,10 +3,12 @@
     <f:content>
       <Label text="{i18n>salesOrg}" />
       <Text text="{SalesOrganization}" />
+      <Label text="{i18n>distributionChannel}" />
+      <Text text="{DistributionChannel}" />
+      <Label text="{i18n>division}" />
+      <Text text="{OrganizationDivision}" />
       <Label text="{i18n>salesOffice}" />
       <Text text="{SalesOffice}" />
-      <Label text="{i18n>salesGroup}" />
-      <Text text="{SalesGroup}" />
     </f:content>
   </f:SimpleForm>
 </core:FragmentDefinition>

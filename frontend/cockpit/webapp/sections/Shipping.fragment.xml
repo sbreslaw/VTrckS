@@ -3,10 +3,12 @@
     <f:content>
       <Label text="{i18n>shipTo}" />
       <Text text="{ShipToParty}" />
+      <Label text="{i18n>customerReference}" />
+      <Text text="{CustomerPurchaseOrderNumber}" />
       <Label text="{i18n>shippingCondition}" />
       <Text text="{ShippingCondition}" />
       <Label text="{i18n>deliveryStatus}" />
-      <Text text="{DeliveryStatus}" />
+      <Text text="{OverallDeliveryStatus}" />
     </f:content>
   </f:SimpleForm>
 </core:FragmentDefinition>

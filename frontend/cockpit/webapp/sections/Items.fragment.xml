@@ -1,28 +1,26 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <Table items="{path: '_Item'}" growing="true" growingThreshold="20">
+  <Table items="{path: 'to_Item'}" growing="true" growingThreshold="20">
     <columns>
-      <Column><Text text="{i18n>itemNdc}" /></Column>
+      <Column><Text text="{i18n>itemMaterial}" /></Column>
       <Column><Text text="{i18n>itemDescription}" /></Column>
-      <Column><Text text="{i18n>itemBrand}" /></Column>
+      <Column><Text text="{i18n>itemCategory}" /></Column>
       <Column hAlign="End"><Text text="{i18n>itemQty}" /></Column>
       <Column><Text text="{i18n>itemUom}" /></Column>
-      <Column><Text text="{i18n>itemFundType}" /></Column>
-      <Column><Text text="{i18n>itemIntention}" /></Column>
-      <Column><Text text="{i18n>itemStatus}" /></Column>
-      <Column hAlign="End"><Text text="{i18n>itemNetValue}" /></Column>
+      <Column visible="{view>/showFundTypeColumn}"><Text text="{i18n>itemFundType}" /></Column>
+      <Column visible="{view>/showOrderIntentionColumn}"><Text text="{i18n>itemIntention}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>itemNetAmount}" /></Column>
     </columns>
     <items>
       <ColumnListItem>
         <cells>
-          <Text text="{Product}" />
-          <Text text="{ProductDescription}" />
-          <Text text="{Brand}" />
-          <ObjectNumber number="{Quantity}" />
-          <Text text="{BaseUnit}" />
-          <Text text="{FundType}" />
-          <Text text="{OrderIntention}" />
-          <Text text="{ItemStatus}" />
-          <ObjectNumber number="{NetValue}" unit="USD" />
+          <Text text="{Material}" />
+          <Text text="{SalesOrderItemText}" />
+          <Text text="{SalesDocumentItemCategory}" />
+          <ObjectNumber number="{RequestedQuantity}" />
+          <Text text="{RequestedQuantityUnit}" />
+          <Text text="{ZZ1_FUNDTYPE_SDI}" visible="{view>/showFundTypeColumn}" />
+          <Text text="{ZZ1_ORDERINTENTION_SDI}" visible="{view>/showOrderIntentionColumn}" />
+          <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" />
         </cells>
       </ColumnListItem>
     </items>

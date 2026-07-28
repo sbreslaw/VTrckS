@@ -81,6 +81,7 @@ Frontend agents: work in `frontend/`; the app runs against the dev-system servic
 ### Current Implementation Status (2026-07-28)
 
 - `frontend/cockpit` scaffold created for MVP-1 prototype: FCL shell, master/detail routing, section factory, and section fragments.
+- Prototype temporarily re-pointed to standard `C_SALESORDERMANAGE` V4 service shape through a centralized schema module; metadata verification is still pending (see `NOTES.md`).
 - `backend/` RAP package and `frontend/listreport/` FE app are not yet implemented in this repository.
 
 ---

@@ -8,7 +8,7 @@
     "description": "{{appDescription}}",
     "dataSources": {
       "mainService": {
-        "uri": "/sap/opu/odata4/sap/zui_vaccinerequest_o4/srvd/sap/zui_vaccinerequest/0001/",
+        "uri": "/sap/opu/odata4/sap/c_salesordermanage_sd/srvd/sap/c_salesordermanage/0001/",
         "type": "OData",
         "settings": {
           "odataVersion": "4.0"
@@ -64,7 +64,9 @@
           "data": {
             "masterCount": 0,
             "masterHasSearch": false,
-            "masterBusy": false
+            "masterBusy": false,
+            "showFundTypeColumn": false,
+            "showOrderIntentionColumn": false
           }
         }
       }
@@ -89,7 +91,7 @@
         },
         {
           "name": "detail",
-          "pattern": "detail/{vaccineRequestId}",
+          "pattern": "detail/{orderId}/{isActiveEntity}",
           "layout": "TwoColumnsMidExpanded",
           "target": [
             "master",

@@ -8,16 +8,16 @@
     <f:title>
       <f:DynamicPageTitle>
         <f:heading>
-          <Title text="{= ${VaccineRequestID} ? ${i18n>detailTitlePrefix} + ' ' + ${VaccineRequestID} : ${i18n>detailTitle}}" />
+          <Title text="{parts: [{path: '.'}, {path: 'i18n>detailTitlePrefix'}, {path: 'i18n>detailTitle'}], formatter: '.formatter.detailTitle'}" />
         </f:heading>
         <f:expandedContent>
           <HBox renderType="Bare" justifyContent="SpaceBetween" width="100%">
             <items>
               <HBox renderType="Bare" wrap="Wrap" width="80%">
                 <items>
-                  <ObjectStatus text="{path: 'UserStatus', formatter: '.formatter.statusText'}" state="{path: 'UserStatus', formatter: '.formatter.statusState'}" class="sapUiTinyMarginEnd" />
-                  <Text text="{= ${i18n>createdOnBy} + ': ' + ${CreatedOn} + ' / ' + ${CreatedBy}}" class="sapUiTinyMarginEnd" />
-                  <ObjectNumber number="{NetValue}" unit="USD" />
+                  <ObjectStatus text="{path: '.', formatter: '.formatter.detailStatusText'}" state="{path: '.', formatter: '.formatter.detailStatusState'}" class="sapUiTinyMarginEnd" />
+                  <Text text="{parts: [{path: '.'}, {path: 'i18n>createdOnBy'}], formatter: '.formatter.detailCreatedOnBy'}" class="sapUiTinyMarginEnd" />
+                  <ObjectNumber number="{path: '.', formatter: '.formatter.detailNetValue'}" unit="{path: '.', formatter: '.formatter.detailCurrency'}" />
                 </items>
               </HBox>
               <OverflowToolbar>

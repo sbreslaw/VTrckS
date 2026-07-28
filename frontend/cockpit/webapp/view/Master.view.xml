@@ -37,15 +37,7 @@
             </fb:FilterGroupItem>
             <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="default" visibleInFilterBar="true">
               <fb:control>
-                <MultiComboBox id="filterStatus">
-                  <core:Item key="1A" text="1A" />
-                  <core:Item key="1B" text="1B" />
-                  <core:Item key="1C" text="1C" />
-                  <core:Item key="1D" text="1D" />
-                  <core:Item key="1E" text="1E" />
-                  <core:Item key="1F" text="1F" />
-                  <core:Item key="1G" text="1G" />
-                </MultiComboBox>
+                <MultiComboBox id="filterStatus" />
               </fb:control>
             </fb:FilterGroupItem>
             <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="default" visibleInFilterBar="true">
@@ -78,8 +70,7 @@
         inset="false"
         growing="true"
         growingThreshold="50"
-        updateFinished=".onUpdateFinished"
-        items="{path: '/VaccineRequest'}">
+        updateFinished=".onUpdateFinished">
         <headerToolbar>
           <Toolbar>
             <Title text="{= ${view>/masterCount} + ' ' + ${i18n>resultsLabel}}" level="H3" />
@@ -93,18 +84,6 @@
           <Column><Text text="{i18n>colCreatedBy}" /></Column>
           <Column hAlign="End"><Text text="{i18n>colNetValue}" /></Column>
         </columns>
-        <items>
-          <ColumnListItem type="Navigation" press=".onRowPress">
-            <cells>
-              <Text text="{VaccineRequestID}" />
-              <Text text="{= ${ProviderID} + ' - ' + ${ProviderName}}" />
-              <ObjectStatus text="{path: 'UserStatus', formatter: '.formatter.statusText'}" state="{path: 'UserStatus', formatter: '.formatter.statusState'}" />
-              <Text text="{CreatedOn}" />
-              <Text text="{CreatedBy}" />
-              <ObjectNumber number="{NetValue}" unit="USD" />
-            </cells>
-          </ColumnListItem>
-        </items>
       </Table>
     </f:content>
   </f:DynamicPage>

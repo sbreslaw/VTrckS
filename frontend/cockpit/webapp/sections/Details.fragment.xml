@@ -3,27 +3,31 @@
     <f:content>
       <Title text="{i18n>detailsGeneral}" />
       <Label text="{i18n>providerId}" />
-      <Text text="{ProviderID}" />
+      <Text text="{SoldToParty}" />
       <Label text="{i18n>providerName}" />
-      <Text text="{ProviderName}" />
+      <Text text="{SoldToPartyName}" />
       <Label text="{i18n>orderType}" />
-      <Text text="{OrderType}" />
+      <Text text="{SalesOrderType}" />
 
       <Title text="{i18n>detailsPartners}" />
       <Label text="{i18n>contact}" />
-      <Text text="{ContactID}" />
+      <Text text="{SoldToPartyContactPerson}" />
       <Label text="{i18n>email}" />
-      <Text text="{ContactEmail}" />
+      <Text text="{SoldToPartyContactEmailAddress}" />
       <Label text="{i18n>phone}" />
-      <Text text="{ContactPhone}" />
+      <Text text="{SoldToPartyContactPhoneNumber}" />
 
       <Title text="{i18n>detailsValues}" />
       <Label text="{i18n>netValue}" />
-      <ObjectNumber number="{NetValue}" unit="USD" />
+      <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" />
       <Label text="{i18n>taxAmount}" />
-      <ObjectNumber number="{TaxAmount}" unit="USD" />
+      <ObjectNumber number="{TotalTaxAmount}" unit="{TransactionCurrency}" />
       <Label text="{i18n>grossValue}" />
-      <ObjectNumber number="{GrossValue}" unit="USD" />
+      <ObjectNumber number="{TotalGrossAmount}" unit="{TransactionCurrency}" />
+
+      <Title text="{i18n>customFields}" />
+      <Label text="{i18n>customFieldsDiscovered}" />
+      <Text text="{i18n>metadataPendingCustomFields}" />
     </f:content>
   </f:SimpleForm>
 </core:FragmentDefinition>

@@ -2,8 +2,9 @@ sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/m/MessageToast",
   "cdc/vaccreq/sections/SectionFactory",
-  "cdc/vaccreq/model/formatter"
-], function (Controller, MessageToast, SectionFactory, formatter) {
+  "cdc/vaccreq/model/formatter",
+  "cdc/vaccreq/model/ServiceSchema"
+], function (Controller, MessageToast, SectionFactory, formatter, ServiceSchema) {
   "use strict";
 
   return Controller.extend("cdc.vaccreq.controller.Detail", {
@@ -48,12 +49,14 @@ sap.ui.define([
     },
 
     _onObjectMatched: function (oEvent) {
-      var sId = decodeURIComponent(oEvent.getParameter("arguments").vaccineRequestId || "");
+      var oArgs = oEvent.getParameter("arguments") || {};
+      var sId = decodeURIComponent(oArgs.orderId || "");
+      var bIsActive = oArgs.isActiveEntity !== "false";
       if (!sId) {
         return;
       }
       this.getView().bindElement({
-        path: "/VaccineRequest(VaccineRequestID='" + sId + "')"
+        path: ServiceSchema.buildHeaderPath(sId, bIsActive)
       });
       this._oSectionFactory.rebind();
     },
