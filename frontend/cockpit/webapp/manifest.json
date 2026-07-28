@@ -91,7 +91,7 @@
         },
         {
           "name": "detail",
-          "pattern": "detail/{orderId}/{isActiveEntity}",
+          "pattern": "detail/{orderId}",
           "layout": "TwoColumnsMidExpanded",
           "target": [
             "master",

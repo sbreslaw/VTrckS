@@ -51,12 +51,11 @@ sap.ui.define([
     _onObjectMatched: function (oEvent) {
       var oArgs = oEvent.getParameter("arguments") || {};
       var sId = decodeURIComponent(oArgs.orderId || "");
-      var bIsActive = oArgs.isActiveEntity !== "false";
       if (!sId) {
         return;
       }
       this.getView().bindElement({
-        path: ServiceSchema.buildHeaderPath(sId, bIsActive)
+        path: ServiceSchema.buildHeaderPath(sId)
       });
       this._oSectionFactory.rebind();
     },

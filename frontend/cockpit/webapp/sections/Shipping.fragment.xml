@@ -2,9 +2,9 @@
   <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
     <f:content>
       <Label text="{i18n>shipTo}" />
-      <Text text="{ShipToParty}" />
+      <Text text="{_ShipToParty/Partner}" />
       <Label text="{i18n>customerReference}" />
-      <Text text="{CustomerPurchaseOrderNumber}" />
+      <Text text="{PurchaseOrderByCustomer}" />
       <Label text="{i18n>shippingCondition}" />
       <Text text="{ShippingCondition}" />
       <Label text="{i18n>deliveryStatus}" />

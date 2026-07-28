@@ -4,28 +4,36 @@
 
 ### Metadata Discovery (Step 0)
 
-- Attempted metadata fetch endpoint:
-  - https://TODO-VERIFY-S4-HOST/sap/opu/odata4/sap/c_salesordermanage_sd/srvd/sap/c_salesordermanage/0001/$metadata
-- Result: host resolution failed (`TODO-VERIFY-S4-HOST` placeholder), so live metadata could not be retrieved from this workspace session.
+- Metadata source used: `design/so.xml` (local service metadata snapshot).
+
+### Confirmed service facts from so.xml
+
+- Service root URL: `/sap/opu/odata4/sap/c_salesordermanage_sd/srvd/sap/c_salesordermanage/0001/`
+- Header entity set: `SalesOrderManage` (EntityType `SalesOrderManageType`)
+- Item entity set: `SalesOrderItem` (EntityType `SalesOrderItemType`)
+- Header key: `SalesOrder` only (no `IsActiveEntity` key in metadata)
+- Header -> item navigation: `_Item`
+- Header -> partner navigation: `_Partner` (to `HeaderPartner`)
+- Header -> ship-to navigation: `_ShipToParty` (to `HeaderShipToParty`)
+- Header -> contact navigation: `_SoldToPartyContactInfo` (to `StandardPartnerContactInfo`)
+- Status value list set: `OverallSDProcessStatus` with text `OverallSDProcessStatus_Text`
 
 ### Provisional schema values (all TODO-VERIFY)
 
-- Service root: `/sap/opu/odata4/sap/c_salesordermanage_sd/srvd/sap/c_salesordermanage/0001/`
-- Header entity set: `SalesOrderManage`
-- Item entity set: `SalesOrderItemManage`
-- Header key: `SalesOrder`
-- Draft key: `IsActiveEntity`
-- Header -> item navigation: `to_Item`
+- Remaining TODO: E008 order-type allow-list currently keeps placeholder `ZVR1` until backend confirms full set.
 
 ### Draft and scope behavior implemented
 
-- Fixed list filter for active entities: `IsActiveEntity eq true`
 - Fixed list filter for order type allow-list: `SalesOrderType in [ZVR1]` (placeholder)
+- `IsActiveEntity` fixed filter was removed because the key/property is not present in `so.xml` metadata.
 
 ### Custom fields
 
-- `ZZ1_*` custom fields could not be confirmed from metadata in this session.
-- UI currently keeps Fund Type / Order Intention item columns hidden by default and labels custom header block as metadata pending.
+- `ZZ1_*` fields found on item entity:
+  - `ZZ1_SKIPADDANC_SDI`
+  - `ZZ1_OptOutAncillary_SDI`
+  - `ZZ1_SKIPANC`
+- No `ZZ1_*` fields found on `SalesOrderManageType` header entity in this metadata file.
 
 ### Validation-session warning
 

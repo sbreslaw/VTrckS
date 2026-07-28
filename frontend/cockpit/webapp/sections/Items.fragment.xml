@@ -1,5 +1,5 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <Table items="{path: 'to_Item'}" growing="true" growingThreshold="20">
+  <Table items="{path: '_Item'}" growing="true" growingThreshold="20">
     <columns>
       <Column><Text text="{i18n>itemMaterial}" /></Column>
       <Column><Text text="{i18n>itemDescription}" /></Column>
@@ -13,13 +13,13 @@
     <items>
       <ColumnListItem>
         <cells>
-          <Text text="{Material}" />
+          <Text text="{Product}" />
           <Text text="{SalesOrderItemText}" />
-          <Text text="{SalesDocumentItemCategory}" />
+          <Text text="{SalesOrderItemCategory}" />
           <ObjectNumber number="{RequestedQuantity}" />
           <Text text="{RequestedQuantityUnit}" />
-          <Text text="{ZZ1_FUNDTYPE_SDI}" visible="{view>/showFundTypeColumn}" />
-          <Text text="{ZZ1_ORDERINTENTION_SDI}" visible="{view>/showOrderIntentionColumn}" />
+          <Text text="{ZZ1_SKIPADDANC_SDI}" visible="{view>/showFundTypeColumn}" />
+          <Text text="{ZZ1_OptOutAncillary_SDI}" visible="{view>/showOrderIntentionColumn}" />
           <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" />
         </cells>
       </ColumnListItem>

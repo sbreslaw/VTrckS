@@ -41,7 +41,7 @@ sap.ui.define([
       var aStatusKeys = oView.byId("filterStatus").getSelectedKeys();
       if (aStatusKeys.length) {
         var aStatusFilters = aStatusKeys.map(function (sKey) {
-          return new Filter(ServiceSchema.headerProperties.status, FilterOperator.EQ, sKey);
+          return new Filter(ServiceSchema.statusProperties.code, FilterOperator.EQ, sKey);
         });
         aFilters.push(new Filter({
           filters: aStatusFilters,
@@ -73,10 +73,8 @@ sap.ui.define([
         return;
       }
       var sId = oCtx.getProperty(ServiceSchema.keys.orderId);
-      var bIsActive = oCtx.getProperty(ServiceSchema.keys.isActive);
       this._oRouter.navTo("detail", {
-        orderId: encodeURIComponent(sId),
-        isActiveEntity: bIsActive !== false ? "true" : "false"
+        orderId: encodeURIComponent(sId)
       });
     },
 
@@ -107,8 +105,12 @@ sap.ui.define([
     _populateStatusCodes: function () {
       var oStatus = this.byId("filterStatus");
       oStatus.removeAllItems();
-      ServiceSchema.masterStatusCodes.forEach(function (sCode) {
-        oStatus.addItem(new Item({ key: sCode, text: sCode }));
+      oStatus.bindItems({
+        path: "/" + ServiceSchema.entitySets.status,
+        template: new Item({
+          key: "{" + ServiceSchema.statusProperties.code + "}",
+          text: "{" + ServiceSchema.statusProperties.text + "}"
+        })
       });
     },
 
@@ -117,9 +119,7 @@ sap.ui.define([
         return new Filter(ServiceSchema.headerProperties.salesOrderType, FilterOperator.EQ, sType);
       });
 
-      var aFixed = [
-        new Filter(ServiceSchema.keys.isActive, FilterOperator.EQ, true)
-      ];
+      var aFixed = [];
 
       if (aTypeFilters.length) {
         aFixed.push(new Filter({ filters: aTypeFilters, and: false }));

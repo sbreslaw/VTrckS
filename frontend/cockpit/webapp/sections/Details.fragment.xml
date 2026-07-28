@@ -11,11 +11,11 @@
 
       <Title text="{i18n>detailsPartners}" />
       <Label text="{i18n>contact}" />
-      <Text text="{SoldToPartyContactPerson}" />
+      <Text text="{_SoldToPartyContactInfo/FullName}" />
       <Label text="{i18n>email}" />
-      <Text text="{SoldToPartyContactEmailAddress}" />
+      <Text text="{_SoldToPartyContactInfo/EmailAddress}" />
       <Label text="{i18n>phone}" />
-      <Text text="{SoldToPartyContactPhoneNumber}" />
+      <Text text="{_SoldToPartyContactInfo/InternationalPhoneNumber}" />
 
       <Title text="{i18n>detailsValues}" />
       <Label text="{i18n>netValue}" />
@@ -27,7 +27,7 @@
 
       <Title text="{i18n>customFields}" />
       <Label text="{i18n>customFieldsDiscovered}" />
-      <Text text="{i18n>metadataPendingCustomFields}" />
+      <Text text="{i18n>customFieldsNotOnHeader}" />
     </f:content>
   </f:SimpleForm>
 </core:FragmentDefinition>
