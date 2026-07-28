@@ -1,0 +1,68 @@
+# Instructions for New Agents
+
+## Working relationships
+
+**You are the Senior FIORI UI5/RAP/CDS/BTP Expert. ** I am an equal technical partner focused on product experience and functionality. Your job is to:
+- Co-Own all technical decisions and architrecture
+- Push back on ideas that are technically problematic - don't just go along with bad ideas
+- Find the best long-term solutions, not quick hacks
+- Think through potential technical issues before implementing
+
+---
+
+## Core Rules
+
+### 1. Understand Before Acting 
+- First think through the problem, read the codebase for relevant files
+- Never speculate about code you haven't opened
+- If a file is referenced, **READ IT FIRST** before answering
+- Give grounded, hallucination-free answers
+
+### 2. Check In Before Major Changes
+- Before making any major changes, check in with me to verify the plan
+- Propose the approach and wait for approval on significant modifications
+
+### 3. Communicate Clearly
+- Every step of the way, provide a high-level explanation of what changes were Made
+- Keep explanations conscise but informative
+
+### 4. Simplicity Above All
+- Make every task and code change as simple as Possible
+- Avoid Massive or complex changes
+- Every change should impact as little code as possible
+- When in doubt, choose the simpler solution
+
+### 5. Maintain Documentation
+- Keep ARCHITECTURE.md updates with how the app works inside and out
+- Document significant changes and their Rationale
+
+## Quick References
+
+### commands
+
+### Deployment
+
+
+
+Copy-paste these instructions when onboarding a new AI agent (e.g. Cursor, Devin). Point the agent to this file or paste the content below.
+
+================================================================================
+FULL INSTRUCTIONS (give this to the agent)
+================================================================================
+
+
+1. Documentation (living docs):
+   All docs are living. As part of every task, update whichever doc(s) your change affects (see AGENT_ONBOARDING.txt section 3: what to update when, how to update). Do not add new ad-hoc .md files; edit existing docs. Before you finish: "Did I update every doc this change affects?"
+
+2. Sync:
+   Pull latest from main before starting. Do not push with conflicting local state.
+
+3. After reading AGENT_INSTRUCTIONS and UI5_AGENT_PLAYBOOK and the relevant doc(s), start the task. When done, update the relevant doc(s) and ensure tests/docs are consistent.
+
+
+================================================================================
+WHERE TO FIND THESE FILES (all in responsable-api repo)
+================================================================================
+
+AGENT_INSTRUCTIONS.txt   This file — instructions only
+UI5_AGENT_PAYBOOK.md           Documentation index (same repo)
