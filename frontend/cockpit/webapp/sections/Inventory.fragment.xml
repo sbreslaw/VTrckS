@@ -1,0 +1,20 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <Table items="{path: '_IoH'}" growing="true" growingThreshold="20">
+    <columns>
+      <Column><Text text="{i18n>iohNdc}" /></Column>
+      <Column><Text text="{i18n>iohLot}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>iohQty}" /></Column>
+      <Column><Text text="{i18n>iohExpiration}" /></Column>
+    </columns>
+    <items>
+      <ColumnListItem>
+        <cells>
+          <Text text="{NDC}" />
+          <Text text="{Lot}" />
+          <ObjectNumber number="{QuantityOnHand}" />
+          <Text text="{ExpirationDate}" />
+        </cells>
+      </ColumnListItem>
+    </items>
+  </Table>
+</core:FragmentDefinition>

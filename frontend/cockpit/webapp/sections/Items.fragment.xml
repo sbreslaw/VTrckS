@@ -1,0 +1,30 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <Table items="{path: '_Item'}" growing="true" growingThreshold="20">
+    <columns>
+      <Column><Text text="{i18n>itemNdc}" /></Column>
+      <Column><Text text="{i18n>itemDescription}" /></Column>
+      <Column><Text text="{i18n>itemBrand}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>itemQty}" /></Column>
+      <Column><Text text="{i18n>itemUom}" /></Column>
+      <Column><Text text="{i18n>itemFundType}" /></Column>
+      <Column><Text text="{i18n>itemIntention}" /></Column>
+      <Column><Text text="{i18n>itemStatus}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>itemNetValue}" /></Column>
+    </columns>
+    <items>
+      <ColumnListItem>
+        <cells>
+          <Text text="{Product}" />
+          <Text text="{ProductDescription}" />
+          <Text text="{Brand}" />
+          <ObjectNumber number="{Quantity}" />
+          <Text text="{BaseUnit}" />
+          <Text text="{FundType}" />
+          <Text text="{OrderIntention}" />
+          <Text text="{ItemStatus}" />
+          <ObjectNumber number="{NetValue}" unit="USD" />
+        </cells>
+      </ColumnListItem>
+    </items>
+  </Table>
+</core:FragmentDefinition>

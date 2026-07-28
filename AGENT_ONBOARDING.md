@@ -78,6 +78,11 @@ e008/
 Backend agents: work in `backend/` per the Claude Code build prompt; activation happens on-system via abapGit pull + ADT — flag anything needing on-system action in your summary.
 Frontend agents: work in `frontend/`; the app runs against the dev-system service (see playbook §1 for proxy setup).
 
+### Current Implementation Status (2026-07-28)
+
+- `frontend/cockpit` scaffold created for MVP-1 prototype: FCL shell, master/detail routing, section factory, and section fragments.
+- `backend/` RAP package and `frontend/listreport/` FE app are not yet implemented in this repository.
+
 ---
 
 ## 5. Roles per Agent Assignment

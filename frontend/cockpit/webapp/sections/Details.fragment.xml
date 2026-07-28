@@ -1,0 +1,29 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
+  <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="3" columnsM="2">
+    <f:content>
+      <Title text="{i18n>detailsGeneral}" />
+      <Label text="{i18n>providerId}" />
+      <Text text="{ProviderID}" />
+      <Label text="{i18n>providerName}" />
+      <Text text="{ProviderName}" />
+      <Label text="{i18n>orderType}" />
+      <Text text="{OrderType}" />
+
+      <Title text="{i18n>detailsPartners}" />
+      <Label text="{i18n>contact}" />
+      <Text text="{ContactID}" />
+      <Label text="{i18n>email}" />
+      <Text text="{ContactEmail}" />
+      <Label text="{i18n>phone}" />
+      <Text text="{ContactPhone}" />
+
+      <Title text="{i18n>detailsValues}" />
+      <Label text="{i18n>netValue}" />
+      <ObjectNumber number="{NetValue}" unit="USD" />
+      <Label text="{i18n>taxAmount}" />
+      <ObjectNumber number="{TaxAmount}" unit="USD" />
+      <Label text="{i18n>grossValue}" />
+      <ObjectNumber number="{GrossValue}" unit="USD" />
+    </f:content>
+  </f:SimpleForm>
+</core:FragmentDefinition>

@@ -1,0 +1,114 @@
+{
+  "_version": "1.65.0",
+  "sap.app": {
+    "id": "cdc.vaccreq",
+    "type": "application",
+    "i18n": "i18n/i18n.properties",
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "dataSources": {
+      "mainService": {
+        "uri": "/sap/opu/odata4/sap/zui_vaccinerequest_o4/srvd/sap/zui_vaccinerequest/0001/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {},
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  },
+  "sap.ui5": {
+    "rootView": {
+      "viewName": "cdc.vaccreq.view.App",
+      "type": "XML",
+      "id": "app"
+    },
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.ui.core": {},
+        "sap.m": {},
+        "sap.f": {},
+        "sap.ui.layout": {},
+        "sap.ui.comp": {},
+        "sap.ui.unified": {}
+      }
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "cdc.vaccreq.i18n.i18n"
+        }
+      },
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "groupId": "$auto"
+        }
+      },
+      "view": {
+        "type": "sap.ui.model.json.JSONModel",
+        "settings": {
+          "data": {
+            "masterCount": 0,
+            "masterHasSearch": false,
+            "masterBusy": false
+          }
+        }
+      }
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.f.routing.Router",
+        "controlId": "fcl",
+        "controlAggregation": "beginColumnPages",
+        "viewType": "XML",
+        "viewPath": "cdc.vaccreq.view",
+        "async": true
+      },
+      "routes": [
+        {
+          "name": "master",
+          "pattern": "",
+          "layout": "OneColumn",
+          "target": [
+            "master"
+          ]
+        },
+        {
+          "name": "detail",
+          "pattern": "detail/{vaccineRequestId}",
+          "layout": "TwoColumnsMidExpanded",
+          "target": [
+            "master",
+            "detail"
+          ]
+        }
+      ],
+      "targets": {
+        "master": {
+          "id": "master",
+          "name": "Master",
+          "controlAggregation": "beginColumnPages"
+        },
+        "detail": {
+          "id": "detail",
+          "name": "Detail",
+          "controlAggregation": "midColumnPages"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "e008-cockpit",
+  "version": "0.0.1",
+  "private": true,
+  "description": "E008 Vaccine Request Cockpit (MVP-1 prototype)",
+  "scripts": {
+    "start": "ui5 serve -o index.html",
+    "build": "ui5 build --clean-dest"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^3.11.1",
+    "fiori-tools-proxy": "^1.15.3"
+  }
+}

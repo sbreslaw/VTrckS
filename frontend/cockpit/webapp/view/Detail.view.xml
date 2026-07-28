@@ -1,0 +1,87 @@
+<mvc:View
+  controllerName="cdc.vaccreq.controller.Detail"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:f="sap.f"
+  xmlns:core="sap.ui.core">
+  <f:DynamicPage id="detailPage" fitContent="true">
+    <f:title>
+      <f:DynamicPageTitle>
+        <f:heading>
+          <Title text="{= ${VaccineRequestID} ? ${i18n>detailTitlePrefix} + ' ' + ${VaccineRequestID} : ${i18n>detailTitle}}" />
+        </f:heading>
+        <f:expandedContent>
+          <HBox renderType="Bare" justifyContent="SpaceBetween" width="100%">
+            <items>
+              <HBox renderType="Bare" wrap="Wrap" width="80%">
+                <items>
+                  <ObjectStatus text="{path: 'UserStatus', formatter: '.formatter.statusText'}" state="{path: 'UserStatus', formatter: '.formatter.statusState'}" class="sapUiTinyMarginEnd" />
+                  <Text text="{= ${i18n>createdOnBy} + ': ' + ${CreatedOn} + ' / ' + ${CreatedBy}}" class="sapUiTinyMarginEnd" />
+                  <ObjectNumber number="{NetValue}" unit="USD" />
+                </items>
+              </HBox>
+              <OverflowToolbar>
+                <ToolbarSpacer />
+                <Button text="{i18n>close}" type="Transparent" press=".onCloseColumn" />
+              </OverflowToolbar>
+            </items>
+          </HBox>
+        </f:expandedContent>
+      </f:DynamicPageTitle>
+    </f:title>
+
+    <f:header>
+      <f:DynamicPageHeader>
+        <HBox wrap="Wrap" renderType="Bare" justifyContent="Start">
+          <items>
+            <Link text="{i18n>sectionDetails}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="details" writeToDom="false" />
+              </customData>
+            </Link>
+            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Link text="{i18n>sectionItems}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="items" writeToDom="false" />
+              </customData>
+            </Link>
+            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Link text="{i18n>sectionInventory}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="inventory" writeToDom="false" />
+              </customData>
+            </Link>
+            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Link text="{i18n>sectionShipping}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="shipping" writeToDom="false" />
+              </customData>
+            </Link>
+            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Link text="{i18n>sectionShippingTransactions}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="shippingTransactions" writeToDom="false" />
+              </customData>
+            </Link>
+            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Link text="{i18n>sectionTransactionHistory}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="transactionHistory" writeToDom="false" />
+              </customData>
+            </Link>
+            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Link text="{i18n>sectionOrgData}" press=".onAnchorPress">
+              <customData>
+                <core:CustomData key="panelId" value="orgData" writeToDom="false" />
+              </customData>
+            </Link>
+          </items>
+        </HBox>
+      </f:DynamicPageHeader>
+    </f:header>
+
+    <f:content>
+      <VBox id="sectionsContainer" class="sapUiResponsiveContentPadding" />
+    </f:content>
+  </f:DynamicPage>
+</mvc:View>

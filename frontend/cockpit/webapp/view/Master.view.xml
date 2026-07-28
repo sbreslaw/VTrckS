@@ -1,0 +1,111 @@
+<mvc:View
+  controllerName="cdc.vaccreq.controller.Master"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:f="sap.f"
+  xmlns:fb="sap.ui.comp.filterbar"
+  xmlns:core="sap.ui.core">
+  <f:DynamicPage id="masterPage" fitContent="true" headerExpanded="true">
+    <f:title>
+      <f:DynamicPageTitle>
+        <f:heading>
+          <Title text="{i18n>masterTitle}" />
+        </f:heading>
+        <f:snappedContent>
+          <ObjectStatus text="{= ${view>/masterCount} + ' ' + ${i18n>resultsLabel}}" />
+        </f:snappedContent>
+      </f:DynamicPageTitle>
+    </f:title>
+    <f:header>
+      <f:DynamicPageHeader pinnable="true">
+        <fb:FilterBar id="filterBar" search=".onSearch" showAdaptFiltersButton="true">
+          <fb:filterGroupItems>
+            <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <Input id="filterRequestId" />
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="providerId" label="{i18n>filterProviderId}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <Input id="filterProviderId" />
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="providerName" label="{i18n>filterProviderName}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <Input id="filterProviderName" />
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <MultiComboBox id="filterStatus">
+                  <core:Item key="1A" text="1A" />
+                  <core:Item key="1B" text="1B" />
+                  <core:Item key="1C" text="1C" />
+                  <core:Item key="1D" text="1D" />
+                  <core:Item key="1E" text="1E" />
+                  <core:Item key="1F" text="1F" />
+                  <core:Item key="1G" text="1G" />
+                </MultiComboBox>
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <DateRangeSelection id="filterCreatedOn" />
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="ndc" label="{i18n>filterNdc}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <Input id="filterNdc" />
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="createdBy" label="{i18n>filterCreatedBy}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <Input id="filterCreatedBy" />
+              </fb:control>
+            </fb:FilterGroupItem>
+            <fb:FilterGroupItem name="jurisdiction" label="{i18n>filterJurisdiction}" groupName="default" visibleInFilterBar="true">
+              <fb:control>
+                <Input id="filterJurisdiction" />
+              </fb:control>
+            </fb:FilterGroupItem>
+          </fb:filterGroupItems>
+        </fb:FilterBar>
+      </f:DynamicPageHeader>
+    </f:header>
+    <f:content>
+      <Table
+        id="requestsTable"
+        inset="false"
+        growing="true"
+        growingThreshold="50"
+        updateFinished=".onUpdateFinished"
+        items="{path: '/VaccineRequest'}">
+        <headerToolbar>
+          <Toolbar>
+            <Title text="{= ${view>/masterCount} + ' ' + ${i18n>resultsLabel}}" level="H3" />
+          </Toolbar>
+        </headerToolbar>
+        <columns>
+          <Column><Text text="{i18n>colRequestId}" /></Column>
+          <Column><Text text="{i18n>colProvider}" /></Column>
+          <Column><Text text="{i18n>colStatus}" /></Column>
+          <Column><Text text="{i18n>colCreatedOn}" /></Column>
+          <Column><Text text="{i18n>colCreatedBy}" /></Column>
+          <Column hAlign="End"><Text text="{i18n>colNetValue}" /></Column>
+        </columns>
+        <items>
+          <ColumnListItem type="Navigation" press=".onRowPress">
+            <cells>
+              <Text text="{VaccineRequestID}" />
+              <Text text="{= ${ProviderID} + ' - ' + ${ProviderName}}" />
+              <ObjectStatus text="{path: 'UserStatus', formatter: '.formatter.statusText'}" state="{path: 'UserStatus', formatter: '.formatter.statusState'}" />
+              <Text text="{CreatedOn}" />
+              <Text text="{CreatedBy}" />
+              <ObjectNumber number="{NetValue}" unit="USD" />
+            </cells>
+          </ColumnListItem>
+        </items>
+      </Table>
+    </f:content>
+  </f:DynamicPage>
+</mvc:View>
