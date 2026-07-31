@@ -1,116 +1,130 @@
 {
-  "_version": "1.65.0",
-  "sap.app": {
-    "id": "cdc.vaccreq",
-    "type": "application",
-    "i18n": "i18n/i18n.properties",
-    "title": "{{appTitle}}",
-    "description": "{{appDescription}}",
-    "dataSources": {
-      "mainService": {
-        "uri": "/sap/opu/odata4/sap/c_salesordermanage_sd/srvd/sap/c_salesordermanage/0001/",
-        "type": "OData",
-        "settings": {
-          "odataVersion": "4.0"
-        }
-      }
-    }
-  },
-  "sap.ui": {
-    "technology": "UI5",
-    "icons": {},
-    "deviceTypes": {
-      "desktop": true,
-      "tablet": true,
-      "phone": true
-    }
-  },
-  "sap.ui5": {
-    "rootView": {
-      "viewName": "cdc.vaccreq.view.App",
-      "type": "XML",
-      "id": "app"
-    },
-    "dependencies": {
-      "minUI5Version": "1.136.0",
-      "libs": {
-        "sap.ui.core": {},
-        "sap.m": {},
-        "sap.f": {},
-        "sap.ui.layout": {},
-        "sap.ui.comp": {},
-        "sap.ui.unified": {}
-      }
-    },
-    "models": {
-      "i18n": {
-        "type": "sap.ui.model.resource.ResourceModel",
-        "settings": {
-          "bundleName": "cdc.vaccreq.i18n.i18n"
-        }
-      },
-      "": {
-        "dataSource": "mainService",
-        "preload": true,
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true,
-          "groupId": "$auto"
-        }
-      },
-      "view": {
-        "type": "sap.ui.model.json.JSONModel",
-        "settings": {
-          "data": {
-            "masterCount": 0,
-            "masterHasSearch": false,
-            "masterBusy": false,
-            "showFundTypeColumn": false,
-            "showOrderIntentionColumn": false
-          }
-        }
-      }
-    },
-    "routing": {
-      "config": {
-        "routerClass": "sap.f.routing.Router",
-        "controlId": "fcl",
-        "controlAggregation": "beginColumnPages",
-        "viewType": "XML",
-        "viewPath": "cdc.vaccreq.view",
-        "async": true
-      },
-      "routes": [
-        {
-          "name": "master",
-          "pattern": "",
-          "layout": "OneColumn",
-          "target": [
-            "master"
-          ]
+    "_version": "1.66.0",
+    "sap.app": {
+        "id": "cdc.vaccreq",
+        "type": "application",
+        "i18n": "i18n/i18n.properties",
+        "title": "{{appTitle}}",
+        "description": "{{appDescription}}",
+        "dataSources": {
+            "mainService": {
+                "uri": "/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0",
+                    "localUri": "localService/metadata.xml"
+                }
+            }
         },
-        {
-          "name": "detail",
-          "pattern": "detail/{orderId}",
-          "layout": "TwoColumnsMidExpanded",
-          "target": [
-            "master",
-            "detail"
-          ]
+        "sourceTemplate": {
+            "id": "@sap/ux-app-migrator:freestyle",
+            "version": "1.29.0",
+            "toolsId": "97867e97-ec69-4256-a27f-e6476e8d1635"
         }
-      ],
-      "targets": {
-        "master": {
-          "id": "master",
-          "name": "Master",
-          "controlAggregation": "beginColumnPages"
+    },
+    "sap.ui": {
+        "technology": "UI5",
+		"fullWidth": true,
+        "icons": {},
+        "deviceTypes": {
+            "desktop": true,
+            "tablet": true,
+            "phone": true
+        }
+    },
+    "sap.ui5": {
+        "rootView": {
+            "viewName": "cdc.vaccreq.view.App",
+            "type": "XML",
+            "id": "app"
         },
-        "detail": {
-          "id": "detail",
-          "name": "Detail",
-          "controlAggregation": "midColumnPages"
+        "dependencies": {
+            "minUI5Version": "1.136.0",
+            "libs": {
+                "sap.ui.core": {},
+                "sap.m": {},
+                "sap.f": {},
+                "sap.ui.layout": {},
+                "sap.ui.comp": {},
+                "sap.ui.unified": {}
+            }
+        },
+        "models": {
+            "i18n": {
+                "type": "sap.ui.model.resource.ResourceModel",
+                "settings": {
+                    "bundleName": "cdc.vaccreq.i18n.i18n"
+                }
+            },
+            "": {
+                "dataSource": "mainService",
+                "preload": true,
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "groupId": "$auto"
+                }
+            },
+            "view": {
+                "type": "sap.ui.model.json.JSONModel",
+                "settings": {
+                    "data": {
+                        "masterCount": 0,
+                        "masterHasSearch": false,
+                        "masterBusy": false,
+                        "showFundTypeColumn": false,
+                        "showOrderIntentionColumn": false
+                    }
+                }
+            }
+        },
+        "routing": {
+            "config": {
+                "routerClass": "sap.f.routing.Router",
+                "controlId": "fcl",
+                "controlAggregation": "beginColumnPages",
+                "viewType": "XML",
+                "viewPath": "cdc.vaccreq.view",
+                "type": "View",
+                "path": "cdc.vaccreq.view",
+                "async": true,
+                "bypassed": {
+                    "target": [
+                        "master"
+                    ]
+                }
+            },
+            "routes": [
+                {
+                    "name": "master",
+                    "pattern": "",
+                    "layout": "OneColumn",
+                    "target": "master"            
+                },
+                {
+                    "name": "detail",
+                    "pattern": "detail/{orderId}",
+                    "layout": "TwoColumnsMidExpanded",
+                    "target": [
+                        "master",
+                        "detail"
+                    ]
+                }
+            ],
+            "targets": {
+                "master": {
+                    "id": "master",
+                    "name": "Master",
+                    "level": 1,
+                    "controlAggregation": "beginColumnPages"
+                },
+                "detail": {
+                    "id": "detail",
+                    "name": "Detail",
+                    "level": 1,
+                    "controlAggregation": "midColumnPages"
+                }
+            }
         }
-      }
     }
-  }
 }

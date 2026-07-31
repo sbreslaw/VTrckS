@@ -1,8 +1,24 @@
 <mvc:View
   controllerName="cdc.vaccreq.controller.App"
-  xmlns:mvc="sap.ui.core.mvc"
-  xmlns:f="sap.f">
-  <f:FlexibleColumnLayout
-    id="fcl"
-    layout="OneColumn" />
+	displayBlock="true"
+	height="100%"
+	xmlns="sap.m"
+	xmlns:f="sap.f"
+	xmlns:mvc="sap.ui.core.mvc">
+	<App
+		id="app"
+		busy="{appView>/busy}"
+		busyIndicatorDelay="{appView>/delay}">
+		<f:FlexibleColumnLayout
+			id="fcl"
+			stateChange=".onStateChange"
+			columnResize=".onColResize"
+			afterEndColumnNavigate=".onColNavigate"
+			afterMidColumnNavigate=".onColNavigate"
+			afterBeginColumnNavigate=".onColNavigate"
+			layout="{appView>/layout}"
+			backgroundDesign="Translucent">
+		</f:FlexibleColumnLayout>
+	</App>
+
 </mvc:View>

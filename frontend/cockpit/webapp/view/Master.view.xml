@@ -18,7 +18,7 @@
     </f:title>
     <f:header>
       <f:DynamicPageHeader pinnable="true">
-        <fb:FilterBar id="filterBar" search=".onSearch" showAdaptFiltersButton="true">
+        <fb:FilterBar id="filterBar" search=".onSearch" showFilterConfiguration="true">
           <fb:filterGroupItems>
             <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
               <fb:control>

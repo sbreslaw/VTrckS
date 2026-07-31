@@ -2,7 +2,7 @@
 
 **Purpose:** Frontend patterns for AI agents on E008. Replaces the legacy UI5 playbook for this project.
 **Stack:** SAPUI5 delivered with S/4HANA 2025 (served by the system/FLP — verify exact version with `sap.ui.version` on the dev system; do not pin from memory), theme **Horizon** (`sap_horizon`), **OData V4 model**, freestyle cockpit + FE V4 List Report.
-**Last Updated:** July 2026 — living doc.
+**Last Updated:** 2026-07-31 — living doc.
 
 > ⚠️ Legacy patterns that do NOT apply here: `/Date(timestamp)/` parsing, `oModel.read()/create()/getProperty()` V2 calls, JSON/OData dual-mode detection, Vercel-hosted UI5 libraries, `sap_bluecrystal`, compatVersion 1.71. If you catch yourself writing any of these, you're following the wrong playbook.
 
@@ -21,6 +21,22 @@ UI5 comes **from the system**, never a CDN:
 </script>
 ```
 Local development uses **ui5-tooling with a proxy** to the dev system so the app at `localhost` talks to the real service (`ui5.yaml` → `fiori-tools-proxy` / backend middleware pointing at the dev host, SSO/basic auth per landscape). There is no mock server target in `package.json`. Week-1-only stub rule: see Onboarding §3.2.
+
+### 1.1 Verified 2026-07-28 local setup
+
+- Current dev host: `https://sapapp2dh1.cdc.gov:44300` (`sap-client=100`).
+- For `frontend/cockpit`, `/resources` should be proxied from `https://sapapp2dh1.cdc.gov:44300/sap/public/bc/ui5_ui5`.
+- Do **not** proxy `/test-resources` from that host for sandbox runs on this landscape. `sap/ushell/bootstrap/sandbox.js` is not available there and local sandbox boot fails with `sap is not defined` follow-on errors.
+- For `start-local`, let UI5 tooling serve `/test-resources` locally while proxying `/resources` and `/sap` only.
+- Internal TLS trust is incomplete on this workstation; local-only configs may need `ignoreCertErrors: true` to talk to the dev host.
+- The current local metadata snapshot is `frontend/cockpit/webapp/localService/metadata.xml`, sourced from `design/so.xml`.
+
+### 1.2 Deployment on this landscape
+
+- `fiori deploy` can generate `ui5-deploy.yaml`, but on this workstation it falls back to HTTP username/password auth.
+- If the developer only has SNC logon and no ABAP password, do **not** assume CLI deploy is viable.
+- Preferred path for this repo on the current landscape: build locally, then deploy the UI5 archive from an SNC-enabled SAP tool/session on the ABAP side, then maintain FLP content on-system.
+- Keep repo secrets out of `.env`; interactive CLI prompts are acceptable for password-based systems, but they do not solve SNC-only landscapes.
 
 ## 2. Manifest & Model (V4)
 
@@ -115,6 +131,13 @@ FE V4 app: filter operators, variants, export come from annotations — resist w
 | Table in hidden container empty | Binding suspended while invisible | Bind/resume after visibility flips (legacy lesson, still true) |
 | CORS/auth weirdness locally | Proxy misconfig | Fix `ui5.yaml` proxy; never route via external hosts |
 | Blank screen | AppData defaults missing / visibility expression | Initialize defaults first (4.4) |
+| `sap-ui-core.js` 400/404 locally | Incorrect `/resources` proxy mapping to SAP host | Proxy `/resources` from `/sap/public/bc/ui5_ui5`; verify on the active localhost port |
+| `sandbox.js` 404 locally | `/test-resources` incorrectly proxied to SAP host | Serve `/test-resources` locally for sandbox runs |
+| `sap is not defined` from `locate-reuse-libs.js` | UI5 bootstrap or sandbox bootstrap failed earlier | Fix `sap-ui-core.js` / `sandbox.js` first; the JS error is secondary |
+| `400 Bad Request` on `EntitySet('key')/.` | A control is bound to `path: "."` (whole entity/row) instead of a concrete property | Bind explicit `ServiceSchema.*` property paths/`parts`; formatters take plain values, not a row object |
+| `encountered unknown setting 'X' for class sap.ui.comp.filterbar.FilterBar` | Property copied from the different `sap.ui.mdc.FilterBar` control | Check the actual `sap.ui.comp.filterbar.FilterBar` API (e.g. `showFilterConfiguration`, not `showAdaptFiltersButton`) before using a property name |
+| App-level busy overlay never clears | Code that flips `appView>/busy` back to `false` is missing/commented out, or calls V2-only APIs (`metadataLoaded()`, `attachMetadataFailed`) that don't exist on the V4 model | Clear busy via `getModel().getMetaModel().requestObject("/")`.then/.catch on the V4 model |
+| Same fragment/section content rendered twice | Race in a lazy-load guard: the "loaded" flag is only set inside the async `.then()`, so two near-simultaneous calls (e.g. `onAfterRendering` and a route-matched `rebind()`) both start a load | Set the "loaded"/"loading" flag synchronously *before* the async call, not after it resolves |
 
 ## 6. Agent Workflow
 
@@ -122,3 +145,12 @@ FE V4 app: filter operators, variants, export come from annotations — resist w
 2. Confirm which phase (MVP-1/MVP-2/v1.1) the task belongs to; don't build ahead of phase without approval.
 3. Implement smallest change; run against dev service; console clean; checklist from Onboarding §6.
 4. Update affected docs. State what changed, why, and anything needing on-system action.
+
+## 7. Phase 2 Focus (starting 2026-07-31)
+
+Phase 1 (read-only prototype: FCL shell, master/detail routing, filterable list, panel sections, all live against the temporary standard V4 service) is complete and stable — see `NOTES.md` for the stabilization bug list. Phase 2 reshapes the UI to match customer requirements for two areas:
+
+- **Search** — the Master-view filter bar (`sap.ui.comp.filterbar.FilterBar` in `Master.view.xml` / `Master.controller.js`).
+- **Content** — the Detail-view panel sections (`sections/*.fragment.xml` + `SectionFactory.js`).
+
+Before changing either: confirm which fields/entity sets the customer requirement needs are already exposed by the current service via `ServiceSchema.js`; if something is missing, file a backend request rather than working around it client-side (Onboarding §5).

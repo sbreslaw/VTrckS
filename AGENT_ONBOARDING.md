@@ -2,7 +2,7 @@
 
 **Purpose:** Bring any AI agent up to speed on the E008 project, its architecture, and how to work here.
 **Environment:** SAP S/4HANA 2025 **on-premise** (no BTP runtime dependency), ADT/Eclipse + abapGit for backend, VS Code/BAS for frontend.
-**Last Updated:** July 2026 — living doc; update it as part of any change that affects it.
+**Last Updated:** 2026-07-31 — living doc; update it as part of any change that affects it.
 
 ---
 
@@ -49,7 +49,7 @@ E008 replaces a CRM_UI (WebDynpro) vaccine ordering application for the CDC. Use
 3. **No draft.** No draft artifacts in any BDEF; unsaved-state protection is client-side; concurrency = ETag (412 handling mandatory in the UI).
 4. **Persistence only via `ZCL_VR_SD_ADAPTER`.** Any direct write to VBAK/VBAP/VBKD/VBPA or other SD tables, anywhere, is a failed build. No `COMMIT WORK` outside the RAP framework.
 5. **No business rules in the client.** Field enablement, action availability, and section visibility come from service metadata (resolver → feature control). If you find yourself hardcoding a status check in a controller, stop — it belongs in the resolver.
-6. **Never reference `R_SalesOrderTP` / `C_SalesOrderManage*` / `C_SALESORDERMANAGE_SRV`** in any layer. Reuse happens only at released `I_*` views.
+6. **Never reference `R_SalesOrderTP` / `C_SalesOrderManage*` / `C_SALESORDERMANAGE_SRV`** in any layer. Reuse happens only at released `I_*` views. **Sanctioned temporary exception:** the Phase 1 `frontend/cockpit` prototype is deliberately re-pointed at the standard `C_SALESORDERMANAGE_SRV`/`C_SALESORDERMANAGE_SD` V4 service per `design/E008 prototype repoint prompt.md`, as an interim bridge until `ZUI_VACCINEREQUEST_O4` is available — see `NOTES.md` for details. This exception is scoped to that prototype only; it does not relax the rule anywhere else.
 7. **Real CDC data never leaves the landscape.** Test data on dev is representative/synthetic.
 8. **Section 508 is an acceptance criterion**, not a polish item: keyboard-complete, announced expand/collapse, labeled fields, message announcements.
 
@@ -78,11 +78,18 @@ e008/
 Backend agents: work in `backend/` per the Claude Code build prompt; activation happens on-system via abapGit pull + ADT — flag anything needing on-system action in your summary.
 Frontend agents: work in `frontend/`; the app runs against the dev-system service (see playbook §1 for proxy setup).
 
-### Current Implementation Status (2026-07-28)
+### Current Implementation Status (2026-07-31)
 
-- `frontend/cockpit` scaffold created for MVP-1 prototype: FCL shell, master/detail routing, section factory, and section fragments.
-- Prototype temporarily re-pointed to standard `C_SALESORDERMANAGE` V4 service shape through a centralized schema module; metadata verification is still pending (see `NOTES.md`).
+**Phase 1 (initial prototyping) is COMPLETE.** `frontend/cockpit` is a working, live-backend-connected read-only prototype: FCL shell, master/detail routing, filterable master list, detail header + expandable panel sections, all wired to the temporary standard `C_SALESORDERMANAGE_SRV`/`C_SALESORDERMANAGE_SD` V4 service through the centralized `ServiceSchema.js` module. It runs clean (no console errors) against the real dev-system service. See `NOTES.md` for the full list of bugs found/fixed while stabilizing it (URL segment swap, whole-entity binding anti-pattern, `FilterBar` property name, App busy-overlay, `SectionFactory` duplicate-content race).
+
+- Verified dev landscape host for current frontend work: `https://sapapp2dh1.cdc.gov:44300` with client `100`.
+- Local prototype runtime currently depends on a checked-in metadata snapshot at `frontend/cockpit/webapp/localService/metadata.xml`, copied from `design/so.xml`, so the mock/server tooling can start before the custom E008 read service is available.
+- `frontend/cockpit` local sandbox only works with a mixed library setup: `/resources` proxied from the SAP host and `/test-resources` served locally by UI5 tooling. Proxying `/test-resources` to the host breaks `sap/ushell/bootstrap/sandbox.js` on this landscape.
+- `ui5-deploy.yaml` was generated for ABAP deploy (`ZCDC_VTRCKS`, package `ZCM`), but the current landscape is SNC-only for the human developer. `fiori deploy` reaches an HTTP username/password prompt and does not reuse the SAP GUI SNC session.
+- For this landscape, the expected deployment path is `npm run build` followed by ABAP-side upload with an SNC-enabled SAP tool such as `/UI5/UI5_REPOSITORY_LOAD`, then FLP catalog/target mapping maintenance on-system.
 - `backend/` RAP package and `frontend/listreport/` FE app are not yet implemented in this repository.
+
+**Phase 2 (in progress, starting now): Search and Content section UI adjustments.** Customer requirements call for reshaping the Master-view Search (filter bar) and Detail-view Content (panel sections) to match actual customer needs — this has not been scoped in code yet. Before implementing: re-read whatever customer requirement doc(s) get shared, and confirm which `ServiceSchema` fields/entity sets are already available vs. need a backend ask (Onboarding §5 — don't work around a missing field client-side, file a backend request instead).
 
 ---
 

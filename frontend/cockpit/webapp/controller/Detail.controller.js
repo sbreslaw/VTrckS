@@ -57,7 +57,50 @@ sap.ui.define([
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId)
       });
+      this._bindDetailHeader();
       this._oSectionFactory.rebind();
+    },
+
+    _bindDetailHeader: function () {
+      var oView = this.getView();
+
+      oView.byId("detailTitle").bindProperty("text", {
+        parts: [
+          { path: ServiceSchema.keys.orderId },
+          { path: "i18n>detailTitlePrefix" },
+          { path: "i18n>detailTitle" }
+        ],
+        formatter: formatter.detailTitle
+      });
+
+      oView.byId("detailStatus")
+        .bindProperty("text", {
+          path: ServiceSchema.headerProperties.status,
+          formatter: formatter.detailStatusText.bind(formatter)
+        })
+        .bindProperty("state", {
+          path: ServiceSchema.headerProperties.status,
+          formatter: formatter.detailStatusState.bind(formatter)
+        });
+
+      oView.byId("detailCreatedOnBy").bindProperty("text", {
+        parts: [
+          { path: ServiceSchema.headerProperties.createdOn },
+          { path: ServiceSchema.headerProperties.createdBy },
+          { path: "i18n>createdOnBy" }
+        ],
+        formatter: formatter.detailCreatedOnBy
+      });
+
+      oView.byId("detailNetValue")
+        .bindProperty("number", {
+          path: ServiceSchema.headerProperties.netValue,
+          formatter: formatter.detailNetValue
+        })
+        .bindProperty("unit", {
+          path: ServiceSchema.headerProperties.currency,
+          formatter: formatter.detailCurrency
+        });
     },
 
     onMvp2Action: function () {

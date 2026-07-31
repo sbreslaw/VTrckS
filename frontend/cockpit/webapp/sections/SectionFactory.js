@@ -55,6 +55,11 @@ sap.ui.define([
     if (this._mLoaded[sId]) {
       return;
     }
+    // Mark as loading immediately (not just after Fragment.load resolves) so
+    // that a second call arriving before the async load finishes (e.g. from
+    // onAfterRendering and _onObjectMatched/rebind racing each other) doesn't
+    // kick off a duplicate Fragment.load and add the content twice.
+    this._mLoaded[sId] = true;
 
     var sFragment = oPanel.data("fragment");
     if (!sFragment) {
@@ -67,8 +72,7 @@ sap.ui.define([
       controller: this._oView.getController()
     }).then(function (oContent) {
       oPanel.addContent(oContent);
-      this._mLoaded[sId] = true;
-    }.bind(this));
+    });
   };
 
   SectionFactory.prototype.rebind = function () {

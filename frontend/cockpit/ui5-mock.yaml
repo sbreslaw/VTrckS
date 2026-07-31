@@ -7,7 +7,7 @@ server:
     - name: fiori-tools-proxy
       afterMiddleware: compression
       configuration:
-        ignoreCertErrors: false
+        ignoreCertErrors: true
         backend:
           - path: /sap
             url: https://sapapp2dh1.cdc.gov:44300
@@ -15,6 +15,16 @@ server:
             url: https://sapapp2dh1.cdc.gov:44300/sap/public/bc/ui5_ui5
           - path: /test-resources
             url: https://sapapp2dh1.cdc.gov:44300/sap/public/bc/ui5_ui5
+    - name: sap-fe-mockserver
+      beforeMiddleware: fiori-tools-proxy
+      configuration:
+        mountPath: /
+        services:
+          - urlPath: /sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001
+            metadataPath: ./webapp/localService/metadata.xml
+            mockdataPath: ./webapp/localService/mockdata
+            generateMockData: true
+            annotations: []
     - name: fiori-tools-appreload
       afterMiddleware: compression
       configuration:
@@ -26,8 +36,3 @@ server:
       configuration:
         component: cdc.vaccreq
         ui5Theme: sap_horizon
-builder:
-  resources:
-    excludes:
-      - /test/**
-      - /localService/**

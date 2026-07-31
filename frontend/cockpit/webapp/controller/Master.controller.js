@@ -18,7 +18,11 @@ sap.ui.define([
 
     onInit: function () {
       this._oRouter = this.getOwnerComponent().getRouter();
-      this._oViewModel = this.getView().getModel("view");
+      // Use the owner component to fetch the "view" model: at this point in the
+      // lifecycle the Master view (a routing target) has not yet been inserted
+      // into the FlexibleColumnLayout's aggregation, so model propagation via
+      // this.getView().getModel("view") has not happened yet and returns undefined.
+      this._oViewModel = this.getOwnerComponent().getModel("view");
       this._applyFilterAvailability();
       this._populateStatusCodes();
       this._bindMasterItems();
@@ -134,17 +138,25 @@ sap.ui.define([
         type: "Navigation",
         press: this.onRowPress.bind(this),
         cells: [
-          new Text({ text: { path: ".", formatter: formatter.masterRequestId } }),
-          new Text({ text: { path: ".", formatter: formatter.masterProvider } }),
-          new ObjectStatus({
-            text: { path: ".", formatter: formatter.masterStatusText.bind(formatter) },
-            state: { path: ".", formatter: formatter.masterStatusState.bind(formatter) }
+          new Text({ text: { path: ServiceSchema.keys.orderId, formatter: formatter.masterRequestId } }),
+          new Text({
+            text: {
+              parts: [
+                { path: ServiceSchema.headerProperties.providerId },
+                { path: ServiceSchema.headerProperties.providerName }
+              ],
+              formatter: formatter.masterProvider
+            }
           }),
-          new Text({ text: { path: ".", formatter: formatter.masterCreatedOn } }),
-          new Text({ text: { path: ".", formatter: formatter.masterCreatedBy } }),
+          new ObjectStatus({
+            text: { path: ServiceSchema.headerProperties.status, formatter: formatter.masterStatusText.bind(formatter) },
+            state: { path: ServiceSchema.headerProperties.status, formatter: formatter.masterStatusState.bind(formatter) }
+          }),
+          new Text({ text: { path: ServiceSchema.headerProperties.createdOn, formatter: formatter.masterCreatedOn } }),
+          new Text({ text: { path: ServiceSchema.headerProperties.createdBy, formatter: formatter.masterCreatedBy } }),
           new ObjectNumber({
-            number: { path: ".", formatter: formatter.masterNetValue },
-            unit: { path: ".", formatter: formatter.masterCurrency }
+            number: { path: ServiceSchema.headerProperties.netValue, formatter: formatter.masterNetValue },
+            unit: { path: ServiceSchema.headerProperties.currency, formatter: formatter.masterCurrency }
           })
         ]
       });

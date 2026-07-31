@@ -2,7 +2,7 @@ sap.ui.define([], function () {
   "use strict";
 
   var ServiceSchema = {
-    serviceRoot: "/sap/opu/odata4/sap/c_salesordermanage_sd/srvd/sap/c_salesordermanage/0001/",
+    serviceRoot: "/sap/opu/odata4/sap/c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/",
 
     // Swap-back block: previous custom service constants retained for quick rollback.
     // customServiceRoot: "/sap/opu/odata4/sap/zui_vaccinerequest_o4/srvd/sap/zui_vaccinerequest/0001/",

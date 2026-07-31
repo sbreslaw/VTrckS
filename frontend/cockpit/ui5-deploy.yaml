@@ -1,0 +1,31 @@
+specVersion: "4.0"
+metadata:
+  name: cdc.vaccreq
+type: application
+builder:
+  resources:
+    excludes:
+      - /test/**
+      - /localService/**
+  customTasks:
+    - name: deploy-to-abap
+      afterTask: generateCachebusterInfo
+      configuration:
+        strictSsl: false
+        ignoreCertErrors: true
+        log: 5
+        target:
+          url: https://sapapp2dh1.cdc.gov:44300
+          client: "100"
+          auth: basic
+        credentials:
+          username: env:UI5_USERNAME
+          password: env:UI5_PASSWORD
+        app:
+          name: ZCDC_VTRCKS
+          description: CDC Vaccine Request Cockpit
+          package: ZCM
+          transport: DH1K900363
+        exclude:
+          - /test/
+          - /localService/

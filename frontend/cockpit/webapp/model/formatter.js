@@ -35,74 +35,65 @@ sap.ui.define([
     "C": "Success"
   };
 
-  function getValue(oRow, sProperty) {
-    return oRow && sProperty ? oRow[sProperty] : null;
-  }
-
   return {
-    masterRequestId: function (oRow) {
-      return getValue(oRow, ServiceSchema.keys.orderId) || "";
+    masterRequestId: function (sOrderId) {
+      return sOrderId || "";
     },
 
-    masterProvider: function (oRow) {
-      var sId = getValue(oRow, ServiceSchema.headerProperties.providerId) || "";
-      var sName = getValue(oRow, ServiceSchema.headerProperties.providerName) || "";
+    masterProvider: function (sId, sName) {
+      sId = sId || "";
+      sName = sName || "";
       return sName ? (sId + " - " + sName) : sId;
     },
 
-    masterStatusText: function (oRow) {
-      var sCode = getValue(oRow, ServiceSchema.headerProperties.status);
+    masterStatusText: function (sCode) {
       return this.statusText(sCode);
     },
 
-    masterStatusState: function (oRow) {
-      var sCode = getValue(oRow, ServiceSchema.headerProperties.status);
+    masterStatusState: function (sCode) {
       return this.statusState(sCode);
     },
 
-    masterCreatedOn: function (oRow) {
-      return getValue(oRow, ServiceSchema.headerProperties.createdOn) || "";
+    masterCreatedOn: function (sValue) {
+      return sValue || "";
     },
 
-    masterCreatedBy: function (oRow) {
-      return getValue(oRow, ServiceSchema.headerProperties.createdBy) || "";
+    masterCreatedBy: function (sValue) {
+      return sValue || "";
     },
 
-    masterNetValue: function (oRow) {
-      return getValue(oRow, ServiceSchema.headerProperties.netValue) || "";
+    masterNetValue: function (sValue) {
+      return sValue || "";
     },
 
-    masterCurrency: function (oRow) {
-      return getValue(oRow, ServiceSchema.headerProperties.currency) || "";
+    masterCurrency: function (sValue) {
+      return sValue || "";
     },
 
-    detailTitle: function (oRow, sPrefix, sFallback) {
-      var sId = getValue(oRow, ServiceSchema.keys.orderId);
-      return sId ? (sPrefix + " " + sId) : sFallback;
+    detailTitle: function (sOrderId, sPrefix, sFallback) {
+      return sOrderId ? (sPrefix + " " + sOrderId) : sFallback;
     },
 
-    detailStatusText: function (oRow) {
-      var sCode = getValue(oRow, ServiceSchema.headerProperties.status);
+    detailStatusText: function (sCode) {
       return this.statusText(sCode);
     },
 
-    detailStatusState: function (oRow) {
-      var sCode = getValue(oRow, ServiceSchema.headerProperties.status);
+    detailStatusState: function (sCode) {
       return this.statusState(sCode);
     },
 
-    detailCreatedOnBy: function (oRow, sLabel) {
-      var sOn = getValue(oRow, ServiceSchema.headerProperties.createdOn) || "";
-      var sBy = getValue(oRow, ServiceSchema.headerProperties.createdBy) || "";
+    detailCreatedOnBy: function (sOn, sBy, sLabel) {
+      sOn = sOn || "";
+      sBy = sBy || "";
       return sLabel + ": " + sOn + " / " + sBy;
     },
 
-    detailNetValue: function (oRow) {
-      return getValue(oRow, ServiceSchema.headerProperties.netValue) || "";
+    detailNetValue: function (sValue) {
+      return sValue || "";
     },
 
-    detailCurrency: function (oRow) {
-      return getValue(oRow, ServiceSchema.headerProperties.currency) || "";
+    detailCurrency: function (sValue) {
+      return sValue || "";
     },
 
     statusText: function (sCode) {
