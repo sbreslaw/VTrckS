@@ -1,26 +1,55 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <Table items="{path: '_Item'}" growing="true" growingThreshold="20">
+  <Table id="itemsTable" items="{path: '_Item'}" growing="true" growingThreshold="20">
+    <headerToolbar>
+      <OverflowToolbar>
+        <ToolbarSpacer />
+        <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
+        <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
+      </OverflowToolbar>
+    </headerToolbar>
     <columns>
-      <Column><Text text="{i18n>itemMaterial}" /></Column>
-      <Column><Text text="{i18n>itemDescription}" /></Column>
-      <Column><Text text="{i18n>itemCategory}" /></Column>
-      <Column hAlign="End"><Text text="{i18n>itemQty}" /></Column>
-      <Column><Text text="{i18n>itemUom}" /></Column>
-      <Column visible="{view>/showFundTypeColumn}"><Text text="{i18n>itemFundType}" /></Column>
-      <Column visible="{view>/showOrderIntentionColumn}"><Text text="{i18n>itemIntention}" /></Column>
-      <Column hAlign="End"><Text text="{i18n>itemNetAmount}" /></Column>
+      <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
+      <Column visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
+      <Column visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
+      <Column visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
+      <Column visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
+      <Column visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
+      <Column visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" /></Column>
+      <Column hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" /></Column>
+      <Column visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" /></Column>
+      <Column visible="{itemsColumns>/orderIntention}"><Text text="{i18n>colOrderIntention}" /></Column>
+      <Column visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" /></Column>
+      <Column visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
+      <Column visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
+      <Column hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
+      <Column visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
     </columns>
     <items>
       <ColumnListItem>
         <cells>
-          <Text text="{Product}" />
-          <Text text="{SalesOrderItemText}" />
-          <Text text="{SalesOrderItemCategory}" />
-          <ObjectNumber number="{RequestedQuantity}" />
-          <Text text="{RequestedQuantityUnit}" />
-          <Text text="{ZZ1_SKIPADDANC_SDI}" visible="{view>/showFundTypeColumn}" />
-          <Text text="{ZZ1_OptOutAncillary_SDI}" visible="{view>/showOrderIntentionColumn}" />
-          <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" />
+          <MenuButton text="" icon="sap-icon://overflow" type="Transparent" visible="{itemsColumns>/rowAction}">
+            <menu>
+              <Menu>
+                <MenuItem text="{i18n>rowActionEdit}" enabled="false" />
+                <MenuItem text="{i18n>rowActionDelete}" enabled="false" />
+                <MenuItem text="{i18n>rowActionFundSplit}" enabled="false" />
+              </Menu>
+            </menu>
+          </MenuButton>
+          <Text text="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}" />
+          <Text text="{SalesOrderItem}" visible="{itemsColumns>/itemNumber}" />
+          <Text text="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}" />
+          <Text text="{= '\u2014'}" visible="{itemsColumns>/brand}" />
+          <Text text="{Product}" visible="{itemsColumns>/ndcCode}" />
+          <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
+          <ObjectNumber number="{RequestedQuantity}" visible="{itemsColumns>/qty}" />
+          <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
+          <Text text="{= '\u2014'}" visible="{itemsColumns>/orderIntention}" />
+          <Text text="{= '\u2014'}" visible="{itemsColumns>/fundType}" />
+          <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
+          <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
+          <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" visible="{itemsColumns>/netValue}" />
+          <Text text="{_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text}" visible="{itemsColumns>/rejectionReason}" />
         </cells>
       </ColumnListItem>
     </items>

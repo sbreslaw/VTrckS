@@ -2,28 +2,48 @@
   <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="3" columnsM="2">
     <f:content>
       <Title text="{i18n>detailsGeneral}" />
+      <Label text="{i18n>filterRequestId}" />
+      <Text text="{SalesOrder}" />
+      <Label text="{i18n>colDescription}" />
+      <Text text="{= '\u2014'}" />
       <Label text="{i18n>providerId}" />
       <Text text="{SoldToParty}" />
       <Label text="{i18n>providerName}" />
-      <Text text="{SoldToPartyName}" />
+      <Text text="{CustomerName}" />
       <Label text="{i18n>orderType}" />
       <Text text="{SalesOrderType}" />
-
-      <Title text="{i18n>detailsPartners}" />
       <Label text="{i18n>contact}" />
       <Text text="{_SoldToPartyContactInfo/FullName}" />
-      <Label text="{i18n>email}" />
-      <Text text="{_SoldToPartyContactInfo/EmailAddress}" />
-      <Label text="{i18n>phone}" />
-      <Text text="{_SoldToPartyContactInfo/InternationalPhoneNumber}" />
+      <Label text="{i18n>shipTo}" />
+      <Text text="{_SoldToPartyContactInfo/FormattedPostalAddressDesc}" />
+      <Label text="{i18n>colEmployeeResponsible}" />
+      <Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" />
+      <Label text="{i18n>filterPriority}" />
+      <Text text="{= '\u2014'}" />
+      <Label text="{i18n>otherReason}" />
+      <Text text="{_SDDocumentReason/SDDocumentReason_Text}" />
+      <Label text="{i18n>category}" />
+      <Text text="{= '\u2014'}" />
+      <Label text="{i18n>colStatus}" />
+      <Text text="{path: 'OverallSDProcessStatus', formatter: '.formatter.detailStatusText'}" />
+      <Label text="{i18n>filterExisId}" />
+      <Text text="{PurchaseOrderByCustomer}" />
 
-      <Title text="{i18n>detailsValues}" />
+      <Title text="{i18n>detailsDates}" />
+      <Label text="{i18n>colCreatedAt}" />
+      <Text text="{path: 'CreationDate', type: 'sap.ui.model.type.Date'}" />
+
+      <Title text="{i18n>detailsValue}" />
       <Label text="{i18n>netValue}" />
       <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" />
       <Label text="{i18n>taxAmount}" />
-      <ObjectNumber number="{TotalTaxAmount}" unit="{TransactionCurrency}" />
+      <Text text="{= '\u2014'}" />
       <Label text="{i18n>grossValue}" />
-      <ObjectNumber number="{TotalGrossAmount}" unit="{TransactionCurrency}" />
+      <Text text="{= '\u2014'}" />
+
+      <Title text="{i18n>detailsNotes}" />
+      <Label text="{i18n>detailsNotes}" />
+      <TextArea value="{i18n>notesPending}" editable="false" growing="true" width="100%" />
 
       <Title text="{i18n>customFields}" />
       <Label text="{i18n>customFieldsDiscovered}" />

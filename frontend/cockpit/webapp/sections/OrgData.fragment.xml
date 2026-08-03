@@ -9,6 +9,12 @@
       <Text text="{OrganizationDivision}" />
       <Label text="{i18n>salesOffice}" />
       <Text text="{SalesOffice}" />
+      <Label text="{i18n>salesGroup}" />
+      <Text text="{SalesGroup}" />
+      <Label text="{i18n>serviceOrgUnit}" />
+      <Text text="{= '\u2014'}" />
+      <Label text="{i18n>serviceOrganization}" />
+      <Text text="{= '\u2014'}" />
     </f:content>
   </f:SimpleForm>
 </core:FragmentDefinition>

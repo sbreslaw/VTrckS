@@ -1,0 +1,16 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
+  <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
+    <f:content>
+      <Label text="{i18n>payer}" />
+      <Text text="{_SoldToPartyContactInfo/PayerParty}" />
+      <Label text="{i18n>billToParty}" />
+      <Text text="{_SoldToPartyContactInfo/BillToParty}" />
+      <Label text="{i18n>paymentTerms}" />
+      <Text text="{CustomerPaymentTerms}" />
+      <Label text="{i18n>billingStatus}" />
+      <Text text="{OverallOrdReltdBillgStatus}" />
+      <Label text="{i18n>billingBlockStatus}" />
+      <Text text="{OverallBillingBlockStatus}" />
+    </f:content>
+  </f:SimpleForm>
+</core:FragmentDefinition>

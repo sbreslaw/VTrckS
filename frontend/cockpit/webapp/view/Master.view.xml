@@ -18,50 +18,113 @@
     </f:title>
     <f:header>
       <f:DynamicPageHeader pinnable="true">
-        <fb:FilterBar id="filterBar" search=".onSearch" showFilterConfiguration="true">
-          <fb:filterGroupItems>
-            <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <Input id="filterRequestId" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="providerId" label="{i18n>filterProviderId}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <Input id="filterProviderId" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="providerName" label="{i18n>filterProviderName}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <Input id="filterProviderName" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <MultiComboBox id="filterStatus" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <DateRangeSelection id="filterCreatedOn" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="ndc" label="{i18n>filterNdc}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <Input id="filterNdc" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="createdBy" label="{i18n>filterCreatedBy}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <Input id="filterCreatedBy" />
-              </fb:control>
-            </fb:FilterGroupItem>
-            <fb:FilterGroupItem name="jurisdiction" label="{i18n>filterJurisdiction}" groupName="default" visibleInFilterBar="true">
-              <fb:control>
-                <Input id="filterJurisdiction" />
-              </fb:control>
-            </fb:FilterGroupItem>
-          </fb:filterGroupItems>
-        </fb:FilterBar>
+        <VBox>
+          <items>
+            <OverflowToolbar id="variantToolbar">
+              <Label text="{i18n>variantLabel}" labelFor="filterVariantSelect" />
+              <Select id="filterVariantSelect" width="12rem" change=".onVariantSelect" items="{variants>/items}">
+                <core:Item key="{variants>key}" text="{variants>text}" />
+              </Select>
+              <Button text="{i18n>variantSaveAs}" press=".onVariantSaveAs" />
+              <Button text="{i18n>variantManage}" press=".onVariantManage" />
+              <Button text="{i18n>filterBarClear}" press=".onFilterBarClear" />
+              <ToolbarSpacer />
+              <Button text="{i18n>tablePersonalize}" icon="sap-icon://action-settings" press=".onMasterTablePersonalize" />
+            </OverflowToolbar>
+            <fb:FilterBar id="filterBar" search=".onSearch" showFilterConfiguration="true">
+              <fb:filterGroupItems>
+                <!-- Visible-in-bar group (Phase 2 Prompt v2, item B) -->
+                <fb:FilterGroupItem name="providerPin" label="{i18n>filterProviderPin}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterProviderPin" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterRequestId" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="exisId" label="{i18n>filterExisId}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterExisId" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="provider" label="{i18n>filterProvider}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterProvider" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="employeeResponsible" label="{i18n>filterEmployeeResponsible}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterEmployeeResponsible" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="ndc" label="{i18n>filterNdc}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterNdc" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+
+                <!-- Dialog-only group ("Filters" adapt dialog only) -->
+                <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <DateRangeSelection id="filterCreatedOn" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="contact" label="{i18n>filterContact}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <Input id="filterContact" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="shipToParty" label="{i18n>filterShipToParty}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <Input id="filterShipToParty" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="createdBy" label="{i18n>filterCreatedBy}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <Input id="filterCreatedBy" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <ComboBox id="filterSalesOrderType" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <MultiComboBox id="filterStatus" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="jurisdiction" label="{i18n>filterJurisdiction}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <Input id="filterJurisdiction" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="priority" label="{i18n>filterPriority}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <ComboBox id="filterPriority" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="deliveryBlockReason" label="{i18n>filterDeliveryBlockReason}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <ComboBox id="filterDeliveryBlockReason" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="rejectionReason" label="{i18n>filterRejectionReason}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <Input id="filterRejectionReason" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="maxHits" label="{i18n>filterMaxHits}" groupName="dialog" visibleInFilterBar="false">
+                  <fb:control>
+                    <Slider id="filterMaxHits" min="10" max="100" step="10" value="50" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+              </fb:filterGroupItems>
+            </fb:FilterBar>
+          </items>
+        </VBox>
       </f:DynamicPageHeader>
     </f:header>
     <f:content>
@@ -76,14 +139,6 @@
             <Title text="{= ${view>/masterCount} + ' ' + ${i18n>resultsLabel}}" level="H3" />
           </Toolbar>
         </headerToolbar>
-        <columns>
-          <Column><Text text="{i18n>colRequestId}" /></Column>
-          <Column><Text text="{i18n>colProvider}" /></Column>
-          <Column><Text text="{i18n>colStatus}" /></Column>
-          <Column><Text text="{i18n>colCreatedOn}" /></Column>
-          <Column><Text text="{i18n>colCreatedBy}" /></Column>
-          <Column hAlign="End"><Text text="{i18n>colNetValue}" /></Column>
-        </columns>
       </Table>
     </f:content>
   </f:DynamicPage>

@@ -1,0 +1,7 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Design TBD: only "Created At" (already shown in Details > Dates) is
+       confirmed available at header level; no further date fields (e.g.
+       requested delivery date range, last changed date) were confirmed in
+       design/so.xml for this section — see PHASE2_AUDIT.md. -->
+  <MessageStrip text="{i18n>designTbd}" type="Information" showIcon="true" />
+</core:FragmentDefinition>

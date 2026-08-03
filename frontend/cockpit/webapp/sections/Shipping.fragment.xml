@@ -9,6 +9,8 @@
       <Text text="{ShippingCondition}" />
       <Label text="{i18n>deliveryStatus}" />
       <Text text="{OverallDeliveryStatus}" />
+      <Label text="{i18n>deliveryBlockStatus}" />
+      <Text text="{OverallDeliveryBlockStatus}" />
     </f:content>
   </f:SimpleForm>
 </core:FragmentDefinition>

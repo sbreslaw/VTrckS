@@ -46,7 +46,8 @@
                 "sap.f": {},
                 "sap.ui.layout": {},
                 "sap.ui.comp": {},
-                "sap.ui.unified": {}
+                "sap.ui.unified": {},
+                "sap.ui.export": {}
             }
         },
         "models": {

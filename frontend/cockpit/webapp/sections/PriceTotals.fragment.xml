@@ -1,0 +1,6 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Price Totals: no distinct pricing-condition breakdown entity was found on
+       this service beyond the header Net/Tax/Gross amounts already shown in the
+       Details section — design TBD, see PHASE2_AUDIT.md. -->
+  <MessageStrip text="{i18n>designTbd}" type="Information" showIcon="true" />
+</core:FragmentDefinition>

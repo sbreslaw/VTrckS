@@ -1,0 +1,15 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- No status-change-history entity exists on this service — designed
+       empty-state only (BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md). -->
+  <Table noDataText="{i18n>noStatusHistory}">
+    <columns>
+      <Column width="3rem"><Text text="{i18n>colRowAction}" /></Column>
+      <Column><Text text="{i18n>colStatus}" /></Column>
+      <Column><Text text="{i18n>statusChangedBy}" /></Column>
+      <Column><Text text="{i18n>statusChangedOn}" /></Column>
+      <Column><Text text="{i18n>statusChangedAt}" /></Column>
+    </columns>
+    <items>
+    </items>
+  </Table>
+</core:FragmentDefinition>

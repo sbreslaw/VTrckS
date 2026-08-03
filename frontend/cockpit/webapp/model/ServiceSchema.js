@@ -11,15 +11,34 @@ sap.ui.define([], function () {
     entitySets: {
       header: "SalesOrderManage",
       item: "SalesOrderItem",
-      status: "OverallSDProcessStatus"
+      status: "OverallSDProcessStatus",
+      salesOrderType: "SalesOrderType",
+      deliveryBlockReason: "DeliveryBlockReason",
+      deliveryPriority: "DeliveryPriority"
     },
 
     navigation: {
-      headerToItems: "_Item"
+      headerToItems: "_Item",
+      headerToPartner: "_Partner",
+      headerToShipToParty: "_ShipToParty",
+      headerToContactInfo: "_SoldToPartyContactInfo",
+      headerToCreatedByUser: "_CreatedByUser",
+      headerToOrderReason: "_SDDocumentReason",
+      headerToPaymentMethod: "_PaymentMethodVH",
+      itemToRejectionReason: "_SalesDocumentRjcnReason",
+      itemToDeliveryStatus: "_DeliveryStatus",
+      // _DeliveryPriority only exists on SalesOrderItemType in design/so.xml (line
+      // ~201) — there is NO header-level DeliveryPriority property or navigation on
+      // SalesOrderManageType. "Priority" as a header/master-list field is
+      // BLOCKED-BY-SERVICE; do not add a headerToDeliveryPriority entry here.
+      itemToDeliveryPriority: "_DeliveryPriority"
     },
 
     keys: {
       orderId: "SalesOrder"
+      // NOTE: no "IsActiveEntity" key here — confirmed absent from SalesOrderManageType
+      // in design/so.xml (Key block contains only PropertyRef "SalesOrder"). This service
+      // is NOT draft-enabled. See NOTES.md "P1 Draft-Key Check" and PHASE2_AUDIT.md.
     },
 
     headerProperties: {
@@ -29,28 +48,97 @@ sap.ui.define([], function () {
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
       netValue: "TotalNetAmount",
+      // No header-level Tax/Gross amount field exists on SalesOrderManageType in
+      // design/so.xml (only TotalNetAmount) — TaxAmount/GrossAmount exist only on
+      // SalesOrderItemType. BLOCKED-BY-SERVICE at header level; see PHASE2_AUDIT.md.
+      taxAmount: null,
+      grossAmount: null,
       currency: "TransactionCurrency",
+      paymentMethod: "PaymentMethod",
       salesOrderType: "SalesOrderType",
       salesOrganization: "SalesOrganization",
       distributionChannel: "DistributionChannel",
       division: "OrganizationDivision",
       salesOffice: "SalesOffice",
+      salesGroup: "SalesGroup",
       shippingCondition: "ShippingCondition",
       deliveryStatus: "OverallDeliveryStatus",
-      shipToParty: "Partner",
-      customerReference: "PurchaseOrderByCustomer"
+      deliveryBlockStatus: "OverallDeliveryBlockStatus",
+      deliveryBlockReason: "DeliveryBlockReason",
+      billingBlockReason: "HeaderBillingBlockReason",
+      billingBlockStatus: "OverallBillingBlockStatus",
+      billingStatus: "OverallOrdReltdBillgStatus",
+      paymentTerms: "CustomerPaymentTerms",
+      // No header-level Priority field/nav exists (see navigation comment above) —
+      // BLOCKED-BY-SERVICE at header level; only present per-item.
+      priority: null,
+      orderReason: "SDDocumentReason",
+      // No header-level "Partner" property exists either — Ship-To-Party ID/name
+      // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
+      customerReference: "PurchaseOrderByCustomer",
+      exisId: "PurchaseOrderByCustomer",
+      // Not present on SalesOrderManageType in design/so.xml — no free-text
+      // "description"/"category" field found at header level. BLOCKED-BY-SERVICE.
+      description: null,
+      category: null
+    },
+
+    // Fields reached via the header's single-cardinality _SoldToPartyContactInfo
+    // navigation (StandardPartnerContactInfoType) — confirmed present in so.xml.
+    contactProperties: {
+      fullName: "FullName",
+      email: "EmailAddress",
+      phone: "InternationalPhoneNumber",
+      mobilePhone: "InternationalMobilePhoneNumber",
+      address: "FormattedPostalAddressDesc",
+      payerParty: "PayerParty",
+      billToParty: "BillToParty",
+      responsibleEmployee: "ResponsibleEmployee",
+      salesEmployee: "SalesEmployee"
+    },
+
+    // _ShipToParty navigates to HeaderShipToPartyType (id + display name), NOT a
+    // direct "Partner" property on SalesOrderManageType itself.
+    shipToPartyProperties: {
+      id: "Partner",
+      fullName: "FullName"
+    },
+
+    // _PaymentMethodVH navigates to PaymentMethodType (BillingCompanyCode +
+    // PaymentMethod key, plus description/name text) — the header PaymentMethod
+    // property is a single SD payment-method *code*, not a stored card/instrument;
+    // there is no card/CVV/PAN entity anywhere in this service (see PaymentMethod
+    // fragment + OPEN_QUESTIONS.md).
+    paymentMethodProperties: {
+      text: "PaymentMethodName"
+    },
+
+    // _CreatedByUser / _LastChangedByUser navigate to UserType (UserID, UserDescription).
+    createdByUserProperties: {
+      name: "UserDescription"
     },
 
     itemProperties: {
       material: "Product",
       itemText: "SalesOrderItemText",
+      itemNumber: "SalesOrderItem",
+      optOutAncillary: "ZZ1_OptOutAncillary_SDI",
       quantity: "RequestedQuantity",
       unit: "RequestedQuantityUnit",
       itemCategory: "SalesOrderItemCategory",
       netAmount: "NetAmount",
       currency: "TransactionCurrency",
+      exisId: "PurchaseOrderByCustomer",
+      deliveryStatus: "DeliveryStatus",
+      deliveryStatusText: "DeliveryStatus_Text",
+      rejectionReason: "SalesDocumentRjcnReason",
+      rejectionReasonText: "SalesDocumentRjcnReason_Text",
       fundType: null,
-      orderIntention: null
+      orderIntention: null,
+      // No distinct "PO Reference" field at item level beyond PurchaseOrderByCustomer
+      // (already used for ExIS ID) — BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md.
+      poReference: null,
+      brand: null
     },
 
     customHeaderFields: [],
@@ -68,6 +156,19 @@ sap.ui.define([], function () {
     statusProperties: {
       code: "OverallSDProcessStatus",
       text: "OverallSDProcessStatus_Text"
+    },
+
+    // Value-help entity code/text property names for the filter ComboBoxes added
+    // in Phase 2 (Priority, Delivery Block Reason). Kept here — not literal in any
+    // controller — so the grep isolation check (design/E008 prototype repoint
+    // prompt.md) still passes.
+    valueHelpProperties: {
+      deliveryBlockReasonCode: "DeliveryBlockReason",
+      deliveryBlockReasonText: "DeliveryBlockReason_Text",
+      deliveryPriorityCode: "DeliveryPriority",
+      deliveryPriorityText: "DeliveryPriority_Text",
+      salesOrderTypeCode: "SalesOrderType",
+      salesOrderTypeText: "SalesOrderType_Text"
     },
 
     showJurisdictionFilter: true,

@@ -1,0 +1,29 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
+  <!-- The header PaymentMethod field/_PaymentMethodVH nav (a single SD payment-
+       method *code*, e.g. check/transfer/cash) IS available on SalesOrderManageType
+       and shown below. No card/payment-instrument entity (number, holder, limit,
+       authorization) exists anywhere in this service — the table below is
+       designed empty-state only (BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md).
+       Deliberately no CVV column anywhere (PCI-DSS: never stored/displayed, see
+       OPEN_QUESTIONS.md). -->
+  <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="1" columnsM="1">
+    <f:content>
+      <Label text="{i18n>paymentMethod}" />
+      <Text text="{_PaymentMethodVH/PaymentMethodName}" />
+    </f:content>
+  </f:SimpleForm>
+  <Table noDataText="{i18n>noPaymentMethods}">
+    <columns>
+      <Column><Text text="{i18n>paymentMethod}" /></Column>
+      <Column><Text text="{i18n>cardType}" /></Column>
+      <Column><Text text="{i18n>validThru}" /></Column>
+      <Column><Text text="{i18n>cardNumber}" /></Column>
+      <Column><Text text="{i18n>cardHolder}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>cardLimit}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>authorizedAmount}" /></Column>
+      <Column><Text text="{i18n>authorizationStatus}" /></Column>
+    </columns>
+    <items>
+    </items>
+  </Table>
+</core:FragmentDefinition>

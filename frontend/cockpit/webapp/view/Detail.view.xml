@@ -27,52 +27,35 @@
             </items>
           </HBox>
         </f:expandedContent>
+        <f:actions>
+          <Button text="{i18n>actionSave}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionNew}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCopy}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCreateReturn}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCreateReplacement}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button icon="sap-icon://print" text="{i18n>actionPreviewOutput}" press=".onPreviewOutput" />
+          <Button icon="sap-icon://refresh" text="{i18n>actionRefresh}" press=".onRefresh" />
+        </f:actions>
+        <f:navigationActions>
+          <Button
+            id="messagePopoverBtn"
+            icon="sap-icon://message-popup"
+            text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
+            type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
+            press=".onMessagePopoverPress" />
+          <Button text="{i18n>actionValidate}" press=".onValidate" />
+        </f:navigationActions>
       </f:DynamicPageTitle>
     </f:title>
 
     <f:header>
       <f:DynamicPageHeader>
-        <HBox wrap="Wrap" renderType="Bare" justifyContent="Start">
+        <HBox wrap="Wrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}">
           <items>
-            <Link text="{i18n>sectionDetails}" press=".onAnchorPress">
+            <Link text="{sectionsNav>title}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
               <customData>
-                <core:CustomData key="panelId" value="details" writeToDom="false" />
-              </customData>
-            </Link>
-            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
-            <Link text="{i18n>sectionItems}" press=".onAnchorPress">
-              <customData>
-                <core:CustomData key="panelId" value="items" writeToDom="false" />
-              </customData>
-            </Link>
-            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
-            <Link text="{i18n>sectionInventory}" press=".onAnchorPress">
-              <customData>
-                <core:CustomData key="panelId" value="inventory" writeToDom="false" />
-              </customData>
-            </Link>
-            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
-            <Link text="{i18n>sectionShipping}" press=".onAnchorPress">
-              <customData>
-                <core:CustomData key="panelId" value="shipping" writeToDom="false" />
-              </customData>
-            </Link>
-            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
-            <Link text="{i18n>sectionShippingTransactions}" press=".onAnchorPress">
-              <customData>
-                <core:CustomData key="panelId" value="shippingTransactions" writeToDom="false" />
-              </customData>
-            </Link>
-            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
-            <Link text="{i18n>sectionTransactionHistory}" press=".onAnchorPress">
-              <customData>
-                <core:CustomData key="panelId" value="transactionHistory" writeToDom="false" />
-              </customData>
-            </Link>
-            <Text text="·" class="sapUiTinyMarginBegin sapUiTinyMarginEnd" />
-            <Link text="{i18n>sectionOrgData}" press=".onAnchorPress">
-              <customData>
-                <core:CustomData key="panelId" value="orgData" writeToDom="false" />
+                <core:CustomData key="panelId" value="{sectionsNav>id}" writeToDom="false" />
               </customData>
             </Link>
           </items>

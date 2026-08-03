@@ -2,10 +2,11 @@ sap.ui.define([
   "sap/ui/core/Fragment",
   "sap/m/Panel",
   "sap/m/OverflowToolbar",
+  "sap/m/ToolbarSpacer",
   "sap/m/Title",
   "sap/m/Button",
-  "sap/m/Text"
-], function (Fragment, Panel, OverflowToolbar, Title, Button, Text) {
+  "sap/m/MessageToast"
+], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast) {
   "use strict";
 
   function SectionFactory(oView, aMeta) {
@@ -22,17 +23,25 @@ sap.ui.define([
 
     var oBundle = this._oView.getModel("i18n").getResourceBundle();
     this._aMeta.forEach(function (oMeta, iIndex) {
-      var oToolbar = new OverflowToolbar({
-        content: [
-          new Title({ text: oBundle.getText(oMeta.titleKey), level: "H4" }),
-          new Text({ text: "" }),
-          new Button({
-            text: oBundle.getText("mvp2Action"),
-            enabled: false,
-            tooltip: oBundle.getText("mvp2Only")
-          })
-        ]
-      });
+      var aToolbarContent = [
+        new Title({ text: oBundle.getText(oMeta.titleKey), level: "H4" }),
+        new ToolbarSpacer()
+      ];
+
+      // Non-editable sections (histories, totals, designed-empty placeholders)
+      // get no Edit button at all (Phase 2 Prompt v2, item D).
+      if (oMeta.editable) {
+        aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
+          text: oBundle.getText("sectionEdit"),
+          visible: "{sectionFlags>/" + oMeta.id + "/editVisible}",
+          enabled: "{sectionFlags>/" + oMeta.id + "/editEnabled}",
+          press: function () {
+            MessageToast.show(oBundle.getText("editAvailableLaterPhase"));
+          }
+        }));
+      }
+
+      var oToolbar = new OverflowToolbar({ content: aToolbarContent });
 
       var oPanel = new Panel(this._oView.createId(oMeta.id), {
         headerToolbar: oToolbar,

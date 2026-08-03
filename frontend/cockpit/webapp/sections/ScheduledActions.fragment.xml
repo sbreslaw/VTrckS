@@ -1,0 +1,18 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- No scheduled-actions entity exists on this service — designed empty-state
+       only (BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md). -->
+  <Table noDataText="{i18n>noScheduledActions}">
+    <columns>
+      <Column width="3rem"><Text text="{i18n>colRowAction}" /></Column>
+      <Column><Text text="{i18n>scheduledActionStatus}" /></Column>
+      <Column><Text text="{i18n>scheduledActionDefinition}" /></Column>
+      <Column><Text text="{i18n>scheduledActionProcessingType}" /></Column>
+      <Column><Text text="{i18n>scheduledActionCreatedBy}" /></Column>
+      <Column><Text text="{i18n>scheduledActionCreatedOn}" /></Column>
+      <Column><Text text="{i18n>scheduledActionCreatedAt}" /></Column>
+      <Column><Text text="{i18n>scheduledActionExecutable}" /></Column>
+    </columns>
+    <items>
+    </items>
+  </Table>
+</core:FragmentDefinition>
