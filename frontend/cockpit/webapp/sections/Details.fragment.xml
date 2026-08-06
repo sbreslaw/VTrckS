@@ -1,53 +1,290 @@
-<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
-  <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="3" columnsM="2">
-    <f:content>
-      <Title text="{i18n>detailsGeneral}" />
-      <Label text="{i18n>filterRequestId}" />
-      <Text text="{SalesOrder}" />
-      <Label text="{i18n>colDescription}" />
-      <Text text="{= '\u2014'}" />
-      <Label text="{i18n>providerId}" />
-      <Text text="{SoldToParty}" />
-      <Label text="{i18n>providerName}" />
-      <Text text="{CustomerName}" />
-      <Label text="{i18n>orderType}" />
-      <Text text="{SalesOrderType}" />
-      <Label text="{i18n>contact}" />
-      <Text text="{_SoldToPartyContactInfo/FullName}" />
-      <Label text="{i18n>shipTo}" />
-      <Text text="{_SoldToPartyContactInfo/FormattedPostalAddressDesc}" />
-      <Label text="{i18n>colEmployeeResponsible}" />
-      <Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" />
-      <Label text="{i18n>filterPriority}" />
-      <Text text="{= '\u2014'}" />
-      <Label text="{i18n>otherReason}" />
-      <Text text="{_SDDocumentReason/SDDocumentReason_Text}" />
-      <Label text="{i18n>category}" />
-      <Text text="{= '\u2014'}" />
-      <Label text="{i18n>colStatus}" />
-      <Text text="{path: 'OverallSDProcessStatus', formatter: '.formatter.detailStatusText'}" />
-      <Label text="{i18n>filterExisId}" />
-      <Text text="{PurchaseOrderByCustomer}" />
+<core:FragmentDefinition 
+  xmlns="sap.m" 
+  xmlns:core="sap.ui.core" 
+  xmlns:f="sap.ui.layout.form" 
+  xmlns:l="sap.ui.layout">
+			<f:Form width="auto" editable="{appView>/editMode}">
+				<f:layout>
+					<f:ResponsiveGridLayout 
+						labelSpanXL="4"
+						labelSpanL="4"
+						labelSpanM="4"
+						labelSpanS="12"
+						adjustLabelSpan="false"
+						emptySpanXL="0"
+						emptySpanL="0"
+						emptySpanM="0"
+						emptySpanS="0"
+						columnsXL="2" 
+						columnsL="2" 
+						columnsM="1" 
+						singleContainerFullSize="false"
+					/>
+				</f:layout>
 
-      <Title text="{i18n>detailsDates}" />
-      <Label text="{i18n>colCreatedAt}" />
-      <Text text="{path: 'CreationDate', type: 'sap.ui.model.type.Date'}" />
+				<f:formContainers>
+					<f:FormContainer title="{i18n>detailsGeneral}">
+						<f:formElements>
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>filterRequestId}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
 
-      <Title text="{i18n>detailsValue}" />
-      <Label text="{i18n>netValue}" />
-      <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" />
-      <Label text="{i18n>taxAmount}" />
-      <Text text="{= '\u2014'}" />
-      <Label text="{i18n>grossValue}" />
-      <Text text="{= '\u2014'}" />
+								<f:fields>
+                  <Text text="{SalesOrder}" />
+								</f:fields>
+							</f:FormElement>
 
-      <Title text="{i18n>detailsNotes}" />
-      <Label text="{i18n>detailsNotes}" />
-      <TextArea value="{i18n>notesPending}" editable="false" growing="true" width="100%" />
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>colDescription}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
 
-      <Title text="{i18n>customFields}" />
-      <Label text="{i18n>customFieldsDiscovered}" />
-      <Text text="{i18n>customFieldsNotOnHeader}" />
-    </f:content>
-  </f:SimpleForm>
+								<f:fields>
+                  <Text text="{SalesOrder}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>providerId}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{SoldToParty}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>providerName}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{CustomerName}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>orderType}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{SalesOrderType}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>contact}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{_SoldToPartyContactInfo/FullName}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>shipTo}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{_SoldToPartyContactInfo/FormattedPostalAddressDesc}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>colEmployeeResponsible}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>filterPriority}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{= '\u2014'}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>otherReason}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{_SDDocumentReason/SDDocumentReason_Text}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>category}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{= '\u2014'}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>colStatus}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{path: 'OverallSDProcessStatus', formatter: '.formatter.detailStatusText'}" />
+								</f:fields>
+							</f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>filterExisId}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <Text text="{PurchaseOrderByCustomer}" />
+								</f:fields>
+							</f:FormElement>
+
+
+            </f:formElements>
+          </f:FormContainer>
+
+<!-- DATES -->
+
+					<f:FormContainer title="{i18n>detailsDates}">
+						<f:formElements>
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>colCreatedAt}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+ 								<f:fields>
+                  <Text text="{path: 'CreationDate'}" />
+								</f:fields>
+
+              </f:FormElement>
+            </f:formElements>
+          </f:FormContainer>
+
+<!-- VALUES -->
+
+					<f:FormContainer title="{i18n>detailsValue}">
+						<f:formElements>
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>netValue}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+ 								<f:fields>
+                  <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" />
+								</f:fields>
+
+              </f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>taxAmount}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+ 								<f:fields>
+                  <Text text="{= '\u2014'}" />
+                  <!-- <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" /> -->
+								</f:fields>
+
+              </f:FormElement>
+
+							<f:FormElement>
+								<f:label>
+									<Label text="{i18n>grossValue}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+ 								<f:fields>
+                  <Text text="{= '\u2014'}" />
+                  <!-- <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" /> -->
+								</f:fields>
+
+              </f:FormElement>
+
+
+            </f:formElements>
+          </f:FormContainer>
+
+
+        </f:formContainers>
+      </f:Form>
+
 </core:FragmentDefinition>

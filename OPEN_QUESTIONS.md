@@ -46,6 +46,42 @@
    found; this looks like a CRM/Service-industry concept this SD-based service
    doesn't have at all. Confirm these are expected to only appear once
    `ZUI_VACCINEREQUEST_O4` (the purpose-built vaccine-request service) is live.
+8. **Backend defect — `_SoldToPartyContactInfo` crashes on master-list `$expand`
+   (needs to be reported/fixed by the ABAP/backend team, not just a design
+   question)** — confirmed via ST22 short dump 2026-08-03 that the custom RAP
+   query provider `CL_SD_S4H_STD_PARTNER_CONTACT=CM002` (implementing
+   `IF_RAP_QUERY_PROVIDER~SELECT` for `StandardPartnerContactInfoType`, the
+   target of `_SoldToPartyContactInfo`) does:
+   ```abap
+   try.
+       data(lt_filter) = io_request->get_filter( )->get_as_ranges( ).
+     catch cx_rap_query_filter_no_range.
+       assert 1 = 0.
+   endtry.
+   ```
+   This unconditionally crashes (`ASSERTION_FAILED`, HTTP 500) whenever the
+   navigation is `$expand`-ed/filtered across multiple `SalesOrderManage` rows
+   at once (i.e. any master-list read), independent of which fields are
+   selected — it broke the Master list's initial load entirely. Client-side
+   workaround applied: the Master list's "Contact" and "Employee Responsible"
+   columns/filters no longer use this navigation at all (em-dash,
+   RUNTIME-BLOCKED-BY-SERVICE — see `PHASE2_AUDIT.md`/`NOTES.md`). **Needs
+   backend team attention**: (a) should `CL_SD_S4H_STD_PARTNER_CONTACT=CM002`
+   handle `cx_rap_query_filter_no_range` gracefully instead of asserting, and
+   (b) is the Detail page's single-entity read of this same navigation (Contact/
+   Ship-To address, Billing's Payer/Bill-To party) safe, or does it need the
+   same client-side removal? **Not yet verified live** — please test opening a
+   Detail record after this fix and report whether it also 500s.
+9. **Confirm the real E008 vaccine-order `SalesOrderType`(s)** — `ServiceSchema.fixedOrderTypes`
+   was set to `["ZVR1"]` as an unconfirmed placeholder and was found live
+   2026-08-03 to incorrectly exclude a real, valid order (500000043) from every
+   search (it doesn't appear to be type `ZVR1`). The automatic search-time
+   restriction to this list has been **removed** (search now matches the
+   unfiltered initial list load — see NOTES.md), but the optional "Order Type"
+   filter dropdown still only offers `ZVR1` as a choice. Please confirm the
+   correct order type code(s) for E008 vaccine requests on this system so the
+   dropdown's allow-list can be corrected (or replaced with the full
+   `SalesOrderType` value-help entity if there's no fixed E008-specific set).
 
 ## Swap-back readiness statement (target: `ZUI_VACCINEREQUEST_O4`)
 

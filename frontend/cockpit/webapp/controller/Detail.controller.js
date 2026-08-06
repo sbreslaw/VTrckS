@@ -289,10 +289,11 @@ sap.ui.define([
       oView.byId("detailTitle").bindProperty("text", {
         parts: [
           { path: ServiceSchema.keys.orderId },
+          { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName },
           { path: "i18n>detailTitlePrefix" },
           { path: "i18n>detailTitle" }
         ],
-        formatter: formatter.detailTitle
+        formatter: formatter.detailTitle.bind(formatter)
       });
 
       oView.byId("detailStatus")

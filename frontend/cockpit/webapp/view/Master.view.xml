@@ -133,6 +133,7 @@
         inset="false"
         growing="true"
         growingThreshold="50"
+        noDataText="{= ${view>/masterHasSearch} ? undefined : ${i18n>masterNoDataBeforeSearch} }"
         updateFinished=".onUpdateFinished">
         <headerToolbar>
           <Toolbar>

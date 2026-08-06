@@ -17,10 +17,16 @@ disabled/em-dash/empty-state.
 ## Section A — Master list (8 columns)
 
 - Vaccine Request ID, Description, Provider, Status, Contact, Created At,
-  Employee Responsible, Created By — **DONE**. Description and Employee
-  Responsible *title* are em-dash (**BLOCKED-BY-SERVICE**: no free-text header
-  description field; no resolved display name for Employee Responsible, only a
-  personnel number via `_SoldToPartyContactInfo/ResponsibleEmployee`).
+  Employee Responsible, Created By — **DONE**. Description is em-dash
+  (**BLOCKED-BY-SERVICE**: no free-text header description field). Contact and
+  Employee Responsible are both **fully em-dash (RUNTIME-BLOCKED-BY-SERVICE)**:
+  the `_SoldToPartyContactInfo` navigation (both fields route through it) is
+  backed by a custom RAP query provider (`CL_SD_S4H_STD_PARTNER_CONTACT=CM002`)
+  that throws an ABAP `ASSERTION_FAILED` dump whenever it's `$expand`-ed across
+  the master list's multiple header rows, regardless of which fields are
+  `$select`-ed — confirmed via ST22 short dump 2026-08-03 (see NOTES.md). This
+  broke the entire Master list's initial load. Do not rebind either column
+  without re-verifying against the live backend first.
 - Column order/visibility is driver by `_getColumnDefs()` + a VariantStore-backed
   layout (`masterTableLayout` key) — **DONE (simplified)**: full reorder+visibility
   custom dialog instead of `sap.m.p13n.Engine`/`sap.ui.comp.p13n`, because there is
@@ -33,10 +39,13 @@ disabled/em-dash/empty-state.
   Party, Created By, Order Type, Status, Jurisdiction, Priority, Delivery Block
   Reason, Rejection Reason) + hit-count Slider (10–100 step 10, default 50) —
   **DONE**, all fields wired via `sap.ui.comp.filterbar.FilterBar`.
-  - Provider Pin, Employee Responsible, NDC Code, Rejection Reason filters —
-    **BLOCKED-BY-SERVICE**: disabled controls with tooltip; no header-level field
-    (NDC/Rejection Reason are item-only) or no reliable filterable path (Employee
-    Responsible resolution).
+  - Provider Pin, Employee Responsible, NDC Code, Rejection Reason, Contact
+    filters — **BLOCKED-BY-SERVICE**: disabled controls with tooltip. NDC/
+    Rejection Reason have no header-level field (item-only); Provider Pin has
+    no header-level field either. Employee Responsible and Contact are
+    **RUNTIME-BLOCKED-BY-SERVICE**: both route through `_SoldToPartyContactInfo`,
+    which crashes the backend with `ASSERTION_FAILED` when filtered/expanded on
+    the master list (see Section A note and NOTES.md).
   - **Priority filter — BLOCKED-BY-SERVICE** (found during this pass): `DeliveryPriority`
     exists only on `SalesOrderItemType`, not on the header entity at all — disabled
     with tooltip, same treatment as the other blocked filters. See NOTES.md
@@ -68,8 +77,10 @@ disabled/em-dash/empty-state.
 ## Section E — Details fragment (4 form groups)
 
 - **General Data, Dates, Value, Notes** groups — **DONE**.
-  - Provider ID/Name, Order Type, Contact, Employee Responsible personnel #,
-    Other Reason, Status, ExIS ID, Created At, Net Value — real data.
+  - Provider ID/Name, Order Type, Contact, Other Reason, Status, ExIS ID,
+    Created At, Net Value — real data.
+  - Employee Responsible — **RUNTIME-BLOCKED-BY-SERVICE** (em-dash; see Section A
+    note above — selecting this field crashes the backend).
   - Description, Category — **BLOCKED-BY-SERVICE** (em-dash; no matching header field).
   - Priority — **BLOCKED-BY-SERVICE** (em-dash; item-level only field, see Section B).
   - Tax, Gross (Value group) — **BLOCKED-BY-SERVICE** (em-dash; only `TotalNetAmount`

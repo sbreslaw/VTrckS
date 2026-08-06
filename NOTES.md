@@ -118,3 +118,49 @@ All other literal properties/navigations introduced in this phase (Billing, OrgD
 
 See `PHASE2_AUDIT.md` for the DONE/BLOCKED-BY-SERVICE status of every Phase 2 requirement, and `OPEN_QUESTIONS.md` for open items requiring backend/customer input.
 
+## Live-backend regression: `_SoldToPartyContactInfo` crashes on master list — 2026-08-03
+
+Running the Phase 2 build against the real dev-system service surfaced a backend crash on the very first Master list load:
+
+- Symptom: `POST .../c_salesordermanage_srv/srvd/sap/c_salesordermanage_sd/0001/$batch` → `500 Internal Server Error`, ABAP dump `ASSERTION_FAILED`. The master list never populated and the Search ("Go") button appeared to do nothing (because the underlying list binding never successfully resolved).
+- Original hypothesis (disproven): suspected the newly-added `ResponsibleEmployee` field in `$expand=_SoldToPartyContactInfo($select=FullName,ResponsibleEmployee,SalesDocument)`. Removed it and redeployed — **same crash still occurred** with a fresh batch payload confirming `ResponsibleEmployee` was fully gone from the wire (`$select=FullName,SalesDocument` only). This proved the field itself was not the cause.
+- **Root cause (confirmed via ST22 short dump, 2026-08-03 13:10)**: the crash originates in a **custom backend RAP query provider**, `CL_SD_S4H_STD_PARTNER_CONTACT=CM002` (the class behind `StandardPartnerContactInfoType`/the `_SoldToPartyContactInfo` navigation), method `IF_RAP_QUERY_PROVIDER~SELECT`:
+  ```abap
+  try.
+      data(lt_filter) = io_request->get_filter( )->get_as_ranges( ).
+    catch cx_rap_query_filter_no_range.
+      assert 1 = 0.        " <-- unconditional crash instead of graceful handling
+  endtry.
+  ```
+  The call stack (`CL_SADL_GW_EXPAND_LEVEL=>READ_DATA` / `_PROCESS_EXPAND` under `READ_ENTITY_LIST`) shows this happens specifically when `_SoldToPartyContactInfo` is `$expand`-ed while reading the **master LIST** (multiple `SalesOrderManage` header rows on one page). Whatever filter shape the RAP framework passes down for a multi-row expand can't be converted to simple ranges by `get_as_ranges()`, and the custom class's own error handling just asserts/crashes instead of falling back — **this is independent of which fields are `$select`-ed**, which is exactly why removing `ResponsibleEmployee` alone didn't help: the still-present `FullName` (used for the Master "Contact" column) was equally implicated.
+- Fixed: removed `_SoldToPartyContactInfo` `$expand`/`$filter` entirely from the **Master list** context:
+  - `Master.controller.js`'s "Contact" column no longer binds through `_SoldToPartyContactInfo/FullName` — shows em-dash (`formatter.masterContact()` with no value).
+  - `Master.controller.js`'s "Contact" filter box (`filterContact`) is now disabled (same treatment as NDC/Provider Pin/Rejection Reason/Priority/Employee Responsible) and removed from variant capture, since filtering by this nav would hit the same crash.
+  - "Employee Responsible" master column / Details field remain em-dash from the earlier (disproven-as-root-cause, but still valid) defensive fix.
+- **Verified live (2026-08-06)**: the Detail page's single-entity read (`Details.fragment.xml`'s Contact/`FullName`, `FormattedPostalAddressDesc`, and `ResponsibleEmployee`) confirmed working with no crash. The ST22 call stack showed the crash is specific to the **list-context** expand (`READ_ENTITY_LIST`); the single-entity `bindElement` read (`READ_ENTITY`, one sales order) is a different code path and does **not** hit `cx_rap_query_filter_no_range`/`ASSERTION_FAILED`. `ResponsibleEmployee` is therefore bound directly on the Detail page (no em-dash needed there); the em-dash workaround remains required only for the Master **list** (Contact and Employee Responsible columns) and the Contact filter, where the crash is real.
+- Lesson: **presence in `$metadata` does not guarantee a field/navigation is safe to request, and a custom-class-backed entity (RAP unmanaged query provider) can behave very differently for list-context `$expand` vs single-entity reads.** Always get the ST22 short dump's "Error analysis" / "Information on where terminated" / "Source Code Extract" sections when diagnosing a live `ASSERTION_FAILED` — it gives the exact class/method/line immediately instead of guessing field-by-field from `$select` clauses.
+- **This is a backend defect, not a metadata-design issue** — see `OPEN_QUESTIONS.md` for the item to report to the backend/ABAP team (`CL_SD_S4H_STD_PARTNER_CONTACT=CM002`, unconditional `assert 1 = 0` on `cx_rap_query_filter_no_range`).
+
+## Live-backend regression: `detailStatusText` "this.statusText is not a function" — 2026-08-03
+
+- Symptom: opening the Detail page threw `this.statusText is not a function` from `formatter.detailStatusText`, bound in `Details.fragment.xml` via the bare XML string `'.formatter.detailStatusText'`.
+- Root cause: `detailStatusText`/`masterStatusText`/`statusText`/`statusState` all internally called `this.statusText(...)`/`this.statusState(...)`. That only works when the formatter function is explicitly `.bind(formatter)`-ed (done for `Master.controller.js`'s JS-side binding), not when referenced as a bare string in XML (`Details.fragment.xml`), where `this` isn't guaranteed to be the formatter module.
+- Fixed: extracted the status-code lookup into private module-level functions (`fnStatusText`/`fnStatusState`, not object methods, no `this` dependency) in `formatter.js`; all four public formatter functions now call these directly. Confirmed no other `this.xxx(...)` internal calls remain in `formatter.js`.
+- Lesson: in `formatter.js`, never call another formatter method via `this.otherFn(...)` — some callers (bare XML string formatter refs) don't bind `this`. Extract shared logic to a private top-level function instead.
+
+## Master search regression: hidden `SalesOrderType = ZVR1` restriction excluded real orders — 2026-08-03
+
+- Symptom: a known, valid order (e.g. 500000043) appears on the Master list's unfiltered initial load, but searching for it by Vaccine Request ID (or any other filter) returns zero results.
+- Root cause: `onSearch` unconditionally AND-ed a hidden `_getFixedFilters()` restriction (`SalesOrderType eq 'ZVR1'`) onto every search — confirmed via the live request `$filter=(SalesOrderType eq 'ZVR1') and contains(SalesOrder,'500000043')`. `ZVR1` was an unconfirmed `TODO-VERIFY` placeholder (`ServiceSchema.fixedOrderTypes`) that was never actually checked against real order data, and evidently doesn't match this order's real type. Because the initial unfiltered `_bindMasterItems()` load never applied this restriction (only `onSearch` did), the order was visible until the user tried to search for it — an inconsistency that had been noted internally as low-priority but turned out to be the actual bug.
+- Fixed: removed the automatic `SalesOrderType = ZVR1` restriction from `onSearch` entirely (removed the now-dead `_getFixedFilters()` method and its call site) — search behavior now matches the unfiltered initial load (no hidden type restriction). The optional "Order Type" filter dropdown (`filterSalesOrderType`) is unchanged and still only offers `ZVR1` as a manual, opt-in choice (`ServiceSchema.fixedOrderTypes` allow-list) — this may need to be revisited/expanded once real order types for this workflow are confirmed with the backend team.
+- Lesson: a restriction applied inconsistently (only on searched loads, not the initial load) is a red flag worth investigating immediately, not deferring as "lower priority."
+
+## UX change: Master list no longer auto-populates on initial load — 2026-08-04
+
+- Requirement: the hit list should stay empty until the user presses "Go" — previously `_bindMasterItems()` bound the table with no filter at all on `onInit`, so it always showed every order (e.g. 60 results) before any search.
+- Change: `onInit` now seeds `this._aCurrentFilters` with a guaranteed-empty filter (`SalesOrder eq ''` — safe since `SalesOrder` is a non-nullable key field, never blank) before calling `_bindMasterItems()`, which now passes `filters: this._aCurrentFilters` into `bindItems()`. `onSearch` overwrites `this._aCurrentFilters` with the real filters (or an empty array if no criteria entered, which then shows everything — same as the old initial-load behavior, just now requiring an explicit Go) and always sets `/masterHasSearch` to `true` (previously only true when at least one filter was set).
+- Added `noDataText` on `requestsTable` bound to `{i18n>masterNoDataBeforeSearch}` ("Enter search criteria and choose Go to see results"), shown only while `view>/masterHasSearch` is `false`, so the empty initial state doesn't look broken/blank.
+- Table personalization/column-layout changes (`_applyColumnDialog` → `_bindMasterItems()`) reuse `this._aCurrentFilters`, so re-rendering columns doesn't reset back to the unfiltered/empty state.
+
+
+

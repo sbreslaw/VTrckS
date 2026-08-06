@@ -45,6 +45,10 @@ sap.ui.define([
       this._populateSalesOrderTypeItems();
       this._populateValueHelp("filterDeliveryBlockReason", ServiceSchema.entitySets.deliveryBlockReason,
         ServiceSchema.valueHelpProperties.deliveryBlockReasonCode, ServiceSchema.valueHelpProperties.deliveryBlockReasonText);
+      // Don't show any rows until the user clicks Go — start with a filter that
+      // is guaranteed to match nothing (SalesOrder is a non-nullable key field,
+      // never an empty string).
+      this._aCurrentFilters = this._getNoResultsFilter();
       this._bindMasterItems();
       this._refreshVariantsModel();
       this._oRouter.getRoute("master").attachPatternMatched(this._onRouteMatched, this);
@@ -60,8 +64,12 @@ sap.ui.define([
         oView.byId("filterProvider").getValue());
       this._pushIfValue(aFilters, ServiceSchema.headerProperties.createdBy, oView.byId("filterCreatedBy").getValue(), FilterOperator.Contains);
 
-      var sContactPath = ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName;
-      this._pushIfValue(aFilters, sContactPath, oView.byId("filterContact").getValue(), FilterOperator.Contains);
+      // Contact: RUNTIME-BLOCKED-BY-SERVICE — do not filter or expand
+      // _SoldToPartyContactInfo on the master LIST. The custom backend provider
+      // (CL_SD_S4H_STD_PARTNER_CONTACT=CM002) throws ASSERTION_FAILED whenever
+      // this navigation is filtered/expanded across multiple header rows
+      // (confirmed via ST22 short dump 2026-08-03 — see NOTES.md). This is
+      // independent of which fields are selected.
 
       // TODO-VERIFY at runtime: filtering on a nested to-one navigation path
       // (_ShipToParty/Partner, _ShipToParty/FullName) depends on backend $filter
@@ -100,18 +108,17 @@ sap.ui.define([
         aFilters.push(new Filter(ServiceSchema.headerProperties.createdOn, FilterOperator.BT, oDateFrom, oDateTo));
       }
 
-      aFilters = this._getFixedFilters().concat(aFilters);
-
       var oTable = this.byId("requestsTable");
       var iMaxHits = oView.byId("filterMaxHits").getValue();
       oTable.setGrowingThreshold(iMaxHits);
 
+      this._aCurrentFilters = aFilters;
       var oBinding = oTable.getBinding("items");
       if (oBinding) {
         oBinding.filter(aFilters);
       }
 
-      this._oViewModel.setProperty("/masterHasSearch", aFilters.length > 0);
+      this._oViewModel.setProperty("/masterHasSearch", true);
     },
 
     onFilterBarClear: function () {
@@ -145,6 +152,13 @@ sap.ui.define([
       }
     },
 
+    // Guaranteed-empty filter used to keep the master list unpopulated until the
+    // user explicitly searches (presses Go) — per requirement, the list should
+    // not show all results on initial load.
+    _getNoResultsFilter: function () {
+      return [new Filter(ServiceSchema.keys.orderId, FilterOperator.EQ, "")];
+    },
+
     _pushOrFilter: function (aFilters, aPaths, sValue) {
       if (!sValue) {
         return;
@@ -168,11 +182,17 @@ sap.ui.define([
       this.byId("filterProviderPin").setEnabled(false);
       this.byId("filterProviderPin").setTooltip(sTooltip);
 
-      // Employee Responsible: per customer instruction, filtering stays disabled
-      // even though the pernr is technically reachable for display (see column A);
-      // filtering by a nested contact-info navigation is not exposed as reliable.
+      // Employee Responsible: RUNTIME-BLOCKED-BY-SERVICE, same root cause as
+      // Contact below — see NOTES.md.
       this.byId("filterEmployeeResponsible").setEnabled(false);
       this.byId("filterEmployeeResponsible").setTooltip(sTooltip);
+
+      // Contact: RUNTIME-BLOCKED-BY-SERVICE — filtering/expanding
+      // _SoldToPartyContactInfo on the master LIST crashes the backend
+      // (ASSERTION_FAILED in CL_SD_S4H_STD_PARTNER_CONTACT=CM002, confirmed via
+      // ST22 short dump 2026-08-03, see NOTES.md).
+      this.byId("filterContact").setEnabled(false);
+      this.byId("filterContact").setTooltip(sTooltip);
 
       // Rejection Reason: no header-level reason-code field exists on this
       // service (only an item-level SalesDocumentRjcnReason) — filtering the
@@ -219,28 +239,17 @@ sap.ui.define([
     },
 
     _populateSalesOrderTypeItems: function () {
-      // Restricted to the E008 allow-list (ServiceSchema.fixedOrderTypes), not the
-      // full SalesOrderType value-help entity set — this control mirrors the same
-      // fixed scope already enforced server-side by _getFixedFilters().
+      // Optional Order Type filter choices, restricted to the E008 allow-list
+      // (ServiceSchema.fixedOrderTypes). NOTE: this is opt-in only — search no
+      // longer forces this restriction on every query (removed 2026-08-03: it
+      // was an unconfirmed placeholder that silently excluded real orders whose
+      // SalesOrderType wasn't in this list from ID/other searches, even though
+      // they appear on the unfiltered initial master-list load — see NOTES.md).
       var oControl = this.byId("filterSalesOrderType");
       oControl.removeAllItems();
       ServiceSchema.fixedOrderTypes.forEach(function (sType) {
         oControl.addItem(new Item({ key: sType, text: sType }));
       });
-    },
-
-    _getFixedFilters: function () {
-      var aTypeFilters = ServiceSchema.fixedOrderTypes.map(function (sType) {
-        return new Filter(ServiceSchema.headerProperties.salesOrderType, FilterOperator.EQ, sType);
-      });
-
-      var aFixed = [];
-
-      if (aTypeFilters.length) {
-        aFixed.push(new Filter({ filters: aTypeFilters, and: false }));
-      }
-
-      return aFixed;
     },
 
     // --- Master table columns: layout (order/visibility) driven by VariantStore
@@ -274,20 +283,34 @@ sap.ui.define([
           key: "status", i18nKey: "colStatus", hAlign: "Begin",
           createCell: function () {
             return new ObjectIdentifier({
-              title: { path: ServiceSchema.headerProperties.status, formatter: formatter.masterStatusText.bind(formatter) },
-              text: { path: ServiceSchema.headerProperties.status }
+              title: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusText.bind(formatter) },
+              text: { path: ServiceSchema.headerProperties.userStatus }
             });
           }
         },
         {
           key: "contact", i18nKey: "colContact", hAlign: "Begin", demandPopin: true, minScreenWidth: "Tablet",
           createCell: function () {
-            return new Text({
-              text: {
-                path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
-                formatter: formatter.masterContact
-              }
-            });
+            // RUNTIME-BLOCKED-BY-SERVICE: expanding _SoldToPartyContactInfo on
+            // the master LIST (multiple header rows at once) causes a backend
+            // 500 ASSERTION_FAILED dump in the custom provider
+            // CL_SD_S4H_STD_PARTNER_CONTACT=CM002 (confirmed live 2026-08-03 via
+            // ST22 short dump, see NOTES.md) — independent of which fields are
+            // selected. Do not rebind without re-verifying against the live
+            // backend first.
+            // return new ObjectIdentifier({
+            //   title: {
+            //     path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
+            //     formatter: formatter.masterContact
+            //   },
+            //   text: { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.phone }
+            // });
+
+            // return new Text({ text: { 
+            //   path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
+            //   formatter: formatter.masterContact
+            // } });
+            return new Text({ text: formatter.masterContact() });
           }
         },
         {
@@ -299,12 +322,14 @@ sap.ui.define([
         {
           key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", demandPopin: true, minScreenWidth: "Desktop",
           createCell: function () {
+            // RUNTIME-BLOCKED-BY-SERVICE: selecting ResponsibleEmployee via the
+            // _SoldToPartyContactInfo navigation causes a backend 500
+            // ASSERTION_FAILED dump on this service (confirmed live 2026-08-03,
+            // see NOTES.md) — do not add this property back to any $expand
+            // without re-verifying against the live backend first.
             return new ObjectIdentifier({
               title: formatter.masterEmployeeResponsibleTitle(),
-              text: {
-                path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee,
-                formatter: formatter.masterEmployeeResponsibleText
-              }
+              text: formatter.masterEmployeeResponsibleTitle()
             });
           }
         },
@@ -381,6 +406,7 @@ sap.ui.define([
       oTable.bindItems({
         path: "/" + ServiceSchema.entitySets.header,
         template: oTemplate,
+        filters: this._aCurrentFilters || this._getNoResultsFilter(),
         sorter: [new Sorter(ServiceSchema.headerProperties.createdOn, true)]
       });
     },
@@ -484,7 +510,6 @@ sap.ui.define([
         { id: "filterRequestId", type: "value" },
         { id: "filterExisId", type: "value" },
         { id: "filterProvider", type: "value" },
-        { id: "filterContact", type: "value" },
         { id: "filterShipToParty", type: "value" },
         { id: "filterCreatedBy", type: "value" },
         { id: "filterJurisdiction", type: "value" },

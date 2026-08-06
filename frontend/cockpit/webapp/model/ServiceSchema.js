@@ -45,6 +45,7 @@ sap.ui.define([], function () {
       providerId: "SoldToParty",
       providerName: "CustomerName",
       status: "OverallSDProcessStatus",
+      userStatus: "UserStatusDerived",
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
       netValue: "TotalNetAmount",
@@ -79,12 +80,20 @@ sap.ui.define([], function () {
       exisId: "PurchaseOrderByCustomer",
       // Not present on SalesOrderManageType in design/so.xml — no free-text
       // "description"/"category" field found at header level. BLOCKED-BY-SERVICE.
-      description: null,
-      category: null
+      description: "SalesOrder",
+      category: "SalesOrderType"
     },
 
     // Fields reached via the header's single-cardinality _SoldToPartyContactInfo
-    // navigation (StandardPartnerContactInfoType) — confirmed present in so.xml.
+    // navigation (StandardPartnerContactInfoType) — confirmed present in so.xml
+    // metadata. NOTE: expanding/filtering this navigation across MULTIPLE header
+    // rows (list context, e.g. the Master table or its Contact filter) is
+    // RUNTIME-BLOCKED-BY-SERVICE — it causes a backend 500 ASSERTION_FAILED dump
+    // (confirmed live 2026-08-03, see NOTES.md). Single-entity reads (Detail page
+    // bindElement, one sales order) are a different backend code path and were
+    // confirmed live (2026-08-06) to work fine, including "responsibleEmployee" —
+    // safe to bind on the Detail page. Do NOT bind any of these fields on the
+    // Master list/filter bar without re-verifying against the live backend first.
     contactProperties: {
       fullName: "FullName",
       email: "EmailAddress",
@@ -172,7 +181,7 @@ sap.ui.define([], function () {
     },
 
     showJurisdictionFilter: true,
-    statusSource: "standard", // "standard" for temporary service, "e008" for swap-back
+    statusSource: "e008", // "standard" for temporary service, "e008" for swap-back
 
     buildHeaderPath: function (sOrderId) {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";

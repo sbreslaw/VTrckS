@@ -47,6 +47,33 @@ sap.ui.define([
     "C": "Success"
   };
 
+  // Extracted as plain functions (not object methods) so status formatting
+  // works correctly regardless of how the caller invokes it: some XML fragments
+  // reference formatters as bare strings (e.g. '.formatter.detailStatusText'),
+  // which does NOT guarantee `this` is bound to the formatter module — using
+  // `this.statusText(...)` inside an object method broke under that call style
+  // ("this.statusText is not a function", found live 2026-08-03).
+  function fnStatusText(sCode) {
+    if (ServiceSchema.statusSource === "e008") {
+      return mStatusTextE008[sCode] || sCode || "";
+    }
+    return mStatusTextStandard[sCode] || sCode || "";
+  }
+
+  function fnUserStatusText(sCode) {
+    if (ServiceSchema.statusSource === "e008") {
+      return mStatusTextE008[sCode] || sCode || "";
+    }
+    return mStatusTextStandard[sCode] || sCode || "";
+  }
+
+  function fnStatusState(sCode) {
+    if (ServiceSchema.statusSource === "e008") {
+      return mStatusStateE008[sCode] || "None";
+    }
+    return mStatusStateStandard[sCode] || "None";
+  }
+
   return {
     masterRequestId: function (sOrderId) {
       return sOrderId || "";
@@ -59,11 +86,15 @@ sap.ui.define([
     },
 
     masterStatusText: function (sCode) {
-      return this.statusText(sCode);
+      return fnStatusText(sCode);
+    },
+
+    userStatusText: function (sCode) {
+      return fnUserStatusText(sCode);
     },
 
     masterStatusState: function (sCode) {
-      return this.statusState(sCode);
+      return fnStatusState(sCode);
     },
 
     masterCreatedOn: function (sValue) {
@@ -88,7 +119,8 @@ sap.ui.define([
     },
 
     masterContact: function (sFullName) {
-      return orDash(sFullName);
+      return '*****';
+      // return orDash(sFullName);
     },
 
     masterCreatedAt: function (oValue) {
@@ -148,16 +180,19 @@ sap.ui.define([
       return bHasWarning ? "Critical" : "Neutral";
     },
 
-    detailTitle: function (sOrderId, sPrefix, sFallback) {
-      return sOrderId ? (sPrefix + " " + sOrderId) : sFallback;
+    detailTitle: function (sOrderId, sContact, sPrefix, sFallback) {
+      if (!sOrderId) {
+        return sFallback;
+      }
+      return sContact ? (sPrefix + ":" + sOrderId + ", " + sContact) : (sPrefix + ":" + sOrderId);
     },
 
     detailStatusText: function (sCode) {
-      return this.statusText(sCode);
+      return fnStatusText(sCode);
     },
 
     detailStatusState: function (sCode) {
-      return this.statusState(sCode);
+      return fnStatusState(sCode);
     },
 
     detailCreatedOnBy: function (sOn, sBy, sLabel) {
@@ -175,17 +210,11 @@ sap.ui.define([
     },
 
     statusText: function (sCode) {
-      if (ServiceSchema.statusSource === "e008") {
-        return mStatusTextE008[sCode] || sCode || "";
-      }
-      return mStatusTextStandard[sCode] || sCode || "";
+      return fnStatusText(sCode);
     },
 
     statusState: function (sCode) {
-      if (ServiceSchema.statusSource === "e008") {
-        return mStatusStateE008[sCode] || "None";
-      }
-      return mStatusStateStandard[sCode] || "None";
+      return fnStatusState(sCode);
     }
   };
 });
