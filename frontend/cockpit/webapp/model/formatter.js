@@ -16,23 +16,31 @@ sap.ui.define([
   }
 
   var mStatusTextE008 = {
-    "1A": "Draft",
-    "1B": "Saved",
-    "1C": "Submitted with Warnings",
-    "1D": "Submitted",
-    "1E": "Cancelled",
-    "1F": "Partially Fulfilled",
-    "1G": "Fulfilled"
+    "0A": "Draft (no status)",
+    "1A": "In Process",
+    "1B": "On-Hold",
+    "1C": "Rejected",
+    "1D": "Approved",
+    "1E": "Approved by Grantee",
+    "1F": "Cancelled",
+    "1G": "Complete",
+    "2A": "Open Replacement",
+    "2B": "Complete",    
+    "2C": "Cancelled"
   };
 
   var mStatusStateE008 = {
+    "0A": "None",
     "1A": "Information",
-    "1B": "None",
-    "1C": "Warning",
+    "1B": "Warning",
+    "1C": "Error",
     "1D": "Success",
-    "1E": "Error",
-    "1F": "Warning",
-    "1G": "Success"
+    "1E": "Success",
+    "1F": "None",
+    "1G": "Success",
+    "2A": "Information",
+    "2B": "Success",    
+    "2C": "None"
   };
 
   var mStatusTextStandard = {
@@ -53,9 +61,38 @@ sap.ui.define([
   // which does NOT guarantee `this` is bound to the formatter module — using
   // `this.statusText(...)` inside an object method broke under that call style
   // ("this.statusText is not a function", found live 2026-08-03).
+
+  function removeFirstWord(str) {
+    if (typeof str !== "string") {
+        throw new TypeError("Input must be a string");
+    }
+
+    // Trim leading/trailing spaces
+    str = str.trim();
+
+    // Find the index of the first space
+    const firstSpaceIndex = str.indexOf(" ");
+
+    // If no space found, return empty string (only one word present)
+    if (firstSpaceIndex === -1) {
+        return "";
+    }
+
+    // Return everything after the first space, trimmed
+    return str.slice(firstSpaceIndex + 1).trim();
+  };
+
   function fnStatusText(sCode) {
     if (ServiceSchema.statusSource === "e008") {
-      return mStatusTextE008[sCode] || sCode || "";
+      return removeFirstWord(sCode) || sCode || "Draft";
+    }
+    return mStatusTextStandard[sCode] || sCode || "Draft";
+  }
+
+  function fnStatusCode(sCode) {
+    if (ServiceSchema.statusSource === "e008") {
+      let _code = sCode.split(' ')[0];
+      return _code || '0A';
     }
     return mStatusTextStandard[sCode] || sCode || "";
   }
@@ -68,8 +105,9 @@ sap.ui.define([
   }
 
   function fnStatusState(sCode) {
+    let _code = fnStatusCode(sCode);
     if (ServiceSchema.statusSource === "e008") {
-      return mStatusStateE008[sCode] || "None";
+      return mStatusStateE008[_code] || "None";
     }
     return mStatusStateStandard[sCode] || "None";
   }
@@ -87,6 +125,10 @@ sap.ui.define([
 
     masterStatusText: function (sCode) {
       return fnStatusText(sCode);
+    },
+
+    masterStatusCode: function (sCode) {
+      return fnStatusCode(sCode);
     },
 
     userStatusText: function (sCode) {

@@ -1,5 +1,5 @@
 {
-    "_version": "1.66.0",
+    "_version": "1.67.0",
     "sap.app": {
         "id": "cdc.vaccreq",
         "type": "application",
@@ -105,7 +105,7 @@
                 {
                     "name": "detail",
                     "pattern": "detail/{orderId}",
-                    "layout": "TwoColumnsMidExpanded",
+                    "layout": "MidColumnFullScreen",
                     "target": [
                         "master",
                         "detail"

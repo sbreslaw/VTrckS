@@ -53,7 +53,7 @@ sap.ui.define([
 				previousLayout : "",
 				actionButtonsInfo : {
 					midColumn : {
-						fullScreen : false
+						fullScreen : true
 					},
 					endColumn : {
 						fullScreen : false

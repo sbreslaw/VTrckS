@@ -54,6 +54,7 @@ sap.ui.define([
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
+
     },
 
     onAfterRendering: function () {
@@ -282,6 +283,21 @@ sap.ui.define([
       this._oSectionFactory.rebind();
     },
 
+		toggleFullScreen: function (oEvent) {
+      let _mdl = this.getOwnerComponent().getModel('appView'),
+          bFullScreen = _mdl.getProperty("/actionButtonsInfo/midColumn/fullScreen");
+			
+      _mdl.setProperty("/actionButtonsInfo/midColumn/fullScreen", !bFullScreen);
+			if (bFullScreen) {
+				// store current layout and go full screen
+				_mdl.setProperty("/previousLayout", _mdl.getProperty("/layout"));
+				_mdl.setProperty("/layout", "TwoColumnsMidExpanded");
+			} else {
+				// reset to previous layout
+				_mdl.setProperty("/layout",  _mdl.getProperty("/previousLayout"));
+			}
+
+		},
 
     _bindDetailHeader: function () {
       var oView = this.getView();
@@ -298,11 +314,11 @@ sap.ui.define([
 
       oView.byId("detailStatus")
         .bindProperty("text", {
-          path: ServiceSchema.headerProperties.status,
+          path: ServiceSchema.headerProperties.userStatus,
           formatter: formatter.detailStatusText.bind(formatter)
         })
-        .bindProperty("state", {
-          path: ServiceSchema.headerProperties.status,
+        .bindProperty("status", {
+          path: ServiceSchema.headerProperties.userStatus,
           formatter: formatter.detailStatusState.bind(formatter)
         });
 

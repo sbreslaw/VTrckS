@@ -66,12 +66,14 @@
    workaround applied: the Master list's "Contact" and "Employee Responsible"
    columns/filters no longer use this navigation at all (em-dash,
    RUNTIME-BLOCKED-BY-SERVICE — see `PHASE2_AUDIT.md`/`NOTES.md`). **Needs
-   backend team attention**: (a) should `CL_SD_S4H_STD_PARTNER_CONTACT=CM002`
-   handle `cx_rap_query_filter_no_range` gracefully instead of asserting, and
-   (b) is the Detail page's single-entity read of this same navigation (Contact/
-   Ship-To address, Billing's Payer/Bill-To party) safe, or does it need the
-   same client-side removal? **Not yet verified live** — please test opening a
-   Detail record after this fix and report whether it also 500s.
+   backend team attention**: should `CL_SD_S4H_STD_PARTNER_CONTACT=CM002`
+   handle `cx_rap_query_filter_no_range` gracefully instead of asserting (still
+   worth reporting/fixing, since it's a real backend defect even though the UI
+   now works around it). **Verified live 2026-08-06**: the Detail page's
+   single-entity read of this same navigation (Contact, Ship-To address,
+   Employee Responsible) does **not** crash — the assert is specific to
+   list-context `$expand`, so the Detail page now binds these fields directly
+   (no em-dash workaround needed there).
 9. **Confirm the real E008 vaccine-order `SalesOrderType`(s)** — `ServiceSchema.fixedOrderTypes`
    was set to `["ZVR1"]` as an unconfirmed placeholder and was found live
    2026-08-03 to incorrectly exclude a real, valid order (500000043) from every
@@ -82,6 +84,15 @@
    correct order type code(s) for E008 vaccine requests on this system so the
    dropdown's allow-list can be corrected (or replaced with the full
    `SalesOrderType` value-help entity if there's no fixed E008-specific set).
+10. **`UserStatusDerived` string-format assumption** — the Master/Detail Status
+    field was switched (2026-08-06/07) from `OverallSDProcessStatus` to
+    `UserStatusDerived`, whose raw value is assumed to always be a
+    `"<code> <description>"` string (e.g. `"1A In Process"`), parsed client-side
+    in `formatter.js` (`removeFirstWord`/`fnStatusCode` split on the first
+    space). Please confirm this format is stable/guaranteed for every possible
+    status code (including `0A`/draft, and any future codes) and won't ever be
+    a bare code with no description or a differently-formatted string — if it
+    ever is, the display text/color would silently be wrong rather than error.
 
 ## Swap-back readiness statement (target: `ZUI_VACCINEREQUEST_O4`)
 

@@ -189,7 +189,7 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{path: 'OverallSDProcessStatus', formatter: '.formatter.detailStatusText'}" />
+                  <Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" />
 								</f:fields>
 							</f:FormElement>
 

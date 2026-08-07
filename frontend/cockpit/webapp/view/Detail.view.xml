@@ -15,7 +15,6 @@
             <items>
               <HBox renderType="Bare" wrap="Wrap" width="80%">
                 <items>
-                  <ObjectStatus id="detailStatus" class="sapUiTinyMarginEnd" />
                   <Text id="detailCreatedOnBy" class="sapUiTinyMarginEnd" />
                   <ObjectNumber id="detailNetValue" />
                 </items>
@@ -27,6 +26,15 @@
             </items>
           </HBox>
         </f:expandedContent>
+
+        <f:content>
+          <OverflowToolbar>
+            <GenericTag id="detailStatus"
+              design="StatusIconHidden">
+           </GenericTag>
+          </OverflowToolbar>
+        </f:content>
+
         <f:actions>
           <Button text="{i18n>actionSave}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
@@ -45,6 +53,22 @@
             type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
             press=".onMessagePopoverPress" />
           <Button text="{i18n>actionValidate}" press=".onValidate" />
+
+					<Button
+						id="enterFullScreen"
+						icon="sap-icon://full-screen"
+						type="Transparent" 
+						visible="{= !${appView>/actionButtonsInfo/midColumn/fullScreen} }"
+						press="toggleFullScreen"				
+						/>
+					<Button
+						id="exitFullScreen"
+						icon="sap-icon://exit-full-screen"
+						type="Transparent" 
+						visible="{= ${appView>/actionButtonsInfo/midColumn/fullScreen}  }"
+						press="toggleFullScreen"				
+						/>
+
         </f:navigationActions>
       </f:DynamicPageTitle>
     </f:title>

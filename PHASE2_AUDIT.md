@@ -16,7 +16,8 @@ disabled/em-dash/empty-state.
 
 ## Section A — Master list (8 columns)
 
-- Vaccine Request ID, Description, Provider, Status, Contact, Created At,
+- Provider Order ID (formerly "Vaccine Request ID" — app renamed 2026-08-07),
+  Description, Provider, Status, Contact, Created At,
   Employee Responsible, Created By — **DONE**. Description is em-dash
   (**BLOCKED-BY-SERVICE**: no free-text header description field). Contact and
   Employee Responsible are both **fully em-dash (RUNTIME-BLOCKED-BY-SERVICE)**:
@@ -78,9 +79,14 @@ disabled/em-dash/empty-state.
 
 - **General Data, Dates, Value, Notes** groups — **DONE**.
   - Provider ID/Name, Order Type, Contact, Other Reason, Status, ExIS ID,
-    Created At, Net Value — real data.
-  - Employee Responsible — **RUNTIME-BLOCKED-BY-SERVICE** (em-dash; see Section A
-    note above — selecting this field crashes the backend).
+    Created At, Net Value, Employee Responsible — real data. Unlike the Master
+    list (Section A), `_SoldToPartyContactInfo`-backed fields (Contact,
+    Employee Responsible) are **not** blocked on the Detail page — confirmed
+    live 2026-08-06 that the single-entity read doesn't hit the backend's
+    `ASSERTION_FAILED` crash (that crash is specific to list-context `$expand`).
+  - Status now displays `UserStatusDerived` (E008-specific derived status) via
+    an `sap.m.GenericTag`, not `OverallSDProcessStatus` — switched 2026-08-06/07
+    to match the Master list's Status column (see NOTES.md).
   - Description, Category — **BLOCKED-BY-SERVICE** (em-dash; no matching header field).
   - Priority — **BLOCKED-BY-SERVICE** (em-dash; item-level only field, see Section B).
   - Tax, Gross (Value group) — **BLOCKED-BY-SERVICE** (em-dash; only `TotalNetAmount`

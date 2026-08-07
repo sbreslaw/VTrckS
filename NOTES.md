@@ -162,5 +162,33 @@ Running the Phase 2 build against the real dev-system service surfaced a backend
 - Added `noDataText` on `requestsTable` bound to `{i18n>masterNoDataBeforeSearch}` ("Enter search criteria and choose Go to see results"), shown only while `view>/masterHasSearch` is `false`, so the empty initial state doesn't look broken/blank.
 - Table personalization/column-layout changes (`_applyColumnDialog` → `_bindMasterItems()`) reuse `this._aCurrentFilters`, so re-rendering columns doesn't reset back to the unfiltered/empty state.
 
+## Verified live: single-entity Detail reads through `_SoldToPartyContactInfo` are safe — 2026-08-06
 
+- Confirmed live that `Details.fragment.xml`'s Contact (`FullName`), Ship-To address (`FormattedPostalAddressDesc`), and Employee Responsible (`ResponsibleEmployee`) fields all bind and render correctly on the Detail page with no crash. This confirms the `ASSERTION_FAILED` regression documented above is specific to the **list-context** `$expand` of `_SoldToPartyContactInfo` (Master list); the **single-entity** `bindElement` read (Detail page, `READ_ENTITY`) is a different backend code path and is not affected.
+- `ResponsibleEmployee` is therefore bound directly on the Detail page. The em-dash workaround remains required only for the Master list's Contact/Employee Responsible columns and the Contact filter, where the crash is real.
+
+## Rebranding: app renamed from "Vaccine Request" to "Provider Order" — 2026-08-07
+
+- All user-facing "Vaccine Request(s)" labels renamed to "Provider Order(s)": app title (`appTitle`), Master list title (`masterTitle`), Vaccine Request ID filter/column (`filterRequestId`, `colRequestId`), Detail page title/prefix (`detailTitle`, `detailTitlePrefix`), and the FLP sandbox tile title/description in `flpSandbox.html`/`flpSandboxMockServer.html`.
+- `manifest.json`'s `sap.app/title` already referenced the `{{appTitle}}` i18n key, so no code change was needed there.
+- The technical namespace/app ID (`cdc.vaccreq`) was intentionally left unchanged — this is a code-level identifier, not a display label, and renaming it would be a much larger, riskier refactor (component ID, manifest, module paths, variant persistence keys) out of scope for a display-text rename.
+
+## Status field switched to `UserStatusDerived` (E008-specific derived status) — 2026-08-06/07
+
+- Both the Master list Status column and the Detail page status control were switched from `OverallSDProcessStatus` (generic SD document status, `status`/`statusSource: "standard"`) to `UserStatusDerived` (`headerProperties.userStatus`, `statusSource: "e008"`), which carries the E008-specific workflow status.
+- `UserStatusDerived`'s raw value is a combined `"<code> <description>"` string (e.g. `"1A In Process"`), not a bare code. `formatter.js` was updated accordingly:
+  - `fnStatusText` (e008 branch) now strips the leading code word (`removeFirstWord`) and displays the remainder as-is, rather than looking up a hardcoded text map.
+  - `fnStatusCode` extracts just the leading code word (`sCode.split(' ')[0]`) for status-state (color) lookup via `mStatusStateE008`.
+  - `mStatusTextE008`/`mStatusStateE008` were updated to the confirmed E008 code set (`0A`, `1A`-`1G`, `2A`-`2C`) with corrected descriptions/severities (`mStatusTextE008` is now effectively a fallback/reference map since the display text comes directly from the backend string).
+- Detail page: `Details.fragment.xml`'s status field and `Detail.controller.js`'s `_bindDetailHeader()` both now bind `UserStatusDerived` (previously `OverallSDProcessStatus`), and the status control changed from `sap.m.ObjectStatus` to `sap.m.GenericTag` (property `status`, type `sap.ui.core.ValueState` — matches the values `fnStatusState` returns: `None`/`Information`/`Success`/`Warning`/`Error`). The controller's binding was updated from `.bindProperty("state", ...)` to `.bindProperty("status", ...)` to match `GenericTag`'s actual property name.
+- Fixed a typo while reviewing: `mStatusStateE008` had a stray `"0A:"` key (trailing colon) instead of `"0A"` — corrected; behavior was unaffected since the lookup miss fell back to the same `"None"` value either way.
+
+## UX addition: Detail page full-screen toggle — 2026-08-06/07
+
+- Added a full-screen toggle button pair (`enterFullScreen`/`exitFullScreen`, mutually exclusive via `visible` bindings on `appView>/actionButtonsInfo/midColumn/fullScreen`) to `Detail.view.xml`'s `f:DynamicPageTitle/f:navigationActions`, wired to a new `toggleFullScreen` handler in `Detail.controller.js` that flips the `appView` model's `midColumn.fullScreen` flag and swaps `/layout` between `TwoColumnsMidExpanded` and the previously-stored layout.
+- `App.controller.js`'s default `appView` model now starts with `actionButtonsInfo.midColumn.fullScreen: true` (was `false`), and `manifest.json`'s `detail` route layout changed from `TwoColumnsMidExpanded` to `MidColumnFullScreen` to match — the Detail page now opens full-screen by default, with the option to return to the split two-column layout.
+
+## Master list Contact column masks contact info — 2026-08-07
+
+- `formatter.masterContact()` now unconditionally returns the literal string `*****` instead of the contact's full name or an em-dash (the previous `orDash(sFullName)` call is commented out, and the Master list doesn't pass it any value regardless). Confirmed intentional (PII masking) — the Master list Contact column intentionally does not display real contact names, independent of whether `_SoldToPartyContactInfo` is available. **Open question**: the current implementation is a hardcoded literal, not a real masking transform — revisit if partial-reveal or per-record masking is ever needed.
 

@@ -282,9 +282,11 @@ sap.ui.define([
         {
           key: "status", i18nKey: "colStatus", hAlign: "Begin",
           createCell: function () {
+            // return new Text({ text: { path: ServiceSchema.headerProperties.userStatus }});
             return new ObjectIdentifier({
               title: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusText.bind(formatter) },
-              text: { path: ServiceSchema.headerProperties.userStatus }
+              // text: { path: ServiceSchema.headerProperties.userStatus }
+              text: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusCode.bind(formatter) }
             });
           }
         },
