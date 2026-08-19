@@ -74,16 +74,12 @@
    Employee Responsible) does **not** crash — the assert is specific to
    list-context `$expand`, so the Detail page now binds these fields directly
    (no em-dash workaround needed there).
-9. **Confirm the real E008 vaccine-order `SalesOrderType`(s)** — `ServiceSchema.fixedOrderTypes`
-   was set to `["ZVR1"]` as an unconfirmed placeholder and was found live
-   2026-08-03 to incorrectly exclude a real, valid order (500000043) from every
-   search (it doesn't appear to be type `ZVR1`). The automatic search-time
-   restriction to this list has been **removed** (search now matches the
-   unfiltered initial list load — see NOTES.md), but the optional "Order Type"
-   filter dropdown still only offers `ZVR1` as a choice. Please confirm the
-   correct order type code(s) for E008 vaccine requests on this system so the
-   dropdown's allow-list can be corrected (or replaced with the full
-   `SalesOrderType` value-help entity if there's no fixed E008-specific set).
+9. ~~**Confirm the real E008 vaccine-order `SalesOrderType`(s)**~~ — **RESOLVED
+   2026-08-19.** `design/E008_Service_Extension_Design.md` §6 confirms the E008
+   vaccine-request order type is **`ZKB`**. `ServiceSchema.fixedOrderTypes` has
+   been updated from the `["ZVR1"]` placeholder to `["ZKB"]` (see NOTES.md,
+   "CRUD Task 1" entry). The "Order Type" filter dropdown's allow-list should
+   be reviewed against this in a follow-up pass if it still only offers `ZVR1`.
 10. **`UserStatusDerived` string-format assumption** — the Master/Detail Status
     field was switched (2026-08-06/07) from `OverallSDProcessStatus` to
     `UserStatusDerived`, whose raw value is assumed to always be a
@@ -93,6 +89,20 @@
     status code (including `0A`/draft, and any future codes) and won't ever be
     a bare code with no description or a differently-formatted string — if it
     ever is, the display text/color would silently be wrong rather than error.
+11. **CRUD Task 1 (Create New Provider Order) backend dependencies** —
+    added 2026-08-19, see `PAYLOAD_CONTRACT.md` for full detail. Frontend
+    scaffolding (dialog, service, enums) is built with a temporary mock
+    (`CreateRequestService.USE_MOCK = true`) pending these:
+    1. A custom `OrderCreate` action — confirmed **not present** in the
+       current `$metadata` (only standard `C_SALESORDERMANAGE_SD` actions
+       exist). Name, parameter shape, and response shape are all unconfirmed.
+    2. `ZI_VR_CONTACTVH` — value help for the Contact field (currently a
+       disabled Input with an "available with the E008 service" tooltip).
+    3. `ZI_VR_NDCVH` — value help for the NDC field (currently a plain,
+       enabled Input with the same pending tooltip).
+    4. Confirmation of the Priority/Order Reason/Category/Intention enum
+       codes used in `webapp/model/Enums.js` (Intention likely maps to
+       MVGR1).
 
 ## Swap-back readiness statement (target: `ZUI_VACCINEREQUEST_O4`)
 

@@ -1,0 +1,126 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form">
+  <Dialog
+    id="createRequestDialog"
+    title="{i18n>createRequestDialogTitle}"
+    contentWidth="42rem"
+    verticalScrolling="true"
+    busy="{create>/busy}"
+    busyIndicatorDelay="0">
+    <content>
+      <VBox class="sapUiSmallMargin">
+        <MessageStrip
+          id="createRequestErrorStrip"
+          text="{create>/errorSummary}"
+          type="Error"
+          showIcon="true"
+          visible="{= !!${create>/errorSummary} }"
+          class="sapUiSmallMarginBottom" />
+
+        <f:SimpleForm
+          editable="true"
+          layout="ResponsiveGridLayout"
+          labelSpanL="4" labelSpanM="4" adjustLabelSpan="false">
+          <core:Title text="{i18n>createRequestGeneralData}" />
+
+          <Label text="{i18n>createRequestProvider}" required="true" labelFor="createRequestProviderInput" />
+          <Input
+            id="createRequestProviderInput"
+            value="{create>/provider}"
+            valueState="{create>/providerState}"
+            valueStateText="{create>/providerStateText}"
+            change=".onProviderChange" />
+
+          <Label text="{i18n>createRequestDescription}" required="true" labelFor="createRequestDescriptionInput" />
+          <Input
+            id="createRequestDescriptionInput"
+            value="{create>/description}"
+            valueState="{create>/descriptionState}"
+            valueStateText="{create>/descriptionStateText}" />
+
+          <Label text="{i18n>createRequestContact}" labelFor="createRequestContactInput" />
+          <Input
+            id="createRequestContactInput"
+            value="{create>/contactId}"
+            enabled="false"
+            tooltip="{i18n>availableWithE008Service}" />
+
+          <Label text="{i18n>createRequestPriority}" labelFor="createRequestPrioritySelect" />
+          <Select id="createRequestPrioritySelect" selectedKey="{create>/priority}" items="{create>/enums/priority}">
+            <core:Item key="{create>key}" text="{create>text}" />
+          </Select>
+
+          <Label text="{i18n>createRequestOrderReason}" labelFor="createRequestOrderReasonSelect" />
+          <Select id="createRequestOrderReasonSelect" selectedKey="{create>/orderReason}" items="{create>/enums/orderReason}">
+            <core:Item key="{create>key}" text="{create>text}" />
+          </Select>
+
+          <Label text="{i18n>createRequestCategory}" labelFor="createRequestCategorySelect" />
+          <Select id="createRequestCategorySelect" selectedKey="{create>/category}" items="{create>/enums/category}">
+            <core:Item key="{create>key}" text="{create>text}" />
+          </Select>
+
+          <Label text="{i18n>createRequestExisId}" labelFor="createRequestExisIdInput" />
+          <Input id="createRequestExisIdInput" value="{create>/exisId}" />
+        </f:SimpleForm>
+
+        <Title text="{i18n>createRequestItems}" level="H4" class="sapUiSmallMarginTop sapUiTinyMarginBottom" />
+        <Text
+          id="createRequestItemsStateText"
+          text="{create>/itemsStateText}"
+          visible="{= !!${create>/itemsStateText} }"
+          class="sapUiTinyMarginBottom" />
+        <Table
+          id="createRequestItemsTable"
+          items="{create>/items}"
+          mode="None"
+          growing="false"
+          noDataText="{i18n>createRequestNoItems}">
+          <columns>
+            <Column><Text text="{i18n>createRequestNdc}" /></Column>
+            <Column><Text text="{i18n>createRequestQuantity}" /></Column>
+            <Column><Text text="{i18n>itemUom}" /></Column>
+            <Column><Text text="{i18n>createRequestIntention}" /></Column>
+            <Column width="3rem" />
+          </columns>
+          <items>
+            <ColumnListItem>
+              <cells>
+                <Input
+                  value="{create>ndc}"
+                  valueState="{create>ndcState}"
+                  tooltip="{i18n>availableWithE008Service}" />
+                <Input
+                  value="{create>quantity}"
+                  type="Number"
+                  valueState="{create>quantityState}" />
+                <Text text="{create>uom}" />
+                <Select selectedKey="{create>intention}" items="{create>/enums/intention}">
+                  <core:Item key="{create>key}" text="{create>text}" />
+                </Select>
+                <Button
+                  icon="sap-icon://delete"
+                  type="Transparent"
+                  tooltip="{i18n>createRequestDeleteRow}"
+                  press=".onDeleteItem" />
+              </cells>
+            </ColumnListItem>
+          </items>
+        </Table>
+        <Button
+          text="{i18n>createRequestAddRow}"
+          icon="sap-icon://add"
+          press=".onAddItem"
+          class="sapUiSmallMarginTop" />
+      </VBox>
+    </content>
+    <beginButton>
+      <Button text="{i18n>masterCreateButton}" type="Emphasized" press=".onCreatePress" />
+    </beginButton>
+    <endButton>
+      <Button text="{i18n>cancel}" press=".onCancelPress" />
+    </endButton>
+  </Dialog>
+</core:FragmentDefinition>

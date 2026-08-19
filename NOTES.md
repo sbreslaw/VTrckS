@@ -291,3 +291,34 @@ Applied directly by the user, not via an agent edit:
 - **Item 4 — Description column width**: `_getColumnDefs()`'s `description` entry changed from `"12rem"` to `"40rem"` initial width. Any already-persisted `VariantStore` layout with the old `12rem` width is left untouched (expected personalization behavior — user-saved widths win over the new default).
 - i18n: added `p13nDialogTitle`, `p13nSelectionPanelTitle`, `p13nSortPanelTitle`, `p13nGroupPanelTitle`, `columnVariantLabel`, `columnVariantSaveDialogTitle`, `columnVariantManageDialogTitle`; removed `columnDialogTitle`/`moveUp`/`moveDown` (only used by the removed hand-rolled dialog).
 
+## CRUD Task 1 — Create New Provider Order (dialog + OrderCreate action) — 2026-08-19
+
+Implemented per `design/NEwVaccReq.md` ("CRUD Task 1 Prompt v2 — supersedes v1"). **Spec filename note**: the user's work order referenced `design/E008_CRUD1_Create_Prompt.md`, which does not exist in this repo — the actual matching document (same title/content) is `design/NEwVaccReq.md`; used that as authoritative.
+
+### Step 0 reconciliation deltas found
+
+- `ServiceSchema.fixedOrderTypes` was still `["ZVR1"]` — fixed to `["ZKB"]` per the confirmed lesson in `design/E008_Service_Extension_Design.md` §6 (also resolves `OPEN_QUESTIONS.md` item 9).
+- **Confirmed blocker**: no custom `OrderCreate` action exists anywhere in the currently bound `$metadata` (checked both `frontend/cockpit/webapp/localService/metadata.xml` and `design/so.xml` — only standard `C_SALESORDERMANAGE_SD` actions such as `CreateWithSalesOrderType`/`CreateWithRefFromSlsQuotation` are present). Per the work order's own instruction, this is bridged with an explicitly-flagged temporary mock (`CreateRequestService.USE_MOCK = true`) rather than inventing an action name or blocking entirely — see `PAYLOAD_CONTRACT.md`/`OPEN_QUESTIONS.md` item 11.
+- **Provider value help**: `SoldToParty` does have a real `SAP__common.ValueListReferences` annotation in `design/so.xml` (`c_soldtosalesareavh` F4 service), but implementing a full F4 dialog was judged disproportionate scope here — used a plain required `Input`, consistent with the existing `filterProvider` precedent in the Master filter bar. Deferred enhancement, not an oversight.
+- **No `ZZ_ContactVH`/NDC VH entities exist** anywhere in the metadata — Contact is a **disabled** `Input` + the existing `availableWithE008Service` tooltip (same pattern used for other pending-backend filter fields); NDC is a **plain enabled** `Input` with the same tooltip (per the spec's exact distinction between the two fields).
+- **Logged spec/reality conflict**: the spec says to navigate to the detail page with a key "incl. `IsActiveEntity=true`" — this service has no `IsActiveEntity` key at all (confirmed in `manifest.json`'s `detail` route pattern `detail/{orderId}` and `ServiceSchema.keys`, which has no such key). Resolution: reused the existing, correct `_navigateToOrder(sId)` helper unchanged for the CRUD1 success path rather than inventing a key that doesn't exist.
+
+### Files created
+
+- `frontend/cockpit/webapp/model/Enums.js` — `PRIORITY`/`ORDER_REASON`/`CATEGORY`/`INTENTION` key+i18nKey lists, `INTENTION_DEFAULT = "PED_AND_ADULT"`, `MIN_ITEMS = 1`. All marked `TODO: replace with backend value help; keys pending config confirmation`.
+- `frontend/cockpit/webapp/service/CreateRequestService.js` — `buildPayload(oDialogData)` (single mapper, omits empty optional header fields, drops invalid item rows) and `create(oModel, oPayload)` (Promise-based). `USE_MOCK = true` resolves a fake `salesDocument` after a short delay; the real-invocation code path (`oModel.bindContext(...).invoke()`) is present but gated behind the flag, with `TODO-VERIFY` on the action name (`ServiceSchema.orderCreateAction`) and the parameter shape (structured vs. single JSON string — unconfirmed).
+- `frontend/cockpit/webapp/view/fragments/CreateRequestDialog.fragment.xml` + `frontend/cockpit/webapp/controller/CreateRequestDialog.js` — standalone dialog handler object (not `Controller.extend`), lazy-instantiated once by `Master.controller.js` via `new CreateRequestDialog(this)`, `open(fnOnSuccess)` API. Local `create` JSONModel holds form fields + an `items` array + resolved enum `{key,text}` lists for the four Selects. Validates Provider/Description required + at least `Enums.MIN_ITEMS` valid item rows (NDC + positive quantity) before calling the service; maps backend failure `messages[].target` onto the same per-field `valueState`s where recognized, else into a top-level `MessageStrip` summary.
+- `PAYLOAD_CONTRACT.md` (repo root) — request/response shape, status **"UNCONFIRMED — pending backend sign-off"**, backend dependency list (5 items).
+
+### Files modified
+
+- `ServiceSchema.js` — `fixedOrderTypes` → `["ZKB"]`; added `orderCreateAction` (`TODO-VERIFY`), `createPayloadFields` (payload key-name isolation block), `createPayloadUom = "EA"`.
+- `Master.controller.js` — `onCreateRequest` now lazy-loads/opens `CreateRequestDialog`; added `_onCreateRequestSuccess` (toast with the new ID, refreshes `requestsTable`'s `rows` binding, calls the existing `_navigateToOrder`). Removed the old placeholder toast (`masterCreateToast` i18n key removed, no other references).
+- `i18n.properties` — added all Create-dialog labels/tooltips/messages and enum display texts; removed `masterCreateToast`.
+- `OPEN_QUESTIONS.md` — item 9 marked resolved (ZKB); added item 11 listing the 4 remaining CRUD1 backend dependencies (OrderCreate action, ContactVH, NDCVH, enum code confirmation).
+
+### Known limitations / not done in this pass
+
+- **Live verification against a real `OrderCreate` action is impossible** — the action doesn't exist yet on any bound service. The mock-backed happy path (dialog → mock resolve → toast → refresh → navigate) is the only thing that can be exercised today; the forced-failure/message-mapping path is implemented but only unit-testable by temporarily rejecting the mock, not verified against a real backend error response.
+- `manifest.json` routes were reviewed (`detail/{orderId}`, no `IsActiveEntity`) to confirm the `_navigateToOrder` reuse decision above — no route changes were needed.
+

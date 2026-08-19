@@ -312,6 +312,60 @@ hard") was **explicitly deferred by the user** — not implemented; still open.
   crash). Revisit with the user before implementing.
 
 
+## Section K — CRUD Task 1: Create New Provider Order (2026-08-19)
+
+Implemented per `design/NEwVaccReq.md` ("CRUD Task 1 Prompt v2"). Full
+Step-0/build detail is in `NOTES.md` ("CRUD Task 1" entry) — summarized here
+for audit-trail purposes.
+
+- **Create button — DONE, replaces the Section I placeholder.**
+  `onCreateRequest` (previously the `masterCreateToast` `MessageToast`
+  placeholder, `// TODO(CRUD)`) now lazy-instantiates and opens
+  `CreateRequestDialog` (`webapp/controller/CreateRequestDialog.js` +
+  `webapp/view/fragments/CreateRequestDialog.fragment.xml`), a standalone
+  handler object owned by `Master.controller.js` (not a second
+  `Controller.extend`). Success callback (`_onCreateRequestSuccess`) shows a
+  toast, refreshes `requestsTable`'s `rows` binding, and reuses the existing
+  `_navigateToOrder` helper — **no `IsActiveEntity` key is used**, deliberately
+  deviating from the spec's literal wording since this service has no such key
+  (logged as a conflict in `NOTES.md`/`OPEN_QUESTIONS.md`, per the work order's
+  own "log the conflict" rule rather than inventing a nonexistent key).
+- **`ServiceSchema` isolation maintained**: new `orderCreateAction`,
+  `createPayloadFields`, `createPayloadUom` constants added so
+  `CreateRequestService.js`/`CreateRequestDialog.js` never hardcode literal
+  payload field names or the action name (Section H's isolation pattern
+  extended to this task).
+- **`ServiceSchema.fixedOrderTypes` correction — DONE.** `["ZVR1"]` →
+  `["ZKB"]`, resolving `OPEN_QUESTIONS.md` item 9 (confirmed via
+  `design/E008_Service_Extension_Design.md`).
+- **DEVIATION / TEMPORARY — mock create.** No custom `OrderCreate` action
+  exists in the currently bound `$metadata` (confirmed by grep of both
+  `localService/metadata.xml` and `design/so.xml`). Per the work order's own
+  explicit allowance, `CreateRequestService.js` has a `USE_MOCK = true` flag
+  that resolves a fake `salesDocument` instead of invoking a real action. The
+  real-invocation code path is present but inactive, with `TODO-VERIFY` on
+  both the action's exact name and its parameter shape (structured params vs.
+  a single JSON string) — **this means the DoD's "live verification against
+  dev" and "forced-failure path against the real action" cannot be completed
+  in this pass.** Must be revisited once the backend ships the action.
+- **DEVIATION — Provider field is a plain `Input`, not a full F4 value
+  help**, even though `SoldToParty` does have a real
+  `SAP__common.ValueListReferences` annotation in `design/so.xml`. Judged
+  disproportionate scope versus the existing `filterProvider` precedent
+  elsewhere in the app; documented as a deliberate simplification (see
+  `PAYLOAD_CONTRACT.md` dependency list), not an oversight.
+- **Contact/NDC fields**: no `ZI_VR_CONTACTVH`/`ZI_VR_NDCVH` entities exist
+  anywhere in the metadata. Contact is a disabled `Input` +
+  `availableWithE008Service` tooltip (reusing the existing pending-backend
+  pattern); NDC is a plain **enabled** `Input` with the same tooltip — per the
+  spec's explicit distinction between the two fields.
+- **TODO-VERIFY at runtime** (per Onboarding guardrail #7): the real
+  `OrderCreate` action name/parameter shape/response shape (see
+  `PAYLOAD_CONTRACT.md`); the Priority/Order Reason/Category/Intention enum
+  codes in `webapp/model/Enums.js` (all flagged inline as pending config
+  confirmation).
+
+
 ## Custom simplifications summary (vs. originally suggested SAPUI5 features)
 
 | Area | Suggested | Implemented instead | Why |

@@ -22,12 +22,13 @@ sap.ui.define([
   "sap/m/p13n/GroupPanel",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/VariantStore"
+  "cdc/vaccreq/model/VariantStore",
+  "cdc/vaccreq/controller/CreateRequestDialog"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Item, Column, Text, Link,
   ObjectIdentifier, Dialog, Button, Input, List, CustomListItem, HBox, MessageToast,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel,
-  formatter, ServiceSchema, VariantStore
+  formatter, ServiceSchema, VariantStore, CreateRequestDialog
 ) {
   "use strict";
 
@@ -165,9 +166,25 @@ sap.ui.define([
     },
 
     onCreateRequest: function () {
+      if (!this._oCreateRequestDialog) {
+        this._oCreateRequestDialog = new CreateRequestDialog(this);
+      }
+      this._oCreateRequestDialog.open(this._onCreateRequestSuccess.bind(this));
+    },
+
+    // Success callback for CreateRequestDialog (CRUD Task 1, design/NEwVaccReq.md):
+    // the dialog closes itself; Master owns the shared post-create steps —
+    // toast, refreshing the list binding, and navigating to the new order via
+    // the existing _navigateToOrder helper (no IsActiveEntity key — this
+    // service has none; see NOTES.md for the logged spec/reality conflict).
+    _onCreateRequestSuccess: function (sSalesDocument) {
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-      MessageToast.show(oBundle.getText("masterCreateToast"));
-      // TODO(CRUD): navigate to create context
+      MessageToast.show(oBundle.getText("createRequestSuccessToast", [sSalesDocument]));
+      var oBinding = this.byId("requestsTable").getBinding("rows");
+      if (oBinding) {
+        oBinding.refresh();
+      }
+      this._navigateToOrder(sSalesDocument);
     },
 
     onMasterRefresh: function () {

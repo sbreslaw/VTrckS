@@ -159,8 +159,39 @@ sap.ui.define([], function () {
     ],
 
     fixedOrderTypes: [
-      "ZVR1" // TODO-VERIFY: confirm E008 order types with backend
+      // Confirmed 2026-08-19 via design/E008_Service_Extension_Design.md §6:
+      // E008 vaccine-request order type is ZKB (replaces the old unconfirmed
+      // "ZVR1" placeholder here — see OPEN_QUESTIONS.md item 9/NOTES.md).
+      "ZKB"
     ],
+
+    // --- CRUD Task 1 (Create New Provider Order) — see design/NEwVaccReq.md ---
+    // TODO-VERIFY: no custom OrderCreate action exists in the current $metadata
+    // (confirmed 2026-08-19: only standard C_SALESORDERMANAGE_SD actions such as
+    // CreateWithSalesOrderType/CreateWithRefFromSlsQuotation are present — see
+    // NOTES.md "CRUD Task 1" entry, PAYLOAD_CONTRACT.md). This name is a
+    // placeholder for when the backend action ships; CreateRequestService.js
+    // falls back to a mock resolve until it's confirmed and corrected here.
+    orderCreateAction: "OrderCreate",
+
+    // Payload field names for the OrderCreate request contract (see
+    // PAYLOAD_CONTRACT.md) — kept here, not literal in CreateRequestService.js/
+    // CreateRequestDialog.js, so a contract change is a one-file edit and the
+    // grep isolation check stays meaningful.
+    createPayloadFields: {
+      provider: "provider",
+      description: "description",
+      contactId: "contactId",
+      priority: "priority",
+      orderReason: "orderReason",
+      category: "category",
+      exisId: "exisId",
+      itemNdc: "ndc",
+      itemQuantity: "quantity",
+      itemUom: "uom",
+      itemIntention: "intention"
+    },
+    createPayloadUom: "EA",
 
     statusProperties: {
       code: "OverallSDProcessStatus",
