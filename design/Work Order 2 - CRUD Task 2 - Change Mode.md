@@ -1,51 +1,48 @@
-# Copilot Work Order — CRUD Task 2: Change Mode (Per-Section Edit via Draft Protocol)
+# Copilot Work Order — CRUD Task 2 v2: Change Mode (Per-Section Edit, PATCH + ETag) — supersedes v1
 
-**Prepared in advance — first prompt cut from `PROMPT_TEMPLATE.md`. Not to be run until CRUD Task 1 (Create) is merged and verified.** Collaborative-agent density: files and contracts pre-decided; implement, don't re-decide.
+**v2 rationale:** `R_SalesOrderTP` BDEF verified in ADT — *unmanaged, NO DRAFT, late numbering, lock master, etag master LastChangeTime*. v1's draft choreography (Edit/Activate/Discard, DraftAdministrativeData, IsActiveEntity keys) is void. Edit = plain PATCH against the active entity; concurrency = ETag/412. Prepared ahead of time — run only after CRUD Task 1 (Create) is merged.
 
 ## 1. AUTHORITY
-Read first: `AGENT_ONBOARDING.md`, `UI5_AGENT_PLAYBOOK.md`, `NOTES.md`, `PAYLOAD_CONTRACT.md`, this file. Authoritative on conflicts: this work order, then the onboarding guardrails. Scope guard: Detail view + a new edit service module only — **no changes to Master, Create flow, SectionFactory's factory mechanics, or ServiceSchema's read mappings.** This task implements field *edits*; Cancel/Copy/Return/Replacement/Un-cancel are commands and belong to later tasks (decision rule on record: commands = actions, edits = CRUD).
+Read: `AGENT_ONBOARDING.md`, `UI5_AGENT_PLAYBOOK.md`, `NOTES.md`, `PAYLOAD_CONTRACT.md`, this file. Conflicts: this work order wins; log in NOTES. Scope guard: Detail view + one new edit service module. No changes to Master, Create flow, SectionFactory mechanics, ServiceSchema read mappings. Edits only — Cancel/Copy/Return/Replacement/Un-cancel are commands (actions), later tasks.
 
-**Ledger note for the module header:** this task is the real test of gate item #1 — the draft protocol lands in the client here, unavoidably.
-
-## 2. STEP-0 RECONCILE (extra weight — this prompt was written ahead of time)
-- [ ] Create flow merged: `CreateRequestService.js`, `Enums.js`, dialog present; note any API drift.
-- [ ] `$metadata` inventory (record exact qualified names in NOTES): the standard draft actions on the order entity — Edit, Activate, Discard, Prepare if present; `DraftAdministrativeData` navigation; which header properties are **updatable** (check `Core.Immutable`/update restrictions): expect Priority, Order Reason, ExIS ID (PurchaseOrderByCustomer) writable; Category per its landed mapping; **Description (ZZ_/KTEXT): expect NOT writable** — ZZ view-extension elements carry no write mapping in SAP's behavior. Verify, don't assume, then apply the degradation below.
-- [ ] `sectionFlags` model + per-section Edit buttons exist (Phase-2 stubs, disabled).
-- [ ] Message-to-panel auto-expand machinery works (Phase-2 deliverable) — the activation error path depends on it.
-- [ ] ZZ read fields live (Description/Contact/ER columns bound) or still em-dash — affects which Details fields render at all.
-- [ ] Backend dependency check: has an UpdateDescription/OrderUpdate micro-action shipped? (Companion ask below.) If yes, record its name; if no, Description stays read-only in edit mode.
+## 2. STEP-0 RECONCILE
+- [ ] Create flow merged; note API drift.
+- [ ] `$metadata` inventory (record in NOTES): **updatable header properties** (check update restrictions/Immutable): expect Priority, Order Reason, ExIS ID writable; Category per its landed mapping; **ZZ_Description expected NOT updatable** (view-extension element — verify; if a backend UpdateDescription micro-action shipped, record its name, else Description stays read-only in edit mode). Item updatability: Quantity; item create-by-association availability on the active entity.
+- [ ] Confirm NO draft markers in metadata (IsActiveEntity/DraftAdministrativeData/Edit-Activate-Discard) — expected absent per the BDEF finding; if any appear, STOP and escalate (would contradict the verified header).
+- [ ] `sectionFlags` model + Edit button stubs present; message-to-panel auto-expand works.
+- [ ] Value-help entities live or pending (affects which edit controls get VHs vs. plain inputs).
 
 ## 3. THE WORK
 
-### Edit model (settled — implement exactly)
-- **One section in edit at a time.** Pressing Edit on section A disables Edit on all others until Save/Cancel. This matches the requirement ("each section edited separately") and honestly reflects the backend truth: there is **one order-wide draft**, not per-section drafts — serializing sections prevents the lie of independent section saves.
-- **Flow per edit session:** Edit press → invoke the standard **Edit action** on the order context (creates the edit draft; on failure — e.g., foreign draft exists — surface the message incl. locked-by user from DraftAdministrativeData, stay in display) → rebind the detail context to the **draft instance** (key `IsActiveEntity=false`) → unlock that section's fields per the updatable-map → user edits (PATCH via context `setProperty`, update group `vrEdit`, submit on Save) → **Save** = `submitBatch` + **Activate action** → rebind to active instance, refresh master row, toast → **Cancel** = **Discard action** → rebind to active, no residue.
-- **Failure semantics:** activation errors render via the message model, panel-anchored with auto-expand + field valueStates; the draft survives for correction (user retries Save or Cancels → Discard). App/browser death mid-edit leaves an SAP-managed draft; on next Edit press the Edit action's foreign/own-draft response governs — **resume own draft silently** (rebind to it) — document the observed behavior in NOTES; no custom orphan cleanup is built (SAP owns draft lifecycle on their BO — note this as an accepted bridge cost in the gate paragraph).
-- **Concurrency:** 412/etag on the Edit action or Activate → existing reload-dialog pattern.
+### Edit model (settled)
+- **One section in edit at a time** — serialized, per the customer requirement ("each section edited separately") and honest save semantics; NOT a draft artifact, keep it.
+- **Flow:** Edit press → snapshot current values (for Cancel) → unlock that section’s fields (two-way binding on the existing order context, update group `vrEdit`, deferred) → **Save** = `submitBatch("vrEdit")` → success: toast, section back to display, master row refreshes → **Cancel** = `oModel.resetChanges("vrEdit")` + section back to display. No server round trip on entering edit; no artifacts to clean up on abandon — a closed browser mid-edit loses only unsent local changes.
+- **Concurrency:** every PATCH carries If-Match automatically; **412** on submit → existing reload dialog (refresh context, section back to display, user re-edits). There is no pre-edit lock or locked-by warning to build — `lock master` guards backend modify processing only; document this expectation in NOTES so nobody “fixes” it later.
+- **Failure semantics:** backend errors on submit render panel-anchored with auto-expand + field valueStates; the edit session stays open for correction (changes remain pending in the group) — user fixes and re-saves, or Cancels (resetChanges).
 
 ### Files to CREATE
-**`webapp/service/EditRequestService.js`** — ALL draft mechanics quarantined here (grep DoD below). Public API mirrors the create module's style: `startEdit(oContext)` → Promise(draft context) · `save(oDraftContext)` → Promise(active context) · `cancel(oDraftContext)` → Promise · `isDraftForeign(oError|oAdminData)` helper. Action names via ServiceSchema constants filled from Step-0 (`// TODO-VERIFY` until recorded). Header comment: gate item #1 implementation; future note — when create converts to draft-free CRUD on the custom service, this module is deleted wholesale, which is the point of the quarantine.
+**`webapp/service/EditRequestService.js`** — thin by design (the v1 draft machinery is gone; keep the module anyway for symmetry, testability, and the update-group discipline): `beginEdit(oContext, sSectionId)` (snapshot + flag bookkeeping) · `save(oContext)` → Promise (submitBatch + message extraction + 412 detection) · `cancel(oContext)` (resetChanges + flags). Header comment: cites the BDEF verification (unmanaged/no-draft) and the NOTES correction entry; notes gate item #1 was deleted on this evidence.
 
 ### Files to MODIFY
-- **`sections/SectionFactory.js` + `Detail.controller.js`:** Edit buttons go live for the **in-scope sections only — Details and Items**; all other sections' Edit stays disabled (tooltip: later phase). `sectionFlags` computed client-side for now: `editEnabled = !anotherSectionEditing && orderStatusAllowsEdit()` — status rule stubbed permissive with `// TODO: resolver feed`; Save/Cancel buttons appear in the editing section's headerToolbar during its session.
-- **`sections/Details.fragment.xml`:** editable controls (Input/Select bound two-way to the draft context) for the Step-0-verified updatable set — expected: Priority (Enums), Order Reason (Enums), Category (per mapping), ExIS ID. **Description: read-only + tooltip "editing available with backend update action"** unless Step-0 found the micro-action (then wire it as a follow-up save step, one function). Contact/Employee Responsible: read-only this task (partner-change writability unverified — deferred, listed below).
-- **`sections/Items.fragment.xml`:** edit session unlocks **Quantity** (Input, >0) on existing rows and enables **Add Item** (row: NDC input/VH, Quantity, Intention select — created via the draft context's item navigation binding). **No row delete this task** — item removal is the cancellation command (ABGRU semantics), out of scope; hide/disable any delete affordance with tooltip.
-- **`ServiceSchema.js`:** `draftActions` block (edit/activate/discard qualified names), `updatableHeaderProperties` map from Step-0.
-- **`i18n`**, **`PHASE2_AUDIT.md`**, **`NOTES.md`**, **`OPEN_QUESTIONS.md`** per §5.
+- **`SectionFactory.js` + `Detail.controller.js`:** Edit live for **Details and Items** only; others disabled (tooltip: later phase). `sectionFlags.editEnabled = !anotherSectionEditing && statusAllows()` (permissive stub, `// TODO: resolver feed`). Save/Cancel in the editing section’s headerToolbar.
+- **`Details.fragment.xml`:** editable controls for the Step-0-verified updatable set (Priority/Order Reason via VH entities if live, else Enums; Category per mapping; ExIS ID Input). Description read-only + tooltip unless the update micro-action exists (then wire as an additional save step, one function). Contact/ER read-only (partner-change ruling pending — OPEN_QUESTIONS).
+- **`Items.fragment.xml`:** edit session unlocks **Quantity** on rows; **Add Item** creates via the items list binding in group `vrEdit` (NDC VH/input, Quantity, Intention with NDC-default logic per TS-B2.2). **No row delete** — item removal = cancellation command, out of scope; disabled affordance + tooltip.
+- **`ServiceSchema.js`:** `updatableHeaderProperties` map from Step-0. **No draftActions block — if one exists from earlier prep, delete it.**
+- `i18n`, `PHASE2_AUDIT.md`, `NOTES.md`, `OPEN_QUESTIONS.md` per §5.
 
-### Backend companion asks (list in audit; none block the build)
-1. UpdateDescription/OrderUpdate micro-action (KTEXT write path for change mode) — same callable-core discipline as OrderCreate.
-2. Confirmation which of Category/Priority/Reason landed as standard-writable vs. needs the action.
-3. Partner-change (Contact/ER) writability ruling — informs the deferred scope.
+### Backend companion asks (non-blocking)
+1. UpdateDescription/OrderUpdate micro-action (KTEXT write path) — reusing OrderCreate’s core per the callable-core decision.
+2. Ruling: which of Priority/Reason/Category are standard-updatable vs. need the action (Step-0 verifies technically; functional ruling on *allowed* changes post-creation belongs to the matrix/E006 conversation — record both).
+3. Partner-change (Contact/ER) writability ruling.
 
 ## 4. DEFINITION OF DONE
-- Live on dev: edit Details (each writable field) → Save → values persist on the active order and in the master list; edit Items quantity + add an item → Save → order reflects both; Cancel mid-edit → zero changes persist, no draft remains bound in the UI.
-- Error path proven: force an activation failure → message anchored to the right panel/field with auto-expand → correct → Save succeeds.
-- Foreign-draft path: second user/session editing → Edit press surfaces locked-by message, display mode preserved.
-- Serialization proven: while section A edits, section B's Edit is disabled; after Save/Cancel it re-enables.
-- **Grep checks:** draft artifacts (`IsActiveEntity=false` handling, draft action names, DraftAdministrativeData) appear ONLY in `EditRequestService.js` + ServiceSchema constants; no draft concept leaks into fragments/controllers beyond calling the service API. i18n complete; console clean; keyboard pass incl. edit-mode controls and Save/Cancel reachability.
+- Live on dev: edit each writable Details field → Save → persists (list + SE16 spot check); Items quantity edit + add item → Save → both persist; Cancel mid-edit → zero changes persist, bindings clean (`hasPendingChanges("vrEdit")` false).
+- 412 path proven: modify the order via VA02 in a second session mid-edit → Save → reload dialog → re-edit succeeds.
+- Error path proven: force a backend rejection → panel-anchored message with auto-expand → correct → Save succeeds.
+- Serialization proven: section B’s Edit disabled while A edits; re-enables after Save/Cancel.
+- **Grep checks:** zero draft vocabulary anywhere (IsActiveEntity, DraftAdministrativeData, draftActivate/Edit/Discard) outside NOTES’ historical correction entry; update-group handling only in EditRequestService + fragments’ bindings. i18n complete; console clean; keyboard pass incl. Save/Cancel reachability.
 
 ## 5. EVIDENCE OBLIGATIONS
-- NOTES: Step-0 inventory (action names, updatable map, Description writability verdict); observed own-draft-resume and mid-edit-crash behavior; **the gate-item-#1 paragraph** — neutral, concrete: LoC of EditRequestService, edge cases hit (foreign drafts, activation message shapes, rebind quirks), and a one-line judgment on the client-side draft cost now that it's real. This paragraph is primary evidence for the MVP-2 architecture gate — write it as if both camps will read it, because they will.
-- OPEN_QUESTIONS: partner-change ruling; Description action status; any updatable-map surprises.
-- PHASE2_AUDIT: task entry + deferred list (partner edits, other sections' edit, row delete→cancel command).
+- NOTES: Step-0 updatable map + micro-action status; observed 412 behavior and lock-master expectation note; **replacement for the old gate paragraph** — one short entry: edit implemented as plain PATCH/ETag, LoC of EditRequestService, judgment line on client complexity (expected: trivial). This entry closes the book on deleted gate item #1 with implementation evidence.
+- OPEN_QUESTIONS: partner-change ruling; post-creation change-allowance matrix (functional).
+- PHASE2_AUDIT: task entry + deferred list (partner edits, other sections, row delete → cancel command).
