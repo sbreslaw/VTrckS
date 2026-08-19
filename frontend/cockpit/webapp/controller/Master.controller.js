@@ -5,29 +5,40 @@ sap.ui.define([
   "sap/ui/model/Sorter",
   "sap/ui/model/json/JSONModel",
   "sap/ui/core/Item",
-  "sap/m/ColumnListItem",
-  "sap/m/Column",
+  "sap/ui/table/Column",
   "sap/m/Text",
+  "sap/m/Link",
   "sap/m/ObjectIdentifier",
   "sap/m/Dialog",
   "sap/m/Button",
   "sap/m/Input",
   "sap/m/List",
   "sap/m/CustomListItem",
-  "sap/m/CheckBox",
   "sap/m/HBox",
+  "sap/m/MessageToast",
+  "sap/m/p13n/Popup",
+  "sap/m/p13n/SelectionPanel",
+  "sap/m/p13n/SortPanel",
+  "sap/m/p13n/GroupPanel",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/VariantStore"
 ], function (
-  Controller, Filter, FilterOperator, Sorter, JSONModel, Item, ColumnListItem, Column, Text,
-  ObjectIdentifier, Dialog, Button, Input, List, CustomListItem, CheckBox, HBox,
+  Controller, Filter, FilterOperator, Sorter, JSONModel, Item, Column, Text, Link,
+  ObjectIdentifier, Dialog, Button, Input, List, CustomListItem, HBox, MessageToast,
+  P13nPopup, SelectionPanel, SortPanel, GroupPanel,
   formatter, ServiceSchema, VariantStore
 ) {
   "use strict";
 
   var FILTER_VARIANT_KEY = "masterFilterVariants";
   var TABLE_LAYOUT_KEY = "masterTableLayout";
+  var COLUMN_VARIANT_KEY = "masterColumnVariants";
+  // Vaccine Request (requestId) + Description are the frozen, non-hideable,
+  // non-movable pair (fixedColumnCount=2) — always first, always visible.
+  var FIXED_COLUMN_KEYS = ["requestId", "description"];
+  var ROW_COUNT_DEBOUNCE_MS = 400;
+  var RESIZE_DEBOUNCE_MS = 400;
 
   return Controller.extend("cdc.vaccreq.controller.Master", {
     formatter: formatter,
@@ -49,8 +60,10 @@ sap.ui.define([
       // is guaranteed to match nothing (SalesOrder is a non-nullable key field,
       // never an empty string).
       this._aCurrentFilters = this._getNoResultsFilter();
-      this._bindMasterItems();
+      this._iMaxHits = 50;
+      this._bindMasterRows();
       this._refreshVariantsModel();
+      this._refreshColumnVariantsModel();
       this._oRouter.getRoute("master").attachPatternMatched(this._onRouteMatched, this);
     },
 
@@ -110,10 +123,16 @@ sap.ui.define([
 
       var oTable = this.byId("requestsTable");
       var iMaxHits = oView.byId("filterMaxHits").getValue();
-      oTable.setGrowingThreshold(iMaxHits);
+      // NOTE: $top/$skip cannot be set as OData V4 list-binding parameters
+      // ("System query option $top is not supported" — confirmed at runtime,
+      // see NOTES.md); V4 paging is fully automatic for sap.ui.table.Table's
+      // virtual scrolling. iMaxHits is captured for the variant state and any
+      // future $apply(top(...))-based cap, but is not enforced as a hard
+      // fetch limit here.
+      this._iMaxHits = iMaxHits;
 
       this._aCurrentFilters = aFilters;
-      var oBinding = oTable.getBinding("items");
+      var oBinding = oTable.getBinding("rows");
       if (oBinding) {
         oBinding.filter(aFilters);
       }
@@ -127,19 +146,94 @@ sap.ui.define([
       this.onSearch();
     },
 
-    onRowPress: function (oEvent) {
-      var oCtx = oEvent.getSource().getBindingContext();
-      if (!oCtx) {
-        return;
-      }
-      var sId = oCtx.getProperty(ServiceSchema.keys.orderId);
+    _navigateToOrder: function (sId) {
       this._oRouter.navTo("detail", {
         orderId: encodeURIComponent(sId)
       });
     },
 
-    onUpdateFinished: function (oEvent) {
-      this._oViewModel.setProperty("/masterCount", oEvent.getParameter("total"));
+    // updateFinished doesn't exist on sap.ui.table.Table; rowsUpdated fires
+    // after the row set is (re)rendered, including after the interactive
+    // row-count drag handle changes visibleRowCount.
+    onRowsUpdated: function () {
+      var oTable = this.byId("requestsTable");
+      var oBinding = oTable.getBinding("rows");
+      if (oBinding) {
+        this._oViewModel.setProperty("/masterCount", oBinding.getCount());
+      }
+      this._persistVisibleRowCount();
+    },
+
+    onCreateRequest: function () {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      MessageToast.show(oBundle.getText("masterCreateToast"));
+      // TODO(CRUD): navigate to create context
+    },
+
+    onMasterRefresh: function () {
+      var oBinding = this.byId("requestsTable").getBinding("rows");
+      if (oBinding) {
+        oBinding.refresh();
+      }
+    },
+
+    // TODO-VERIFY at runtime: columnMove event parameter names ("column"/"newPos")
+    // against the live sap.ui.table.Table API on this landscape's UI5 version.
+    onColumnMove: function (oEvent) {
+      var oTable = this.byId("requestsTable");
+      var oColumn = oEvent.getParameter("column");
+      var iNewIndex = oEvent.getParameter("newPos");
+      var iFixedCount = oTable.getFixedColumnCount();
+      var iOldIndex = oTable.indexOfColumn(oColumn);
+
+      // Guard the fixed zone: never allow drag to move a fixed column, or move
+      // any column into the frozen Vaccine Request/Description slots.
+      if (iOldIndex < iFixedCount || iNewIndex < iFixedCount) {
+        oEvent.preventDefault();
+        return;
+      }
+
+      setTimeout(this._persistColumnOrder.bind(this), 0);
+    },
+
+    onColumnResize: function (oEvent) {
+      var oColumn = oEvent.getParameter("column");
+      var sWidth = oEvent.getParameter("width");
+      var sKey = oColumn && oColumn.data("colKey");
+      if (!sKey) {
+        return;
+      }
+      clearTimeout(this._iResizeDebounce);
+      this._iResizeDebounce = setTimeout(function () {
+        var oLayout = this._getColumnLayout();
+        oLayout.widths = oLayout.widths || {};
+        oLayout.widths[sKey] = sWidth;
+        this._saveColumnLayout(oLayout);
+      }.bind(this), RESIZE_DEBOUNCE_MS);
+    },
+
+    _persistColumnOrder: function () {
+      var oTable = this.byId("requestsTable");
+      var oLayout = this._getColumnLayout();
+      oLayout.order = oTable.getColumns().map(function (oColumn) {
+        return oColumn.data("colKey");
+      });
+      this._saveColumnLayout(oLayout);
+    },
+
+    _persistVisibleRowCount: function () {
+      var oTable = this.byId("requestsTable");
+      var iCount = oTable.getVisibleRowCount();
+      if (iCount === this._iLastPersistedRowCount) {
+        return;
+      }
+      clearTimeout(this._iRowCountDebounce);
+      this._iRowCountDebounce = setTimeout(function () {
+        this._iLastPersistedRowCount = iCount;
+        var oLayout = this._getColumnLayout();
+        oLayout.rowCount = iCount;
+        this._saveColumnLayout(oLayout);
+      }.bind(this), ROW_COUNT_DEBOUNCE_MS);
     },
 
     _onRouteMatched: function () {
@@ -257,21 +351,35 @@ sap.ui.define([
     // source of truth. ---
 
     _getColumnDefs: function () {
+      var that = this;
       return [
         {
-          key: "requestId", i18nKey: "colRequestId", hAlign: "Begin",
+          key: "requestId", i18nKey: "colRequestId", hAlign: "Begin", width: "10rem",
+          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
-            return new Text({ text: { path: ServiceSchema.keys.orderId, formatter: formatter.masterRequestId } });
+            // Provider Order column is the sole navigation trigger (item 3):
+            // a plain Link with a click/press handler, replacing the former
+            // row-action chevron (rowActionTemplate/RowActionItem, removed).
+            return new Link({
+              text: { path: ServiceSchema.keys.orderId, formatter: formatter.masterRequestId },
+              press: function (oEvent) {
+                var oCtx = oEvent.getSource().getBindingContext();
+                if (oCtx) {
+                  that._navigateToOrder(oCtx.getProperty(ServiceSchema.keys.orderId));
+                }
+              }
+            });
           }
         },
         {
-          key: "description", i18nKey: "colDescription", hAlign: "Begin", demandPopin: true, minScreenWidth: "Tablet",
+          key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "40rem",
           createCell: function () {
             return new Text({ text: formatter.masterDescription() });
           }
         },
         {
-          key: "provider", i18nKey: "colProvider", hAlign: "Begin",
+          key: "provider", i18nKey: "colProvider", hAlign: "Begin", width: "14rem",
+          sortPath: ServiceSchema.headerProperties.providerId,
           createCell: function () {
             return new ObjectIdentifier({
               title: { path: ServiceSchema.headerProperties.providerName },
@@ -280,7 +388,8 @@ sap.ui.define([
           }
         },
         {
-          key: "status", i18nKey: "colStatus", hAlign: "Begin",
+          key: "status", i18nKey: "colStatus", hAlign: "Begin", width: "10rem",
+          sortPath: ServiceSchema.headerProperties.userStatus,
           createCell: function () {
             // return new Text({ text: { path: ServiceSchema.headerProperties.userStatus }});
             return new ObjectIdentifier({
@@ -291,7 +400,7 @@ sap.ui.define([
           }
         },
         {
-          key: "contact", i18nKey: "colContact", hAlign: "Begin", demandPopin: true, minScreenWidth: "Tablet",
+          key: "contact", i18nKey: "colContact", hAlign: "Begin", width: "12rem",
           createCell: function () {
             // RUNTIME-BLOCKED-BY-SERVICE: expanding _SoldToPartyContactInfo on
             // the master LIST (multiple header rows at once) causes a backend
@@ -316,13 +425,14 @@ sap.ui.define([
           }
         },
         {
-          key: "createdAt", i18nKey: "colCreatedAt", hAlign: "Begin", demandPopin: true, minScreenWidth: "Desktop",
+          key: "createdAt", i18nKey: "colCreatedAt", hAlign: "Begin", width: "9rem",
+          sortPath: ServiceSchema.headerProperties.createdOn,
           createCell: function () {
             return new Text({ text: { path: ServiceSchema.headerProperties.createdOn, formatter: formatter.masterCreatedAt } });
           }
         },
         {
-          key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", demandPopin: true, minScreenWidth: "Desktop",
+          key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", width: "12rem",
           createCell: function () {
             // RUNTIME-BLOCKED-BY-SERVICE: selecting ResponsibleEmployee via the
             // _SoldToPartyContactInfo navigation causes a backend 500
@@ -336,7 +446,8 @@ sap.ui.define([
           }
         },
         {
-          key: "createdBy", i18nKey: "colCreatedBy", hAlign: "Begin", demandPopin: true, minScreenWidth: "Tablet",
+          key: "createdBy", i18nKey: "colCreatedBy", hAlign: "Begin", width: "12rem",
+          sortPath: ServiceSchema.headerProperties.createdBy,
           createCell: function () {
             return new ObjectIdentifier({
               title: {
@@ -358,7 +469,12 @@ sap.ui.define([
       }
       return {
         order: this._aColumnDefs.map(function (oDef) { return oDef.key; }),
-        visibility: {}
+        visibility: {},
+        widths: this._aColumnDefs.reduce(function (oAcc, oDef) {
+          oAcc[oDef.key] = oDef.width;
+          return oAcc;
+        }, {}),
+        rowCount: 12
       };
     },
 
@@ -366,140 +482,337 @@ sap.ui.define([
       VariantStore.saveVariant(TABLE_LAYOUT_KEY, "layout", oLayout);
     },
 
+    // Fixed pair (requestId, description) always sort first, regardless of any
+    // stored/dragged order — enforces the frozen fixedColumnCount=2 zone.
     _getOrderedDefs: function (oLayout) {
       var mDefsByKey = {};
       this._aColumnDefs.forEach(function (oDef) { mDefsByKey[oDef.key] = oDef; });
 
-      var aOrderKeys = oLayout.order.filter(function (sKey) { return mDefsByKey[sKey]; });
+      var aFixedKeys = FIXED_COLUMN_KEYS.filter(function (sKey) { return mDefsByKey[sKey]; });
+      var aRestKeys = (oLayout.order || []).filter(function (sKey) {
+        return mDefsByKey[sKey] && aFixedKeys.indexOf(sKey) === -1;
+      });
       this._aColumnDefs.forEach(function (oDef) {
-        if (aOrderKeys.indexOf(oDef.key) === -1) {
-          aOrderKeys.push(oDef.key);
+        if (aFixedKeys.indexOf(oDef.key) === -1 && aRestKeys.indexOf(oDef.key) === -1) {
+          aRestKeys.push(oDef.key);
         }
       });
 
-      return aOrderKeys.map(function (sKey) { return mDefsByKey[sKey]; });
+      return aFixedKeys.concat(aRestKeys).map(function (sKey) { return mDefsByKey[sKey]; });
     },
 
-    _bindMasterItems: function () {
+    // Builds the sorter array from the personalized sort/group state (item 1).
+    //
+    // NOTE (TODO-VERIFY confirmed via sap.ui.table.Table API docs, 1.151):
+    // the table's native enableGrouping/groupBy visualization ("group header"
+    // rows) is documented as client-model-only — "Grouping does not work with
+    // OData models." True OData V4 group-header rendering would require
+    // sap.ui.table.TreeTable + ODataListBinding#setAggregation (data
+    // aggregation/groupLevels), a materially different control/architecture —
+    // out of scope for this pass. "Group by" is therefore implemented here as
+    // a primary sort key: rows sharing the grouped value become contiguous,
+    // without a visual group-header divider row. This is a documented
+    // limitation, not a guess — see NOTES.md.
+    //
+    // Only columns with a real, single bindable server property (sortPath) are
+    // offered as sort/group candidates (see _getColumnDefs); columns without
+    // one (description, contact, employeeResponsible) are excluded.
+    _buildSorters: function (oLayout) {
+      var mDefsByKey = {};
+      this._aColumnDefs.forEach(function (oDef) { mDefsByKey[oDef.key] = oDef; });
+      var aSorters = [];
+      var oGroup = oLayout.group;
+      var oSort = oLayout.sort;
+
+      if (oGroup && mDefsByKey[oGroup.key] && mDefsByKey[oGroup.key].sortPath) {
+        aSorters.push(new Sorter(mDefsByKey[oGroup.key].sortPath, false));
+      }
+      if (oSort && mDefsByKey[oSort.key] && mDefsByKey[oSort.key].sortPath && (!oGroup || oGroup.key !== oSort.key)) {
+        aSorters.push(new Sorter(mDefsByKey[oSort.key].sortPath, !!oSort.descending));
+      }
+      if (!aSorters.length) {
+        aSorters.push(new Sorter(ServiceSchema.headerProperties.createdOn, true));
+      }
+      return aSorters;
+    },
+
+    _bindMasterRows: function () {
       var oTable = this.byId("requestsTable");
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
       var oLayout = this._getColumnLayout();
       var aOrderedDefs = this._getOrderedDefs(oLayout);
       var aVisibleDefs = aOrderedDefs.filter(function (oDef) {
-        return oLayout.visibility[oDef.key] !== false;
+        return FIXED_COLUMN_KEYS.indexOf(oDef.key) !== -1 || oLayout.visibility[oDef.key] !== false;
       });
 
       oTable.removeAllColumns();
       aVisibleDefs.forEach(function (oDef) {
-        oTable.addColumn(new Column({
+        var oColumn = new Column({
+          label: new Text({ text: oBundle.getText(oDef.i18nKey) }),
+          template: oDef.createCell(),
           hAlign: oDef.hAlign || "Begin",
-          demandPopin: !!oDef.demandPopin,
-          minScreenWidth: oDef.minScreenWidth || "",
-          header: new Text({ text: oBundle.getText(oDef.i18nKey) })
-        }));
+          width: (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem",
+          resizable: true,
+          autoResizable: true
+        });
+        oColumn.data("colKey", oDef.key);
+        oTable.addColumn(oColumn);
       });
 
-      var oTemplate = new ColumnListItem({
-        type: "Navigation",
-        press: this.onRowPress.bind(this),
-        cells: aVisibleDefs.map(function (oDef) { return oDef.createCell(); })
-      });
+      oTable.setFixedColumnCount(Math.min(FIXED_COLUMN_KEYS.length, aVisibleDefs.length));
+      oTable.setVisibleRowCount(oLayout.rowCount || 12);
+      this._iLastPersistedRowCount = oLayout.rowCount || 12;
 
-      oTable.bindItems({
+      oTable.bindRows({
         path: "/" + ServiceSchema.entitySets.header,
-        template: oTemplate,
         filters: this._aCurrentFilters || this._getNoResultsFilter(),
-        sorter: [new Sorter(ServiceSchema.headerProperties.createdOn, true)]
+        sorter: this._buildSorters(oLayout),
+        parameters: { $count: true }
       });
+
+      var oRowsBinding = oTable.getBinding("rows");
+      if (oRowsBinding) {
+        oRowsBinding.attachDataRequested(function () { oTable.setBusy(true); });
+        oRowsBinding.attachDataReceived(function () { oTable.setBusy(false); });
+      }
     },
+
+    // --- Master table personalization dialog (item 1). Uses the modern,
+    // non-deprecated sap.m.p13n.Popup + SelectionPanel/SortPanel/GroupPanel
+    // control family (available since 1.96/1.97, still current in 1.151) —
+    // NOT sap.m.p13n.Engine/*Controller (that stack is for sap.ui.fl-backed,
+    // multi-control state persistence, which this app doesn't use) and NOT
+    // the deprecated sap.m.P13nDialog pattern (confirmed dead/commented-out
+    // code in the unrelated lp2preq reference app — see NOTES.md). State is
+    // read/written directly against the same VariantStore-backed layout
+    // object used elsewhere (_getColumnLayout/_saveColumnLayout), just with
+    // two added optional fields: layout.sort ({key, descending}) and
+    // layout.group ({key}) — see _buildSorters for how these are applied.
+    //
+    // TODO-VERIFY: the exact property names expected by
+    // SelectionPanel/SortPanel/GroupPanel#setP13nData/getP13nData items
+    // (key/label/visible/position/sorted/descending/grouped) were not
+    // published in the fetched API reference (only that the methods exist);
+    // implemented per the standard mdc p13n item shape used across SAP
+    // samples. Verify against the running app and adjust field names here if
+    // the panels don't render/apply state as expected.
 
     onMasterTablePersonalize: function () {
-      if (!this._oColumnDialog) {
-        this._oColumnDialog = this._createColumnDialog();
-        this.getView().addDependent(this._oColumnDialog);
+      if (!this._oP13nPopup) {
+        this._createP13nPopup();
       }
-      var oLayout = this._getColumnLayout();
-      var aOrderedDefs = this._getOrderedDefs(oLayout);
-      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-      var aRows = aOrderedDefs.map(function (oDef) {
-        return {
-          key: oDef.key,
-          label: oBundle.getText(oDef.i18nKey),
-          visible: oLayout.visibility[oDef.key] !== false
-        };
-      });
-      this._oColumnDialog.setModel(new JSONModel({ rows: aRows }), "columns");
-      this._oColumnDialog.open();
+      this._setP13nPopupData();
+      this._oP13nPopup.open();
     },
 
-    _createColumnDialog: function () {
+    _createP13nPopup: function () {
       var that = this;
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
 
-      var oList = new List({
-        mode: "None",
-        items: {
-          path: "columns>/rows",
-          template: new CustomListItem({
-            content: [
-              new HBox({
-                alignItems: "Center",
-                items: [
-                  new CheckBox({ selected: "{columns>visible}" }),
-                  new Text({ text: "{columns>label}" }).addStyleClass("sapUiTinyMarginBegin sapUiTinyMarginEnd sapUiFlexGrow1"),
-                  new Button({ icon: "sap-icon://slim-arrow-up", type: "Transparent", tooltip: oBundle.getText("moveUp"), press: that._onMoveColumn.bind(that, -1) }),
-                  new Button({ icon: "sap-icon://slim-arrow-down", type: "Transparent", tooltip: oBundle.getText("moveDown"), press: that._onMoveColumn.bind(that, 1) })
-                ]
-              }).addStyleClass("sapUiTinyMargin")
-            ]
-          })
-        }
+      this._oSelectionPanel = new SelectionPanel({
+        title: oBundle.getText("p13nSelectionPanelTitle"),
+        enableCount: true
+      });
+      this._oSortPanel = new SortPanel({
+        title: oBundle.getText("p13nSortPanelTitle")
+      });
+      this._oGroupPanel = new GroupPanel({
+        title: oBundle.getText("p13nGroupPanelTitle")
       });
 
-      return new Dialog({
-        title: oBundle.getText("columnDialogTitle"),
-        contentWidth: "28rem",
-        content: [oList],
+      this._oP13nPopup = new P13nPopup({
+        title: oBundle.getText("p13nDialogTitle"),
+        panels: [this._oSelectionPanel, this._oSortPanel, this._oGroupPanel],
+        close: function (oEvent) {
+          if (oEvent.getParameter("reason") === "Ok") {
+            that._applyP13nPopup();
+          }
+        }
+      });
+      this.getView().addDependent(this._oP13nPopup);
+    },
+
+    _setP13nPopupData: function () {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var oLayout = this._getColumnLayout();
+      var aOrderedDefs = this._getOrderedDefs(oLayout);
+
+      // Fixed pair (requestId, description) is not offered here: non-hideable,
+      // non-movable — same rule the previous dialog enforced.
+      var aSelectableDefs = aOrderedDefs.filter(function (oDef) {
+        return FIXED_COLUMN_KEYS.indexOf(oDef.key) === -1;
+      });
+      // Only columns with a real, single bindable server property can be
+      // sorted/grouped (see _getColumnDefs' sortPath / _buildSorters note).
+      var aSortableDefs = aSelectableDefs.filter(function (oDef) { return !!oDef.sortPath; });
+
+      var aSelectionItems = aSelectableDefs.map(function (oDef, iIndex) {
+        return {
+          key: oDef.key,
+          label: oBundle.getText(oDef.i18nKey),
+          visible: oLayout.visibility[oDef.key] !== false,
+          position: iIndex
+        };
+      });
+      this._oSelectionPanel.setP13nData(aSelectionItems);
+
+      var oSortState = oLayout.sort || {};
+      var aSortItems = aSortableDefs.map(function (oDef) {
+        return {
+          key: oDef.key,
+          label: oBundle.getText(oDef.i18nKey),
+          sorted: oSortState.key === oDef.key,
+          descending: oSortState.key === oDef.key ? !!oSortState.descending : false
+        };
+      });
+      this._oSortPanel.setP13nData(aSortItems);
+
+      var oGroupState = oLayout.group || {};
+      var aGroupItems = aSortableDefs.map(function (oDef) {
+        return {
+          key: oDef.key,
+          label: oBundle.getText(oDef.i18nKey),
+          grouped: oGroupState.key === oDef.key
+        };
+      });
+      this._oGroupPanel.setP13nData(aGroupItems);
+    },
+
+    _applyP13nPopup: function () {
+      var oLayout = this._getColumnLayout();
+
+      var aSelectionData = this._oSelectionPanel.getP13nData();
+      oLayout.order = FIXED_COLUMN_KEYS.concat(aSelectionData.map(function (oItem) { return oItem.key; }));
+      oLayout.visibility = aSelectionData.reduce(function (oAcc, oItem) {
+        oAcc[oItem.key] = oItem.visible;
+        return oAcc;
+      }, {});
+      FIXED_COLUMN_KEYS.forEach(function (sKey) { oLayout.visibility[sKey] = true; });
+
+      var aSortData = this._oSortPanel.getP13nData();
+      var oSortedItem = aSortData.filter(function (oItem) { return oItem.sorted; })[0];
+      oLayout.sort = oSortedItem ? { key: oSortedItem.key, descending: !!oSortedItem.descending } : null;
+
+      var aGroupData = this._oGroupPanel.getP13nData();
+      var oGroupedItem = aGroupData.filter(function (oItem) { return oItem.grouped; })[0];
+      oLayout.group = oGroupedItem ? { key: oGroupedItem.key } : null;
+
+      this._saveColumnLayout(oLayout);
+      this._bindMasterRows();
+    },
+
+    // --- Column layout variants (item 2): Save As/Manage for named table
+    // layouts (order/visibility/widths/rowCount/sort/group), analogous to the
+    // existing FilterBar search-variant pattern below, backed by a separate
+    // VariantStore key so the "current"/active layout (masterTableLayout)
+    // stays independent from the list of named, save-able layouts. ---
+
+    _refreshColumnVariantsModel: function () {
+      var oData = VariantStore.load(COLUMN_VARIANT_KEY);
+      var aItems = Object.keys(oData.variants || {}).map(function (sName) {
+        return { key: sName, text: sName };
+      });
+      var oModel = this.getView().getModel("columnVariants");
+      if (oModel) {
+        oModel.setData({ items: aItems });
+      } else {
+        this.getView().setModel(new JSONModel({ items: aItems }), "columnVariants");
+      }
+      if (oData.lastSelectedKey) {
+        this.byId("columnVariantSelect").setSelectedKey(oData.lastSelectedKey);
+      }
+    },
+
+    onColumnVariantSelect: function (oEvent) {
+      var sKey = oEvent.getParameter("selectedItem") && oEvent.getParameter("selectedItem").getKey();
+      if (!sKey) {
+        return;
+      }
+      var oData = VariantStore.load(COLUMN_VARIANT_KEY);
+      var oLayout = oData.variants[sKey];
+      if (!oLayout) {
+        return;
+      }
+      this._saveColumnLayout(oLayout);
+      VariantStore.setLastSelectedKey(COLUMN_VARIANT_KEY, sKey);
+      this._bindMasterRows();
+    },
+
+    onColumnVariantSaveAs: function () {
+      var that = this;
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var oInput = new Input({ placeholder: oBundle.getText("variantNameLabel") });
+      var oDialog = new Dialog({
+        title: oBundle.getText("columnVariantSaveDialogTitle"),
+        content: [oInput],
         beginButton: new Button({
           text: oBundle.getText("ok"),
           press: function () {
-            that._applyColumnDialog();
-            that._oColumnDialog.close();
+            var sName = oInput.getValue().trim();
+            if (!sName) {
+              return;
+            }
+            VariantStore.saveVariant(COLUMN_VARIANT_KEY, sName, that._getColumnLayout());
+            that._refreshColumnVariantsModel();
+            that.byId("columnVariantSelect").setSelectedKey(sName);
+            oDialog.close();
           }
         }),
         endButton: new Button({
           text: oBundle.getText("cancel"),
-          press: function () { that._oColumnDialog.close(); }
+          press: function () { oDialog.close(); }
+        }),
+        afterClose: function () { oDialog.destroy(); }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    onColumnVariantManage: function () {
+      var that = this;
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var oData = VariantStore.load(COLUMN_VARIANT_KEY);
+      var aNames = Object.keys(oData.variants || {});
+
+      var oList = new List({
+        items: aNames.map(function (sName) {
+          return new CustomListItem({
+            content: [
+              new HBox({
+                alignItems: "Center",
+                justifyContent: "SpaceBetween",
+                width: "100%",
+                items: [
+                  new Text({ text: sName }),
+                  new Button({
+                    icon: "sap-icon://delete",
+                    type: "Transparent",
+                    tooltip: oBundle.getText("variantDelete"),
+                    press: function () {
+                      VariantStore.deleteVariant(COLUMN_VARIANT_KEY, sName);
+                      that._refreshColumnVariantsModel();
+                      oDialog.close();
+                    }
+                  })
+                ]
+              }).addStyleClass("sapUiTinyMargin")
+            ]
+          });
         })
       });
-    },
 
-    _onMoveColumn: function (iDirection, oEvent) {
-      var oListItem = oEvent.getSource().getParent().getParent();
-      var oModel = this._oColumnDialog.getModel("columns");
-      var aRows = oModel.getProperty("/rows");
-      var iIndex = oListItem.getBindingContext("columns").getPath().split("/").pop() * 1;
-      var iTarget = iIndex + iDirection;
-      if (iTarget < 0 || iTarget >= aRows.length) {
-        return;
-      }
-      var oTmp = aRows[iIndex];
-      aRows[iIndex] = aRows[iTarget];
-      aRows[iTarget] = oTmp;
-      oModel.setProperty("/rows", aRows);
-    },
-
-    _applyColumnDialog: function () {
-      var aRows = this._oColumnDialog.getModel("columns").getProperty("/rows");
-      var oLayout = {
-        order: aRows.map(function (oRow) { return oRow.key; }),
-        visibility: aRows.reduce(function (oAcc, oRow) {
-          oAcc[oRow.key] = oRow.visible;
-          return oAcc;
-        }, {})
-      };
-      this._saveColumnLayout(oLayout);
-      this._bindMasterItems();
+      var oDialog = new Dialog({
+        title: oBundle.getText("columnVariantManageDialogTitle"),
+        contentWidth: "24rem",
+        content: [oList],
+        endButton: new Button({
+          text: oBundle.getText("close"),
+          press: function () { oDialog.close(); }
+        }),
+        afterClose: function () { oDialog.destroy(); }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
     },
 
     // --- FilterBar search variants (Phase 2 Prompt v2, item B). Deliberately a

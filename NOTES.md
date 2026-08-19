@@ -118,7 +118,84 @@ All other literal properties/navigations introduced in this phase (Billing, OrgD
 
 See `PHASE2_AUDIT.md` for the DONE/BLOCKED-BY-SERVICE status of every Phase 2 requirement, and `OPEN_QUESTIONS.md` for open items requiring backend/customer input.
 
-## Live-backend regression: `_SoldToPartyContactInfo` crashes on master list — 2026-08-03
+## Master list: grid table migration + toolbar actions — 2026-08-18
+
+Replaced `sap.m.Table` with `sap.ui.table.Table` on the Master view (grid table
+for column drag-reorder/resize) and added a header toolbar (Create/Refresh/
+Personalize) in the table's `extension` aggregation. Full DONE/deviation list
+in `PHASE2_AUDIT.md` Section I. Findings worth keeping for future agents:
+
+- **Task prompt assumed two things that don't hold for this codebase** — caught
+  by reading the actual files before touching them (Onboarding rule 1):
+  1. It asked to keep fixed filters `IsActiveEntity eq true` + order type `ZKB`
+     on the rows binding. This app has **no draft** (`SalesOrderManageType` has
+     no `IsActiveEntity` key — guardrail #3 bans draft anyway) and no `ZKB`
+     order type (the allow-list is `ZVR1`, and a force-applied order-type
+     filter was deliberately removed back on 2026-08-03 as a bug fix — see the
+     Phase 2 entry above). Did not add either filter; kept the rows binding's
+     filter behavior identical to the old items binding.
+  2. It asked to re-register the table with "the existing `sap.m.p13n.Engine`
+     setup" / a "SelectionController metadata helper." **Neither exists in this
+     codebase.** Master's (and Items') personalization has always been a
+     hand-rolled dialog + `VariantStore.js` (see the Phase 2 entry above,
+     Section A/F) — a deliberate simplification because there's no live FLP
+     flex-persistence backend to target yet. Rewired *that* mechanism to the
+     grid table instead of introducing `p13n.Engine` net-new (would be a large,
+     out-of-scope architecture change for a "two changes to Master only" task):
+     the persisted layout (`VariantStore` key `masterTableLayout`) now also
+     carries per-column `widths` and the interactive `rowCount`, and
+     `columnMove`/`columnResize` (debounced) plus the row-count-drag path
+     (`rowsUpdated`) write into it alongside the existing dialog-driven
+     order/visibility — same storage path, so everything survives reload.
+  - Lesson: when a task prompt describes framework pieces (event names,
+    control APIs, service filters) that don't turn up anywhere in a grep of the
+    actual codebase, verify against the real files and flag the mismatch
+    (`PHASE2_AUDIT.md`/here) rather than inventing the described piece from
+    scratch — matches Onboarding guardrail #7 ("never invent SAP artifact
+    names, config keys, or API signatures").
+- `manifest.json`'s `sap.ui5.dependencies.libs` was missing `sap.ui.table`
+  entirely — only `ui5-local.yaml`'s framework library list (used for the
+  local mock-server dev profile) had it. Added it to the manifest; that's the
+  list that actually drives runtime library loading for the deployed/FLP app.
+- The prompt says "same nine columns" for Section A; this app's Master list
+  has always had **8** columns (see Phase 2 entry above and `PHASE2_AUDIT.md`
+  Section A) — carried over all 8 as-is, no ninth column exists to add.
+- `sap.ui.table.Table` API surface (`RowActionItem` press parameter,
+  `columnMove`/`columnResize` event parameters) is new to this codebase and
+  was not independently verified against a live UI5 API reference in this
+  pass — flagged `TODO-VERIFY` at each usage per guardrail #7; re-check before
+  sign-off.
+
+### Runtime correction: `$top` is not a valid V4 list-binding parameter (2026-08-18)
+
+Live testing threw `Uncaught (in promise) Error: System query option $top is
+not supported` (`ODataModel-dbg.js` `buildQueryOptions`) as soon as the Master
+route bound the grid table. Root cause: the task prompt's instruction to keep
+"Max Hits semantics: slider still caps via `$top`" doesn't hold for
+`sap.ui.model.odata.v4.ODataListBinding` — **`$top`/`$skip` cannot be set as
+client bind parameters at all** (neither in the initial `bindRows(...)`
+`parameters` map nor via `oBinding.changeParameters(...)`); V4 paging for
+`sap.ui.table.Table`'s virtual scrolling is fully automatic and owns those two
+query options itself. This is a hard model restriction, not a config mistake.
+
+Fix applied: removed `$top` from both `_bindMasterRows`'s initial `bindRows`
+parameters and `onSearch`'s `changeParameters` call (both `Master.controller.js`).
+`$count: true` stays (that one **is** allowed and is what drives the result
+count display). The Max Hits slider UI, its variant capture, and
+`this._iMaxHits` bookkeeping are all still in place, but **the value is
+currently advisory only — it no longer enforces a hard fetch cap**, since
+there is no verified, safe V4-idiomatic way to do so from the client for this
+service without risking un-tested `$apply=top(N)` transformation-string
+behavior against a live SD-based V4 service (would need to be confirmed
+against a real `$apply` capability check before use — not attempted here).
+Flag for follow-up: decide whether Max Hits should (a) stay advisory, (b) be
+enforced via a verified `$apply` top-transformation once confirmed against the
+live service, or (c) be dropped/re-labeled now that grid-table virtual
+scrolling makes a "growing threshold"-style batch-size control moot (the old
+`sap.m.Table` behavior wasn't a true hard cap either — `growingThreshold` was
+just the per-page batch size, see the removed `setGrowingThreshold` call).
+
+
 
 Running the Phase 2 build against the real dev-system service surfaced a backend crash on the very first Master list load:
 
@@ -191,4 +268,26 @@ Running the Phase 2 build against the real dev-system service surfaced a backend
 ## Master list Contact column masks contact info — 2026-08-07
 
 - `formatter.masterContact()` now unconditionally returns the literal string `*****` instead of the contact's full name or an em-dash (the previous `orDash(sFullName)` call is commented out, and the Master list doesn't pass it any value regardless). Confirmed intentional (PII masking) — the Master list Contact column intentionally does not display real contact names, independent of whether `_SoldToPartyContactInfo` is available. **Open question**: the current implementation is a hardcoded literal, not a real masking transform — revisit if partial-reveal or per-record masking is ever needed.
+
+## Master table personalization rework + Link navigation + column-variant management — 2026-08-19
+
+Follow-up task list (5 items) applied to `Master.view.xml`/`Master.controller.js`/`i18n.properties`, building on the grid-table migration above. Item 5 (hard 100-record cap) was **explicitly deferred by the user** — not implemented in this pass; the `$top`/`$skip`/`$apply` research from the earlier `$top` crash fix still applies and remains the starting point when this is picked up (no fully-safe client-side mechanism was found — see the `$top` correction entry above).
+
+- **Item 1 — standard p13n personalization dialog (sort + group enabled)**: replaced the hand-rolled `sap.m.Dialog`/`sap.m.List`/`CheckBox`/move-up-down-button column dialog (`onMasterTablePersonalize`/`_createColumnDialog`/`_onMoveColumn`/`_applyColumnDialog`) with `sap.m.p13n.Popup` + `sap.m.p13n.SelectionPanel`/`SortPanel`/`GroupPanel` (verified live via the official UI5 1.151 API reference — available since 1.96/1.97, not deprecated). Deliberately **not** `sap.m.p13n.Engine` + `SelectionController`/`SortController`/`GroupController`: those are abstract base classes meant to be subclassed per control type for `sap.ui.fl`-backed, cross-control persistence — overkill and unverified for this app, which has no live FLP flex backend and already has its own `VariantStore` persistence. Also deliberately **not** the deprecated `sap.m.P13nDialog`/`P13nColumnsPanel` pattern shown by the user via the unrelated `lp2preq` project reference — confirmed via grep that every usage of that pattern in `lp2preq` is dead/commented-out code in `BaseController.js`, and that project is a completely different, older, OData V2 app (`lmco.ces.preq`) — not a live example to replicate.
+  - State is layered onto the existing `_getColumnLayout()`/`_saveColumnLayout()` object (VariantStore key `masterTableLayout`) with two new optional fields: `layout.sort` (`{key, descending}`) and `layout.group` (`{key}`).
+  - **Confirmed hard restriction (via `sap.ui.table.Table` API docs, 1.151)**: the table's native `enableGrouping`/`groupBy` group-header-row visualization is client-model-only — "Grouping does not work with OData models." True OData V4 group-header rendering would need `sap.ui.table.TreeTable` + `ODataListBinding#setAggregation` (data aggregation/`groupLevels`), a materially different control — out of scope here. "Group by" is therefore implemented as a **primary sort key** (`_buildSorters`): rows sharing the grouped value become contiguous, but there is **no visual group-header divider row**. This is a documented technical limitation, not a shortcut/guess.
+  - Only columns with a real, single bindable server property (`sortPath` on the column def) are offered in the Sort/Group panels — `description`, `contact`, and `employeeResponsible` are excluded (formatter-composed/placeholder values, no clean single path to sort/group by).
+  - `TODO-VERIFY`: the exact item property names expected by `SelectionPanel`/`SortPanel`/`GroupPanel#setP13nData`/`getP13nData` (`key`/`label`/`visible`/`position`/`sorted`/`descending`/`grouped`) were not published in the fetched API reference (only that the methods exist, not their parameter shape) — implemented per the standard mdc p13n item shape used across SAP samples; verify against the running app and adjust field names if the panels don't render/apply state as expected.
+
+### Manual tweaks to `Master.view.xml` after the above (2026-08-19)
+
+Applied directly by the user, not via an agent edit:
+
+- `t:Table`: `visibleRowCountMode` `Interactive` → `Fixed`, `visibleRowCount` `12` → `10`, added `alternateRowColors="true"`, added `enableGrouping="true"`. Wrapping `VBox` `height` `100%` → `80%`.
+- Effect on existing controller logic: with `visibleRowCountMode="Fixed"` there is no drag handle, so `onRowsUpdated`/`_persistVisibleRowCount` (which persists a user-dragged row count into the `masterTableLayout` variant) is now effectively dead code — harmless, just unreachable until/unless the mode is switched back to `Interactive`. `_bindMasterRows`'s `oTable.setVisibleRowCount(oLayout.rowCount || 12)` still runs and still works in `Fixed` mode (it's a one-time programmatic set, not tied to the interactive handle).
+- `enableGrouping="true"` is a no-op as currently wired: `sap.ui.table.Table`'s native grouping needs both `enableGrouping` **and** a `groupBy` column/binding parameter, and this app never calls `setGroupBy()`/passes a `groupBy` parameter (item 1's "group" personalization is implemented as a sort-key, per the confirmed `enableGrouping` + OData-models restriction documented above) — so this flag currently has no visible effect and doesn't reintroduce the documented OData-incompatibility risk. Flagged for the user in case the intent was to test native grouping directly.
+- **Item 2 — column-layout variant management**: added a second Select + Save As/Manage UI (toolbar of the grid table, next to the "Columns" button) mirroring the existing FilterBar search-variant pattern, backed by a new `VariantStore` key `masterColumnVariants` (distinct from the single active-layout entry under `masterTableLayout`). New controller methods: `_refreshColumnVariantsModel`, `onColumnVariantSelect`, `onColumnVariantSaveAs`, `onColumnVariantManage`.
+- **Item 3 — Provider Order column navigation via Link**: removed `rowActionCount`/`<t:rowActionTemplate>`/`RowActionItem`/`onRowActionPress` entirely. The `requestId` column's cell template is now a `sap.m.Link` (imported `sap/m/Link`) whose `press` handler resolves the row's binding context and calls the existing `_navigateToOrder()` helper (reused, not duplicated).
+- **Item 4 — Description column width**: `_getColumnDefs()`'s `description` entry changed from `"12rem"` to `"40rem"` initial width. Any already-persisted `VariantStore` layout with the old `12rem` width is left untouched (expected personalization behavior — user-saved widths win over the new default).
+- i18n: added `p13nDialogTitle`, `p13nSelectionPanelTitle`, `p13nSortPanelTitle`, `p13nGroupPanelTitle`, `columnVariantLabel`, `columnVariantSaveDialogTitle`, `columnVariantManageDialogTitle`; removed `columnDialogTitle`/`moveUp`/`moveDown` (only used by the removed hand-rolled dialog).
 

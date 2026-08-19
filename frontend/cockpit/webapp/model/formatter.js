@@ -15,7 +15,7 @@ sap.ui.define([
     return vValue;
   }
 
-  var mStatusTextE008 = {
+  var mStatusText = {
     "0A": "Draft (no status)",
     "1A": "In Process",
     "1B": "On-Hold",
@@ -29,7 +29,7 @@ sap.ui.define([
     "2C": "Cancelled"
   };
 
-  var mStatusStateE008 = {
+  var mStatusState = {
     "0A": "None",
     "1A": "Information",
     "1B": "Warning",
@@ -43,17 +43,6 @@ sap.ui.define([
     "2C": "None"
   };
 
-  var mStatusTextStandard = {
-    "A": "Not Processed",
-    "B": "Partially Processed",
-    "C": "Completed"
-  };
-
-  var mStatusStateStandard = {
-    "A": "Information",
-    "B": "Warning",
-    "C": "Success"
-  };
 
   // Extracted as plain functions (not object methods) so status formatting
   // works correctly regardless of how the caller invokes it: some XML fragments
@@ -83,33 +72,30 @@ sap.ui.define([
   };
 
   function fnStatusText(sCode) {
-    if (ServiceSchema.statusSource === "e008") {
+    if (!!sCode) {
       return removeFirstWord(sCode) || sCode || "Draft";
     }
-    return mStatusTextStandard[sCode] || sCode || "Draft";
+    return sCode || "Draft";
   }
 
   function fnStatusCode(sCode) {
-    if (ServiceSchema.statusSource === "e008") {
+    if (!!sCode) {
       let _code = sCode.split(' ')[0];
       return _code || '0A';
     }
-    return mStatusTextStandard[sCode] || sCode || "";
+    return sCode || "";
   }
 
   function fnUserStatusText(sCode) {
-    if (ServiceSchema.statusSource === "e008") {
-      return mStatusTextE008[sCode] || sCode || "";
+    if (!!sCode) {
+      return mStatusText[sCode] || sCode || "";
     }
-    return mStatusTextStandard[sCode] || sCode || "";
+    return sCode || "";
   }
 
   function fnStatusState(sCode) {
-    let _code = fnStatusCode(sCode);
-    if (ServiceSchema.statusSource === "e008") {
-      return mStatusStateE008[_code] || "None";
-    }
-    return mStatusStateStandard[sCode] || "None";
+    let _code = (!!sCode)?fnStatusCode(sCode):'';
+      return mStatusState[_code] || "None";
   }
 
   return {
