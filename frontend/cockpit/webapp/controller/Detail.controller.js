@@ -1,6 +1,7 @@
 sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/m/MessageToast",
+  "sap/m/MessageBox",
   "sap/m/MessagePopover",
   "sap/m/MessageItem",
   "sap/m/Dialog",
@@ -10,20 +11,43 @@ sap.ui.define([
   "sap/m/CustomListItem",
   "sap/m/CheckBox",
   "sap/m/HBox",
+  "sap/m/SelectDialog",
+  "sap/m/StandardListItem",
+  "sap/ui/core/Fragment",
   "sap/ui/core/Messaging",
+  "sap/ui/core/EventBus",
   "sap/ui/model/json/JSONModel",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator",
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/sections/SectionFactory",
   "cdc/vaccreq/sections/SectionConfig",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/VariantStore"
+  "cdc/vaccreq/model/VariantStore",
+  "cdc/vaccreq/model/Enums",
+  "cdc/vaccreq/service/EditRequestService",
+  "cdc/vaccreq/service/CreateOrderService"
 ], function (
-  Controller, MessageToast, MessagePopover, MessageItem, Dialog, Button, Text,
-  List, CustomListItem, CheckBox, HBox,
-  Messaging, JSONModel, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore
+  Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
+  List, CustomListItem, CheckBox, HBox, SelectDialog, StandardListItem, Fragment,
+  Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums,
+  EditRequestService, CreateOrderService
 ) {
   "use strict";
+
+  // CRUD Task 1 v4 (Create Order field adjustments): hardcoded sample data for
+  // the Employee Responsible Value Help stub picker - no real F4 service is
+  // wired yet (VH EntitySet TBD), see NOTES.md/OPEN_QUESTIONS.md.
+  // Provider/Ship-To VH is live (HeaderShipToParty, see
+  // _openShipToPartyValueHelpDialog) and Contact VH is live
+  // (StandardPartnerContactInfo, see _openContactValueHelpDialog).
+  // "based on SAP User name (USR02)" - hardcoded sample user master rows.
+  var EMPLOYEE_PICKER_ITEMS = [
+    { id: "JDOE", name: "John Doe" },
+    { id: "ASMITH", name: "Alice Smith" },
+    { id: "BJONES", name: "Bob Jones" }
+  ];
 
   var ITEMS_COLUMNS_KEY = "itemsColumns";
   var ITEMS_COLUMN_KEYS = [
@@ -44,21 +68,42 @@ sap.ui.define([
     onInit: function () {
       this._oRouter = this.getOwnerComponent().getRouter();
       this._oRouter.getRoute("detail").attachPatternMatched(this._onObjectMatched, this);
+      // CRUD Task 1 v3 (In-Place Create): the "create" route reuses this same
+      // Detail view/controller instance — a transient context stands in for the
+      // bindElement path the "detail" route uses (design/prompts/CRUD Task 1
+      // Prompt v3.md).
+      this._oRouter.getRoute("create").attachPatternMatched(this._onCreateMatched, this);
       // Single source of truth for the panel stack: SectionConfig.js. The anchor
       // strip (sectionsNav model, below) and the sectionFlags model are both
       // derived from this same array, so a new section added there appears in
       // both automatically (Phase 2 Prompt v2, P1 item 2).
       this._aSectionMeta = SectionConfig;
-      this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta);
+      this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this));
       this.getView().setModel(this._createSectionFlagsModel(), "sectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
+      // CRUD Task 1 v3: IoH has no backend context pre-save (CR-002, local rows
+      // only until step ③) — a plain local JSON model, reset each time createMode
+      // is entered (_setCreateMode).
+      this.getView().setModel(new JSONModel({ rows: [] }), "ioh");
+      // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
+      // Shipping-Provider have no real writable field yet (all part of the
+      // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
+      // each time createMode is entered (_setCreateMode), sent as the enrichment
+      // payload at Save (still a no-op today, see CreateOrderService.js#enrich).
+      this.getView().setModel(new JSONModel(this._createEnrichDefaults()), "createEnrich");
+      this.getView().setModel(this._createEnumsModel(), "enums");
+      this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
 
     },
 
     onAfterRendering: function () {
       this._oSectionFactory.ensurePanels();
+      // First-ever render can race _onObjectMatched/_onCreateMatched (the
+      // "details-title" control doesn't exist until ensurePanels() runs) -
+      // (re)apply the binding here too, it's idempotent.
+      this._bindDetailsSectionTitle();
     },
 
     onExpandPanel: function (oEvent) {
@@ -249,14 +294,620 @@ sap.ui.define([
       this._oMessagePopover.toggle(oEvent.getSource());
     },
 
+    // --- CRUD Task 2 (Change Mode): per-section edit sessions (Details/Items
+    // only \u2014 SectionConfig.js `editLive`). One section in edit at a time;
+    // Edit/Save/Cancel buttons live in that section's headerToolbar
+    // (SectionFactory.js). No draft: Save = submitBatch("vrEdit"), Cancel =
+    // resetChanges("vrEdit") \u2014 see EditRequestService.js. ---
+
+    onSectionEditPress: function (sSectionId) {
+      var oContext = this.getView().getBindingContext();
+      var oFlags = this.getView().getModel("sectionFlags");
+      if (!oContext || oFlags.getProperty("/" + sSectionId + "/editing")) {
+        return;
+      }
+      // Serialize: disable every other live section's Edit while this one is open.
+      this._aSectionMeta.forEach(function (oMeta) {
+        if (oMeta.editLive && oMeta.id !== sSectionId) {
+          oFlags.setProperty("/" + oMeta.id + "/editEnabled", false);
+        }
+      });
+      EditRequestService.beginEdit(oContext, sSectionId);
+      oFlags.setProperty("/" + sSectionId + "/editing", true);
+    },
+
+    onSectionCancelPress: function (sSectionId) {
+      var oContext = this.getView().getBindingContext();
+      if (oContext) {
+        EditRequestService.cancel(oContext);
+      }
+      this._endEditSession(sSectionId);
+    },
+
+    // Sections whose display Text reads a code's expanded to-one nav-property
+    // text (e.g. Order Reason code -> _SDDocumentReason/SDDocumentReason_Text):
+    // changing the code points that nav at a *different* entity, and
+    // requestSideEffects errors on that ("Key predicate ... changed") since it
+    // expects a nav's target identity to stay stable. A full context reload
+    // (same as reopening the order) sidesteps that merge check entirely.
+    _aSectionsNeedingFullReload: ["details", "shipping", "orgData", "billing"],
+
+    onSectionSavePress: function (sSectionId) {
+      var that = this;
+      var oContext = this.getView().getBindingContext();
+      var oBundle = this.getResourceBundle();
+      if (!oContext) {
+        return;
+      }
+      EditRequestService.save(oContext).then(function () {
+        MessageToast.show(oBundle.getText("editSaveSuccess"));
+        if (that._aSectionsNeedingFullReload.indexOf(sSectionId) !== -1) {
+          that._reloadHeaderContext(oContext.getPath());
+        }
+        // No explicit master-row refresh call: the Master list binds the same
+        // OData V4 model/entity instance, whose cache the PATCH response
+        // already updated \u2014 any bound row for this order reflects it automatically.
+        that._endEditSession(sSectionId);
+      }, function (oError) {
+        if (oError.isConflict) {
+          that._showConflictDialog(oContext, sSectionId);
+        } else {
+          // Edit session stays open for correction; backend messages are
+          // already bound onto the matching fields via the message model
+          // (Detail.controller.js `message` model + matching binding paths).
+          MessageToast.show(oBundle.getText("editSaveError"));
+          that._oSectionFactory.expandSection(sSectionId);
+        }
+      });
+    },
+
+    // Full re-GET of the header (mirrors reopening the order) - used instead
+    // of requestSideEffects when a saved section can change a to-one nav's
+    // target identity (see _aSectionsNeedingFullReload above).
+    _reloadHeaderContext: function (sPath) {
+      this.getView().unbindElement();
+      this.getView().bindElement({
+        path: sPath,
+        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup }
+      });
+    },
+
+    // Controls loaded via a section's Fragment.load carry the panel's ID as an
+    // extra ID-preservation prefix (SectionFactory.js ensurePanelContent) - a
+    // plain this.byId() only strips the view's own prefix, so it can never find
+    // them; must go through Fragment.byId(panelId, ...) instead.
+    _byIdInSection: function (sSectionId, sControlId) {
+      var oPanel = this.byId(sSectionId);
+      return oPanel && Fragment.byId(oPanel.getId(), sControlId);
+    },
+
+    onItemsAddRow: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (!oBinding) {
+        return;
+      }
+      oBinding.create({
+        Product: "",
+        RequestedQuantity: null,
+        RequestedQuantityUnit: ServiceSchema.createPayloadUom
+      });
+    },
+
+    // NDC Code VH-only Input (Items.fragment.xml, valueHelpOnly="true") - the
+    // row's own context (not the header) receives the selected Product; also
+    // mirrors the material description into SalesOrderItemText (ARKTX) right
+    // away for immediate feedback, ahead of the batch save that would
+    // otherwise be the only place the backend defaults it from the material.
+    onItemNdcValueHelpRequest: function (oEvent) {
+      var oProps = ServiceSchema.productProperties;
+      var oBundle = this.getResourceBundle();
+      var oRowContext = oEvent.getSource().getBindingContext();
+      this._openProductValueHelpDialog(oBundle.getText("ndcCodePickerTitle"), function (oItem) {
+        oRowContext.setProperty(ServiceSchema.itemProperties.material, oItem[oProps.id]);
+        oRowContext.setProperty(ServiceSchema.itemProperties.itemText, oItem[oProps.text]);
+      });
+    },
+
+    _endEditSession: function (sSectionId) {
+      var oFlags = this.getView().getModel("sectionFlags");
+      oFlags.setProperty("/" + sSectionId + "/editing", false);
+      this._aSectionMeta.forEach(function (oMeta) {
+        if (oMeta.editLive) {
+          oFlags.setProperty("/" + oMeta.id + "/editEnabled", true);
+        }
+      });
+    },
+
+    _showConflictDialog: function (oContext, sSectionId) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      MessageBox.warning(oBundle.getText("editConflictReload"), {
+        actions: [MessageBox.Action.OK],
+        onClose: function () {
+          oContext.refresh();
+          that._endEditSession(sSectionId);
+        }
+      });
+    },
+
+    // --- CRUD Task 1 v3 (In-Place Create, design/prompts/CRUD Task 1 Prompt
+    // v3.md, ADDENDUM-001): the Create dialog is removed \u2014 creation happens
+    // in-place on the "create" route (_onCreateMatched above). Global Save/
+    // Cancel live on the DynamicPage title (Detail.view.xml); no per-section
+    // Save/Cancel while createMode is on (SectionFactory.js). ---
+
+    // Sections that force their `editing` flag on for the duration of
+    // createMode (so their existing editing-toggled Inputs/ComboBoxes show
+    // with zero fragment changes) \u2014 the same four sections already wired
+    // `editLive` for CRUD Task 2. IoH/Parties Involved/Attachments read
+    // `sectionFlags>/createMode` directly instead (no per-section edit session).
+    _aCreateModeEditingSections: ["details", "items", "shipping", "orgData"],
+
+    _setCreateMode: function (bOn) {
+      var oFlags = this.getView().getModel("sectionFlags");
+      oFlags.setProperty("/createMode", bOn);
+      this._aCreateModeEditingSections.forEach(function (sId) {
+        oFlags.setProperty("/" + sId + "/editing", bOn);
+      });
+      if (bOn) {
+        this.getView().getModel("ioh").setProperty("/rows", []);
+        this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
+      }
+    },
+
+    // Resolves Enums.js's {key, i18nKey} lists into {key, text} once, so the
+    // createMode Selects (Priority/Category/Status) can bind items/text
+    // directly without a runtime i18n lookup in the XML.
+    _createEnumsModel: function () {
+      var oBundle = this.getResourceBundle();
+      function resolve(aList) {
+        return aList.map(function (oEntry) {
+          return { key: oEntry.key, text: oBundle.getText(oEntry.i18nKey) };
+        });
+      }
+      return new JSONModel({
+        PRIORITY: resolve(Enums.PRIORITY),
+        CATEGORY: resolve(Enums.CATEGORY),
+        STATUS: resolve(Enums.STATUS)
+      });
+    },
+
+    // Defaults for the "createEnrich" local-only model - Employee Responsible
+    // defaults to the current logged-in user (sap.ushell.Container UserInfo
+    // service); the display value is the full name (falls back to the user ID
+    // if the ushell doesn't expose one, e.g. standalone/mock server runs).
+    _createEnrichDefaults: function () {
+      return {
+        providerName: "",
+        providerAddress: "",
+        contactId: "",
+        contactName: "",
+        employeeResponsibleId: this._getCurrentUserId(),
+        employeeResponsibleName: this._getCurrentUserFullName(),
+        priority: "",
+        category: "",
+        status: "",
+        shipToPartyId: "",
+        shipToPartyName: ""
+      };
+    },
+
+    _getCurrentUserId: function () {
+      try {
+        if (sap.ushell && sap.ushell.Container) {
+          return sap.ushell.Container.getService("UserInfo").getId() || "";
+        }
+      } catch (oError) {
+        // ushell not available (standalone/mock server run) - leave blank.
+      }
+      return "";
+    },
+
+    _getCurrentUserFullName: function () {
+      try {
+        if (sap.ushell && sap.ushell.Container) {
+          var oUserInfo = sap.ushell.Container.getService("UserInfo");
+          return oUserInfo.getFullName() || oUserInfo.getId() || "";
+        }
+      } catch (oError) {
+        // ushell not available (standalone/mock server run) - leave blank.
+      }
+      return "";
+    },
+
+    // Generic hardcoded-data picker (Contact/Employee Responsible only) - no
+    // real F4 service is wired for either yet.
+    _openPickerDialog: function (sTitle, aItems, fnApply) {
+      var oDialog = new SelectDialog({
+        title: sTitle,
+        items: {
+          path: "/items",
+          template: new StandardListItem({ title: "{name}", description: "{id}" })
+        },
+        confirm: function (oEvent) {
+          var oSelectedItem = oEvent.getParameter("selectedItem");
+          if (oSelectedItem) {
+            fnApply(oSelectedItem.getBindingContext().getObject());
+          }
+          oDialog.destroy();
+        },
+        cancel: function () {
+          oDialog.destroy();
+        }
+      });
+      oDialog.setModel(new JSONModel({ items: aItems }));
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    // CRUD Task 1 v4: Provider/Ship-To VH backed by the real, top-level
+    // `/HeaderShipToParty` (C_SalesOrderShipToPtyMng) entity set - one row per
+    // order's ship-to snapshot, searchable by name/partner ID regardless of the
+    // (possibly transient/create-mode) current order context.
+    _openShipToPartyValueHelpDialog: function (sTitle, fnApply) {
+      var oProps = ServiceSchema.shipToPartyProperties;
+      var oDialog = new SelectDialog({
+        title: sTitle,
+        growing: true,
+        items: {
+          path: "/" + ServiceSchema.entitySets.shipToParty,
+          parameters: {
+            $select: [oProps.id, oProps.fullName, oProps.address].join(",")
+          },
+          template: new StandardListItem({
+            title: "{" + oProps.fullName + "}",
+            description: "{" + oProps.id + "}"
+          })
+        },
+        search: function (oEvent) {
+          var sValue = oEvent.getParameter("value");
+          var oBinding = oEvent.getSource().getBinding("items");
+          oBinding.filter(sValue ? new Filter({
+            filters: [
+              new Filter(oProps.fullName, FilterOperator.Contains, sValue),
+              new Filter(oProps.id, FilterOperator.Contains, sValue)
+            ],
+            and: false
+          }) : []);
+        },
+        confirm: function (oEvent) {
+          var oSelectedItem = oEvent.getParameter("selectedItem");
+          if (oSelectedItem) {
+            fnApply(oSelectedItem.getBindingContext().getObject());
+          }
+          oDialog.destroy();
+        },
+        cancel: function () {
+          oDialog.destroy();
+        }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    // CRUD Task 1 v4: Contact VH backed by the real, top-level
+    // `/StandardPartnerContactInfo` (C_SlsDocStdPartnerContactInfo) entity set -
+    // one row per sales document's standard-contact snapshot, searchable by name.
+    _openContactValueHelpDialog: function (sTitle, fnApply) {
+      var oProps = ServiceSchema.contactProperties;
+      var oDialog = new SelectDialog({
+        title: sTitle,
+        growing: true,
+        items: {
+          path: "/" + ServiceSchema.entitySets.contactInfo,
+          parameters: {
+            $select: [oProps.fullName, oProps.email, oProps.phone].join(",")
+          },
+          template: new StandardListItem({
+            title: "{" + oProps.fullName + "}",
+            description: "{" + oProps.email + "}"
+          })
+        },
+        search: function (oEvent) {
+          var sValue = oEvent.getParameter("value");
+          var oBinding = oEvent.getSource().getBinding("items");
+          oBinding.filter(sValue ? new Filter(oProps.fullName, FilterOperator.Contains, sValue) : []);
+        },
+        confirm: function (oEvent) {
+          var oSelectedItem = oEvent.getParameter("selectedItem");
+          if (oSelectedItem) {
+            fnApply(oSelectedItem.getBindingContext().getObject());
+          }
+          oDialog.destroy();
+        },
+        cancel: function () {
+          oDialog.destroy();
+        }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    // NDC Code VH backed by this same service's own top-level `/Product`
+    // EntitySet (ProductType) - search by material description or code.
+    _openProductValueHelpDialog: function (sTitle, fnApply) {
+      var oProps = ServiceSchema.productProperties;
+      var oDialog = new SelectDialog({
+        title: sTitle,
+        growing: true,
+        items: {
+          path: "/" + ServiceSchema.entitySets.product,
+          parameters: {
+            $select: [oProps.id, oProps.text].join(",")
+          },
+          template: new StandardListItem({
+            title: "{" + oProps.id + "}",
+            description: "{" + oProps.text + "}"
+          })
+        },
+        search: function (oEvent) {
+          var sValue = oEvent.getParameter("value");
+          var oBinding = oEvent.getSource().getBinding("items");
+          oBinding.filter(sValue ? new Filter({
+            filters: [
+              new Filter(oProps.id, FilterOperator.Contains, sValue),
+              new Filter(oProps.text, FilterOperator.Contains, sValue)
+            ],
+            and: false
+          }) : []);
+        },
+        confirm: function (oEvent) {
+          var oSelectedItem = oEvent.getParameter("selectedItem");
+          if (oSelectedItem) {
+            fnApply(oSelectedItem.getBindingContext().getObject());
+          }
+          oDialog.destroy();
+        },
+        cancel: function () {
+          oDialog.destroy();
+        }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    // Best-effort Contact prefill after a Provider is picked: was meant to take
+    // the most recent `/StandardPartnerContactInfo` row for that SoldToParty as
+    // a stand-in "main contact", but the backend query provider
+    // (CL_SD_S4H_STD_PARTNER_CONTACT) rejects ANY standalone query on this
+    // entity set with 501 Not Implemented (confirmed live, filtered or not) -
+    // so prefill is not possible; always leave blank for manual selection.
+    _prefillMainContact: function (sProviderId) {
+      this.getView().getModel("createEnrich").setProperty("/contactName", "");
+    },
+
+    // Sets the real SoldToParty header property on the transient context (the
+    // one field in this batch with an actual writable backing field) plus the
+    // display-only name/address mirrors (createEnrich>/providerName,
+    // createEnrich>/providerAddress), then best-effort prefills the Contact
+    // field from that provider's own most recent order.
+    onProviderValueHelpRequest: function () {
+      var that = this;
+      var oProps = ServiceSchema.shipToPartyProperties;
+      var oBundle = this.getResourceBundle();
+      this._openShipToPartyValueHelpDialog(oBundle.getText("providerPickerTitle"), function (oItem) {
+        var oContext = that.getView().getBindingContext();
+        oContext.setProperty(ServiceSchema.headerProperties.providerId, oItem[oProps.id]);
+        var oEnrichModel = that.getView().getModel("createEnrich");
+        oEnrichModel.setProperty("/providerName", oItem[oProps.fullName]);
+        oEnrichModel.setProperty("/providerAddress", oItem[oProps.address]);
+        that._prefillMainContact(oItem[oProps.id]);
+      });
+    },
+
+    // CRUD Task 1 v4: Contact VH backed by the real, top-level
+    // `/StandardPartnerContactInfo` (C_SlsDocStdPartnerContactInfo) entity set -
+    // no dedicated contact-person ID is exposed by this service (only
+    // name/phone/email), so createEnrich>/contactId is left unset here.
+    onContactValueHelpRequest: function () {
+      var oProps = ServiceSchema.contactProperties;
+      var oBundle = this.getResourceBundle();
+      this._openContactValueHelpDialog(oBundle.getText("contactPickerTitle"), function (oItem) {
+        var oModel = this.getView().getModel("createEnrich");
+        oModel.setProperty("/contactName", oItem[oProps.fullName]);
+      }.bind(this));
+    },
+
+    // Local-only (see createEnrich>/employeeResponsibleName) - "based on SAP
+    // User name (USR02)", hardcoded sample rows for now.
+    onEmployeeResponsibleValueHelpRequest: function () {
+      var oBundle = this.getResourceBundle();
+      this._openPickerDialog(oBundle.getText("employeeResponsiblePickerTitle"), EMPLOYEE_PICKER_ITEMS, function (oItem) {
+        var oModel = this.getView().getModel("createEnrich");
+        oModel.setProperty("/employeeResponsibleId", oItem.id);
+        oModel.setProperty("/employeeResponsibleName", oItem.name);
+      }.bind(this));
+    },
+
+    // Rebinds the Items table's `_Item` navigation to the given deferred
+    // update group ("vrEdit" for an existing order, ServiceSchema.createUpdateGroup
+    // for a transient one) \u2014 a nested list binding's $$updateGroupId can only be
+    // set at bind time, and (unlike header property bindings) is not inherited
+    // automatically unless the parent context is itself transient in that same
+    // group, so the Items table's static XML binding carries no group of its
+    // own (Items.fragment.xml) and this is the only place "vrCreate" is used
+    // outside CreateOrderService.js/ServiceSchema.js.
+    _rebindItemsGroup: function (sGroupId) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return;
+      }
+      var oBindingInfo = oTable.getBindingInfo("items");
+      if (!oBindingInfo) {
+        return;
+      }
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId });
+      oTable.bindItems(oBindingInfo);
+    },
+
+    // SectionFactory.js content-loaded hook \u2014 fires once per section the
+    // first time its fragment content loads (user expand or a forced createMode
+    // expand). Only "items" needs a reaction (see _rebindItemsGroup above).
+    _onSectionContentLoaded: function (sSectionId) {
+      if (sSectionId === "items") {
+        this._rebindItemsGroup(this._sItemsUpdateGroup);
+      }
+    },
+
+    onIohAddRow: function () {
+      var oModel = this.getView().getModel("ioh");
+      var aRows = oModel.getProperty("/rows");
+      aRows.push({ ndc: "", lot: "", quantity: null, expirationDate: null });
+      oModel.setProperty("/rows", aRows);
+    },
+
+    onIohDeleteRow: function (oEvent) {
+      var oModel = this.getView().getModel("ioh");
+      var oRowContext = oEvent.getSource().getBindingContext("ioh");
+      var iIndex = Number(oRowContext.getPath().split("/").pop());
+      var aRows = oModel.getProperty("/rows");
+      aRows.splice(iIndex, 1);
+      oModel.setProperty("/rows", aRows);
+    },
+
+    onCreateCancelPress: function () {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oContext = this.getView().getBindingContext();
+
+      function doCancel() {
+        that._destroyCreateContext();
+        that._setCreateMode(false);
+        that._oRouter.navTo("master", {}, true);
+      }
+
+      if (oContext && CreateOrderService.isDirty(oContext)) {
+        MessageBox.confirm(oBundle.getText("createCancelConfirm"), {
+          onClose: function (sAction) {
+            if (sAction === MessageBox.Action.OK) {
+              doCancel();
+            }
+          }
+        });
+      } else {
+        doCancel();
+      }
+    },
+
+    onCreateSavePress: function () {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oContext = this.getView().getBindingContext();
+      if (!oContext) {
+        return;
+      }
+
+      if (!oContext.getProperty(ServiceSchema.headerProperties.providerId)) {
+        MessageToast.show(oBundle.getText("createRequestFieldRequired"));
+        this._oSectionFactory.expandSection("details");
+        return;
+      }
+
+      // CreateWithSalesOrderType (the bound action that actually creates the
+      // order — CreateOrderService.js#save) declares SalesOrganization/
+      // DistributionChannel/OrganizationDivision Nullable="false"; a blank
+      // value here isn't a UI nicety anymore, the action call itself fails
+      // without it.
+      var aRequiredOrgFields = [
+        ServiceSchema.headerProperties.salesOrganization,
+        ServiceSchema.headerProperties.distributionChannel,
+        ServiceSchema.headerProperties.division
+      ];
+      var bOrgDataMissing = aRequiredOrgFields.some(function (sProperty) {
+        return !oContext.getProperty(sProperty);
+      });
+      if (bOrgDataMissing) {
+        MessageToast.show(oBundle.getText("createRequestFieldRequired"));
+        this._oSectionFactory.expandSection("orgData");
+        return;
+      }
+
+      var oItemsTable = this._byIdInSection("items", "itemsTable");
+      var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
+      if (!CreateOrderService.hasMinItems(oItemsBinding)) {
+        MessageToast.show(oBundle.getText("createRequestMinItemsError"));
+        this._oSectionFactory.expandSection("items");
+        return;
+      }
+
+      this.getView().setBusy(true);
+      var sNewId;
+      CreateOrderService.save(oContext, oItemsBinding)
+        // Step ① succeeded — the order now exists (oNewContext is the real,
+        // persisted context; oContext/the scratch context is already
+        // discarded by CreateOrderService.save()). Steps ②/③ failing from
+        // here on is a partial-failure: the order stays created (design/
+        // prompts/CRUD Task 1 Prompt v3.md "Partial-failure semantics").
+        .then(function (oNewContext) {
+          sNewId = oNewContext.getProperty(ServiceSchema.keys.orderId);
+          var oEnrich = that.getView().getModel("createEnrich").getData();
+          return CreateOrderService.enrich(oNewContext, {
+            contactId: oEnrich.contactId,
+            employeeResponsibleId: oEnrich.employeeResponsibleId,
+            priority: oEnrich.priority,
+            category: oEnrich.category,
+            status: oEnrich.status,
+            shipToPartyId: oEnrich.shipToPartyId
+          }).catch(function (oError) {
+            oError.orderCreatedId = sNewId;
+            throw oError;
+          });
+        })
+        .then(function () {
+          return CreateOrderService.submitIoH(sNewId, that.getView().getModel("ioh").getProperty("/rows")).catch(function (oError) {
+            oError.orderCreatedId = sNewId;
+            throw oError;
+          });
+        })
+        .then(function () {
+          that.getView().setBusy(false);
+          MessageToast.show(oBundle.getText("createRequestSuccessToast", [sNewId]));
+          that._completeCreate(sNewId);
+        }, function (oError) {
+          that.getView().setBusy(false);
+          if (oError && oError.orderCreatedId) {
+            // Step \u2461/\u2462 failed but the order exists \u2014 exit createMode into the
+            // saved order; user completes the rest via Change Mode (no
+            // compensating deletes, per the v3 prompt).
+            MessageToast.show(oBundle.getText("createPartialFailure", [oError.orderCreatedId]));
+            that._completeCreate(oError.orderCreatedId);
+          } else {
+            // Step \u2460 failed \u2014 nothing exists; stay in createMode, messages are
+            // already bound onto the matching fields via the message model.
+            MessageToast.show(oBundle.getText("createSaveError"));
+            that._oSectionFactory.expandSection("details");
+          }
+        });
+    },
+
+    // Step \u2463: rebind to the new order's real key, exit createMode, refresh
+    // the master list (EventBus, channel "app" — Master.controller.js owns its
+    // own table; deliberately distinct from the "vrCreate" update-group literal,
+    // see CreateOrderService.js/ServiceSchema.js).
+    _completeCreate: function (sNewId) {
+      this._oCreateListBinding = null;
+      this._setCreateMode(false);
+      EventBus.getInstance().publish("app", "orderCreated", { orderId: sNewId });
+      this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
+    },
+
     _createSectionFlagsModel: function () {
-      // Shape mirrors the future resolver feed (status/orderType/user-driven);
-      // for Phase 2 every editable section is visible but disabled (placeholder
-      // Edit button — no transactional behavior yet).
-      var oData = {};
+      // Shape mirrors the future resolver feed (status/orderType/user-driven).
+      // `editLive` sections (Details, Items \u2014 CRUD Task 2) start enabled,
+      // permissive-stub style (`// TODO: resolver feed`); every other editable
+      // section stays visible-but-disabled ("later phase" placeholder).
+      // CRUD Task 1 v3: `/createMode` is the one extra top-level dimension \u2014
+      // true only for the lifetime of the "create" route; SectionFactory.js and
+      // the fragments both read it directly (design/prompts/CRUD Task 1 Prompt v3.md
+      // "sectionFlags gains a createMode dimension").
+      var oData = { createMode: false };
       this._aSectionMeta.forEach(function (oMeta) {
         if (oMeta.editable) {
-          oData[oMeta.id] = { editVisible: true, editEnabled: false };
+          oData[oMeta.id] = { editVisible: true, editEnabled: !!oMeta.editLive };
+          if (oMeta.editLive) {
+            oData[oMeta.id].editing = false;
+          }
         }
       });
       return new JSONModel(oData);
@@ -265,7 +916,7 @@ sap.ui.define([
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey) };
+        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), createVisible: !!oMeta.createVisible };
       });
       return new JSONModel({ list: aList });
     },
@@ -276,11 +927,52 @@ sap.ui.define([
       if (!sId) {
         return;
       }
+      this._destroyCreateContext();
+      this._setCreateMode(false);
       this.getView().bindElement({
-        path: ServiceSchema.buildHeaderPath(sId)
+        path: ServiceSchema.buildHeaderPath(sId),
+        // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
+        // no $$updateGroupId of their own (unsupported on ODataPropertyBinding) -
+        // they inherit this context binding's update group instead.
+        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup }
       });
+      this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
       this._oSectionFactory.rebind();
+    },
+
+    // CRUD Task 1 v3 (In-Place Create): "create" route \u2014 a transient list-
+    // binding context stands in for the bindElement path the "detail" route
+    // uses. No backend contact until Save (CreateOrderService.js#enter).
+    _onCreateMatched: function () {
+      this._destroyCreateContext();
+      var oResult = CreateOrderService.enter(this.getView().getModel());
+      this._oCreateListBinding = oResult.listBinding;
+      this.getView().setBindingContext(oResult.context);
+      this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
+      this._setCreateMode(true);
+      this._bindDetailHeader();
+      // All createMode-visible sections are expanded/loaded simultaneously \u2014
+      // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
+      // Prompt v3.md "Sections in edit simultaneously").
+      this._aSectionMeta.forEach(function (oMeta) {
+        if (oMeta.createVisible) {
+          this._oSectionFactory.expandSection(oMeta.id);
+        }
+      }, this);
+    },
+
+    // Cleans up a previous transient create context (e.g. the user leaves the
+    // create route via the Close button/browser back instead of Save/Cancel) -
+    // nothing was ever sent to the backend, so a local delete is enough.
+    _destroyCreateContext: function () {
+      if (this._oCreateListBinding) {
+        var oContext = this.getView().getBindingContext();
+        if (oContext && oContext.isTransient && oContext.isTransient()) {
+          CreateOrderService.cancel(oContext);
+        }
+        this._oCreateListBinding = null;
+      }
     },
 
 		toggleFullScreen: function (oEvent) {
@@ -340,6 +1032,32 @@ sap.ui.define([
           path: ServiceSchema.headerProperties.currency,
           formatter: formatter.detailCurrency
         });
+
+      this._bindDetailsSectionTitle();
+    },
+
+    // Details/Items section Panel titles = "<order type label> Details"/"...
+    // Items" (formatter.orderTypeSectionTitle) - a separate method (not folded
+    // into _bindDetailHeader) because the Panels/Titles are created lazily by
+    // SectionFactory.ensurePanels() and may not exist yet the first time
+    // _bindDetailHeader runs (see onAfterRendering).
+    _bindDetailsSectionTitle: function () {
+      [
+        { id: "details-title", textKey: "sectionDetails" },
+        { id: "items-title", textKey: "sectionItems" }
+      ].forEach(function (oTitleMeta) {
+        var oTitle = this.byId(oTitleMeta.id);
+        if (!oTitle) {
+          return;
+        }
+        oTitle.bindProperty("text", {
+          parts: [
+            { path: ServiceSchema.headerProperties.salesOrderType },
+            { path: "i18n>" + oTitleMeta.textKey }
+          ],
+          formatter: formatter.orderTypeSectionTitle
+        });
+      }, this);
     },
 
     getResourceBundle: function () {

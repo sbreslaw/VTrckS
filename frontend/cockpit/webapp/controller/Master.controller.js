@@ -20,15 +20,15 @@ sap.ui.define([
   "sap/m/p13n/SelectionPanel",
   "sap/m/p13n/SortPanel",
   "sap/m/p13n/GroupPanel",
+  "sap/ui/core/EventBus",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/VariantStore",
-  "cdc/vaccreq/controller/CreateRequestDialog"
+  "cdc/vaccreq/model/VariantStore"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Item, Column, Text, Link,
   ObjectIdentifier, Dialog, Button, Input, List, CustomListItem, HBox, MessageToast,
-  P13nPopup, SelectionPanel, SortPanel, GroupPanel,
-  formatter, ServiceSchema, VariantStore, CreateRequestDialog
+  P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
+  formatter, ServiceSchema, VariantStore
 ) {
   "use strict";
 
@@ -66,6 +66,17 @@ sap.ui.define([
       this._refreshVariantsModel();
       this._refreshColumnVariantsModel();
       this._oRouter.getRoute("master").attachPatternMatched(this._onRouteMatched, this);
+      // CRUD Task 1 v3 (In-Place Create): Detail.controller.js publishes this
+      // once a new order is created in-place (step ④) - Master owns the shared
+      // list refresh, same responsibility split as the old dialog's success
+      // callback (see the deleted _onCreateRequestSuccess). Channel is "app",
+      // deliberately distinct from the "vrCreate" update-group literal (grep
+      // isolation - see CreateOrderService.js/ServiceSchema.js).
+      EventBus.getInstance().subscribe("app", "orderCreated", this._onOrderCreated, this);
+    },
+
+    onExit: function () {
+      EventBus.getInstance().unsubscribe("app", "orderCreated", this._onOrderCreated, this);
     },
 
     onSearch: function () {
@@ -165,26 +176,21 @@ sap.ui.define([
       this._persistVisibleRowCount();
     },
 
+    // CRUD Task 1 v3 (In-Place Create): the Create dialog is removed — creation
+    // now happens in the Detail view itself (route "create"), which owns the
+    // whole transient-context/save/cancel flow (Detail.controller.js).
     onCreateRequest: function () {
-      if (!this._oCreateRequestDialog) {
-        this._oCreateRequestDialog = new CreateRequestDialog(this);
-      }
-      this._oCreateRequestDialog.open(this._onCreateRequestSuccess.bind(this));
+      this._oRouter.navTo("create", {}, false);
     },
 
-    // Success callback for CreateRequestDialog (CRUD Task 1, design/NEwVaccReq.md):
-    // the dialog closes itself; Master owns the shared post-create steps —
-    // toast, refreshing the list binding, and navigating to the new order via
-    // the existing _navigateToOrder helper (no IsActiveEntity key — this
-    // service has none; see NOTES.md for the logged spec/reality conflict).
-    _onCreateRequestSuccess: function (sSalesDocument) {
-      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-      MessageToast.show(oBundle.getText("createRequestSuccessToast", [sSalesDocument]));
+    // Detail.controller.js publishes {orderId} on the "app"/"orderCreated"
+    // channel after a successful in-place create (step ④); it already navigates
+    // to the new order itself, so Master's only remaining job is the list refresh.
+    _onOrderCreated: function () {
       var oBinding = this.byId("requestsTable").getBinding("rows");
       if (oBinding) {
         oBinding.refresh();
       }
-      this._navigateToOrder(sSalesDocument);
     },
 
     onMasterRefresh: function () {

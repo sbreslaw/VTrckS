@@ -3,7 +3,7 @@
   xmlns:core="sap.ui.core" 
   xmlns:f="sap.ui.layout.form" 
   xmlns:l="sap.ui.layout">
-			<f:Form width="auto" editable="{appView>/editMode}">
+			<f:Form width="auto" editable="{sectionFlags>/details/editing}">
 				<f:layout>
 					<f:ResponsiveGridLayout 
 						labelSpanXL="4"
@@ -27,7 +27,7 @@
 						<f:formElements>
 							<f:FormElement>
 								<f:label>
-									<Label text="{i18n>filterRequestId}" required="false">
+									<Label text="{i18n>detailRequestId}" required="false">
 										<layoutData>
 											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
 										</layoutData>
@@ -49,13 +49,14 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{SalesOrder}" />
+                  <!-- CRUD Task 2: no real Description/KTEXT field or update micro-action exists on this service - stays read-only (see ServiceSchema.js headerProperties.description note). -->
+                  <Text text="{SalesOrder}" tooltip="{i18n>editDescriptionUnavailable}" />
 								</f:fields>
 							</f:FormElement>
 
 							<f:FormElement>
 								<f:label>
-									<Label text="{i18n>providerId}" required="false">
+									<Label text="{i18n>providerId}" required="{sectionFlags>/createMode}">
 										<layoutData>
 											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
 										</layoutData>
@@ -63,13 +64,30 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{SoldToParty}" />
+                  <!-- CRUD Task 1 v4: merges the old Provider ID/Provider Name
+                       fields into one "Provider" field that always displays the
+                       provider NAME. Create-only editable (SoldToParty is not in
+                       updatableHeaderProperties - the backend rejects changing
+                       the customer on an existing order). Value Help queries the
+                       live HeaderShipToParty (C_SalesOrderShipToPtyMng) entity
+                       set; the picker sets the real SoldToParty code on the
+                       transient context, createEnrich>/providerName+
+                       /providerAddress are display-only mirrors of the picked
+                       row (see Detail.controller.js#onProviderValueHelpRequest). -->
+                  <Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }" />
+                  <Input
+                    value="{createEnrich>/providerName}"
+                    showValueHelp="true"
+                    valueHelpOnly="true"
+                    editable="{= !${createEnrich>/providerName} }"
+                    visible="{sectionFlags>/createMode}"
+                    valueHelpRequest=".onProviderValueHelpRequest" />
 								</f:fields>
 							</f:FormElement>
 
 							<f:FormElement>
 								<f:label>
-									<Label text="{i18n>providerName}" required="false">
+									<Label text="{i18n>providerAddress}" required="false">
 										<layoutData>
 											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
 										</layoutData>
@@ -77,21 +95,14 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{CustomerName}" />
-								</f:fields>
-							</f:FormElement>
-
-							<f:FormElement>
-								<f:label>
-									<Label text="{i18n>orderType}" required="false">
-										<layoutData>
-											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
-										</layoutData>
-									</Label>
-								</f:label>
-
-								<f:fields>
-                  <Text text="{SalesOrderType}" />
+                  <!-- CRUD Task 1 v4: sourced from _ShipToParty (HeaderShipToParty
+                       / C_SalesOrderShipToPtyMng), same entity set the Provider
+                       Value Help now queries - read-only in every mode; in
+                       createMode the order has no backend context yet, so the
+                       address mirrors whatever the VH picker returned
+                       (createEnrich>/providerAddress). -->
+                  <Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} }" />
+                  <Text text="{createEnrich>/providerAddress}" visible="{sectionFlags>/createMode}" />
 								</f:fields>
 							</f:FormElement>
 
@@ -105,21 +116,15 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{_SoldToPartyContactInfo/FullName}" />
-								</f:fields>
-							</f:FormElement>
-
-							<f:FormElement>
-								<f:label>
-									<Label text="{i18n>shipTo}" required="false">
-										<layoutData>
-											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
-										</layoutData>
-									</Label>
-								</f:label>
-
-								<f:fields>
-                  <Text text="{_SoldToPartyContactInfo/FormattedPostalAddressDesc}" />
+                  <Text text="{_SoldToPartyContactInfo/FullName}" visible="{= !${sectionFlags>/createMode} }" />
+                  <!-- CRUD Task 1 v4: VH temporarily removed - StandardPartnerContactInfo
+                       rejects any standalone query with 501 Not Implemented (confirmed
+                       live), so the picker dialog can never list results; plain free-text
+                       entry until a working data source is found. -->
+                  <Input
+                    value="{createEnrich>/contactName}"
+                    visible="{sectionFlags>/createMode}"
+                    tooltip="{i18n>createEnrichmentUnavailable}" />
 								</f:fields>
 							</f:FormElement>
 
@@ -133,7 +138,18 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" />
+                  <Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" visible="{= !${sectionFlags>/createMode} }" />
+                  <!-- Stub Value Help based on SAP user name (USR02) - hardcoded
+                       picker for now; defaults to the current user
+                       (sap.ushell.Container UserInfo service) on entering
+                       createMode, local-only until the enrichment action is live. -->
+                  <Input
+                    value="{createEnrich>/employeeResponsibleName}"
+                    showValueHelp="true"
+                    valueHelpOnly="true"
+                    visible="{sectionFlags>/createMode}"
+                    valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
+                    tooltip="{i18n>createEnrichmentUnavailable}" />
 								</f:fields>
 							</f:FormElement>
 
@@ -147,7 +163,17 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{= '\u2014'}" />
+                  <!-- BLOCKED-BY-SERVICE at header level for an existing order;
+                       hardcoded Select in createMode only, local-only until the
+                       enrichment action is live (ADDENDUM-001). -->
+                  <Text text="{= '\u2014'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}" />
+                  <Select
+                    selectedKey="{createEnrich>/priority}"
+                    visible="{sectionFlags>/createMode}"
+                    tooltip="{i18n>createEnrichmentUnavailable}"
+                    items="{enums>/PRIORITY}">
+                    <core:Item key="{enums>key}" text="{enums>text}" />
+                  </Select>
 								</f:fields>
 							</f:FormElement>
 
@@ -161,7 +187,13 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{_SDDocumentReason/SDDocumentReason_Text}" />
+                  <Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }" />
+                  <ComboBox
+                    selectedKey="{SDDocumentReason}"
+                    visible="{sectionFlags>/details/editing}"
+                    items="{path: '/SDDocumentReason'}">
+                    <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+                  </ComboBox>
 								</f:fields>
 							</f:FormElement>
 
@@ -175,7 +207,17 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{= '\u2014'}" />
+                  <!-- Not a real writable field (SalesOrderType alias) - hardcoded
+                       Select in createMode only, local-only until the
+                       enrichment action is live (ADDENDUM-001). -->
+                  <Text text="{= '\u2014'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}" />
+                  <Select
+                    selectedKey="{createEnrich>/category}"
+                    visible="{sectionFlags>/createMode}"
+                    tooltip="{i18n>createEnrichmentUnavailable}"
+                    items="{enums>/CATEGORY}">
+                    <core:Item key="{enums>key}" text="{enums>text}" />
+                  </Select>
 								</f:fields>
 							</f:FormElement>
 
@@ -189,7 +231,18 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" />
+                  <!-- Status derivation on create is also part of the still-
+                       unbuilt enrichment action per ADDENDUM-001 - must stay
+                       user-selectable per the create-order design, hardcoded
+                       Select in createMode, local-only until then. -->
+                  <Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}" />
+                  <Select
+                    selectedKey="{createEnrich>/status}"
+                    visible="{sectionFlags>/createMode}"
+                    tooltip="{i18n>createEnrichmentUnavailable}"
+                    items="{enums>/STATUS}">
+                    <core:Item key="{enums>key}" text="{enums>text}" />
+                  </Select>
 								</f:fields>
 							</f:FormElement>
 
@@ -203,7 +256,24 @@
 								</f:label>
 
 								<f:fields>
-                  <Text text="{PurchaseOrderByCustomer}" />
+                  <Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }" />
+                  <Input value="{PurchaseOrderByCustomer}" visible="{sectionFlags>/details/editing}" />
+								</f:fields>
+							</f:FormElement>
+
+              <f:FormElement>
+								<f:label>
+									<Label text="{i18n>detailsNotes}" required="false">
+										<layoutData>
+											<l:GridData span="XL4 L4 M4 S12" indent="XL0 L0 M0 S0" linebreak="true"/>
+										</layoutData>
+									</Label>
+								</f:label>
+
+								<f:fields>
+                  <!-- Field mapping TBD (no header long-text source found in
+                       this service, see i18n>notesPending) - UI element only. -->
+                  <TextArea rows="3" width="100%" tooltip="{i18n>notesPending}" />
 								</f:fields>
 							</f:FormElement>
 
@@ -224,7 +294,7 @@
 									</Label>
 								</f:label>
  								<f:fields>
-                  <Text text="{path: 'CreationDate'}" />
+                  <Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}" />
 								</f:fields>
 
               </f:FormElement>

@@ -366,6 +366,236 @@ for audit-trail purposes.
   confirmation).
 
 
+## Section L — CRUD Task 2 v2: Change Mode (per-section edit, PATCH + ETag) (2026-08-19)
+
+Implemented per `design/Work Order 2 - CRUD Task 2 - Change Mode.md` (v2).
+Full Step-0/design detail is in `NOTES.md` ("CRUD Task 2 v2" entry) —
+summarized here for audit-trail purposes. Scope guard honored: only the
+Detail view + one new edit service module touched; Master, Create flow,
+`SectionFactory` panel mechanics, and `ServiceSchema` read mappings are
+otherwise unchanged.
+
+- **Edit model — DONE, no draft protocol anywhere.** Gate item #1 closed:
+  the bound `C_SALESORDERMANAGE_SD` service is confirmed unmanaged/no-draft
+  with `SAP__core.OptimisticConcurrency` on `LastChangeDateTime` (re-confirms
+  `PHASE2_AUDIT.md`'s own P1 finding plus the ETag claim). One section in edit
+  at a time (Details, Items only — `SectionConfig.js` `editLive`), serialized
+  via `sectionFlags` (`editEnabled` disabled on all other `editLive` sections
+  while one is open). Edit → snapshot (`EditRequestService.beginEdit`,
+  bookkeeping only, no request) → two-way bindings on the existing header
+  context with `$$updateGroupId: 'vrEdit'` (deferred, `manifest.json`
+  `groupProperties.vrEdit.submit: "API"`) → Save = `submitBatch("vrEdit")` →
+  toast + section back to display; Cancel = `resetChanges("vrEdit")` +
+  section back to display. No explicit "master row refresh" call was added —
+  V4's single shared entity cache means the Master table's bound row already
+  reflects the PATCH once it lands (documented assumption, not
+  independently re-verified against a live backend this pass).
+- **`EditRequestService.js` (new)** — thin wrapper: `beginEdit`/`save`/
+  `cancel`. No draft context, no `IsActiveEntity`, no Edit/Activate/Discard
+  actions anywhere (grep clean).
+- **Details section — DONE**: Order Reason (`SDDocumentReason`, real field
+  with a genuine fixed VH) wired as a `ComboBox`; ExIS ID
+  (`PurchaseOrderByCustomer`, real field) wired as an `Input`. Both two-way
+  bound with `$$updateGroupId: 'vrEdit'`, shown only while
+  `sectionFlags>/details/editing` is true (existing `Text` display stays for
+  the non-editing state).
+- **Items section — DONE**: table's `_Item` binding gets
+  `$$updateGroupId: 'vrEdit'`; Quantity (`RequestedQuantity`, real field)
+  wired as an `Input` alongside the existing `ObjectNumber` display; Add Item
+  button (`onItemsAddRow`, `oBinding.create(...)`) creates a transient row
+  with NDC (`Product`) + Quantity only (unit fixed via the existing
+  `ServiceSchema.createPayloadUom`, same precedent as CRUD Task 1); NDC input
+  shown only for that transient/not-yet-numbered row (`!${SalesOrderItem}`),
+  existing (numbered) rows' NDC stays read-only (late numbering).
+- **Priority — NOT wired, deviates from the work order's expectation.**
+  Re-confirmed (again) there is no header-level Priority field at all on this
+  service (item-level `DeliveryPriority` only) — nothing to make editable
+  without inventing a field. Stays the existing em-dash placeholder.
+- **Category — NOT wired, deliberate deviation.** `headerProperties.category`
+  is a `SalesOrderType` display alias, not a real distinct field; wiring it as
+  editable would silently PATCH `SalesOrderType` under a misleading label.
+  Stays the existing em-dash placeholder.
+- **Description — confirmed still not writable**, as expected; added an
+  explanatory tooltip (`editDescriptionUnavailable`) rather than leaving it
+  silently non-interactive.
+- **Item "Intention" — NOT wired, deviates from the work order.** No backing
+  field exists anywhere in the bound `$metadata` (same BLOCKED-BY-SERVICE
+  status as Fund Type/PO Reference/Brand, pre-dating this task). Add Item
+  therefore cannot set it; `TS_B2-2_NDCVH.docx`'s NDC-default logic was not
+  implemented as a result (binary `.docx`, not parsed this pass, and moot
+  regardless since the target field doesn't exist).
+- **412 (ETag conflict) handling — DONE, built fresh.** No pre-existing
+  reload-dialog code was found anywhere (`UI5_AGENT_PLAYBOOK.md` §3.5 was a
+  documented pattern, not shipped code) — built
+  `Detail.controller.js#_showConflictDialog` (`MessageBox.warning` +
+  `oContext.refresh()` on close) following that pattern.
+  `EditRequestService._isConflictError`/`_hasConflictMessage`'s exact
+  `Message#getTechnicalDetails()` shape is `TODO-VERIFY` — not yet exercised
+  against a real 412 response.
+- **"Message-to-panel auto-expand" — did not actually exist before this
+  task**, despite being referenced as if it were a shipped Phase 2
+  deliverable in `UI5_AGENT_PLAYBOOK.md`/this work order (repo-wide grep
+  found nothing). Built the minimal `SectionFactory.prototype.expandSection(sSectionId)`
+  this task needs (expand + ensure content loaded); a general
+  message-target-path → section resolver for arbitrary collapsed panels was
+  judged out of scope for a 2-section task and is **not** built — flagged for
+  whoever adds the next `editLive` section.
+- **TODO-VERIFY at runtime** (per Onboarding guardrail #7): the entire edit
+  flow (ComboBox VH binding, `$$updateGroupId` deferred-batch behavior,
+  `submitBatch`/`resetChanges`/`hasPendingChanges` semantics, and the 412
+  detection path above) has **not** been exercised against a live backend in
+  this pass — this is a code-only implementation; live verification per the
+  work order's Definition of Done is still outstanding.
+
+### Deferred / explicitly out of scope for this task
+
+- Edit for Inventory/Shipping/Billing/Payment Method sections (marked
+  `editable: true` in `SectionConfig.js` but **not** `editLive`) — remain the
+  Section C "later phase" placeholder (`sectionEdit` button, disabled,
+  `editAvailableLaterPhase` tooltip). Not touched by this task.
+- Row delete / "cancel a specific new row" command for the Items table — the
+  row-action menu's Delete entry stays disabled (`enabled="false"`, unchanged
+  from Section F); a newly-added transient row can currently only be
+  abandoned via the section-level Cancel (`resetChanges("vrEdit")`), which
+  reverts *all* pending changes in the section, not just that one row. No
+  per-row discard was built.
+- Partner (Contact/Employee Responsible) edit — ruling still pending, see
+  `OPEN_QUESTIONS.md` item 12.2.
+- Category/Priority functional ruling — see `OPEN_QUESTIONS.md` items 12.3/12.4.
+
+
+## Section M — CRUD Task 2 follow-up: Shipping, Org Data, Billing wired editable (2026-08-21)
+
+Extended Change Mode to three more sections at the user's request, reusing
+the Section L mechanics unchanged (`editLive` flag, generic Edit/Save/Cancel
+wiring, `vrEdit` deferred group inherited from the header context — no new
+service module, no `SectionFactory`/`EditRequestService` changes needed).
+
+- **Shipping — DONE.** `ShippingCondition` (real fixed-values VH, no
+  Immutable/Computed annotation) wired as a `ComboBox`. Delivery
+  Status/Delivery Block Status re-confirmed `Core.Computed` (server-derived) —
+  correctly stay read-only, untouched.
+- **Org Data — DONE, partial (reverted after live testing).** `SalesOffice`/
+  `SalesGroup` wired (both real, no Immutable/Computed); section flipped from
+  `editable: false` to `editable: true, editLive: true` in `SectionConfig.js`.
+  `SalesOrganization`/`DistributionChannel`/`OrganizationDivision` were briefly
+  wired editable per explicit user request, then **reverted to read-only the
+  same day**: live testing failed with `"Read-only fields must not be
+  changed"` for all three, confirming the flagged risk — their
+  `Common.FieldControl` dynamically resolves read-only for an existing sales
+  order even without a static Immutable/Computed annotation. See
+  `OPEN_QUESTIONS.md` item 13 (resolved) and `NOTES.md`. Service Org
+  Unit/Service Organization remain the pre-existing
+  BLOCKED-BY-SERVICE placeholders (no matching field exists at all).
+- **Billing — DONE (partial), one field is a hard technical block, not a
+  judgment call.** `CustomerPaymentTerms` (real, `Common.FieldControl`, no
+  Computed) wired as a `ComboBox`. Billing Status/Billing Block Status
+  re-confirmed `Core.Computed` — stay read-only, no circumstance under which
+  they could be made writable. **Payer/Bill-To Party
+  (`_SoldToPartyContactInfo`) were evaluated for the "all fields editable"
+  request and confirmed NOT wirable**: the `StandardPartnerContactInfo`
+  EntitySet is explicitly annotated `SAP__capabilities.UpdateRestrictions.Updatable = false`
+  in `$metadata` (a read-only convenience projection). The real write path is
+  a separate `_Partner` collection (`HeaderPartnerType`) plus a bound
+  `CreatePartner` action, which nothing in the app currently reads/writes —
+  scoped as a distinct follow-up task, not attempted here. See
+  `OPEN_QUESTIONS.md` item 14.
+- **Full-context-reload list extended** — `Detail.controller.js#_aSectionsNeedingFullReload`
+  now includes `"shipping"`, `"orgData"`, `"billing"` alongside `"details"`,
+  since all three sections' newly-editable fields are code/text nav pairs
+  subject to the same `requestSideEffects` "Key predicate ... changed" error
+  found and fixed for Order Reason (see `NOTES.md`).
+- **Display text upgrade (minor, bundled with the above):** Shipping's
+  Shipping Condition and Billing's Payment Terms display `Text` switched from
+  the raw code to the expanded VH text (`_ShippingCondition/ShippingCondition_Text`,
+  `_CustomerPaymentTerms/CustomerPaymentTerms_Text`), matching the Order
+  Reason display convention, since both fields now have a real VH with a
+  proper description.
+- **TODO-VERIFY at runtime**: same caveat as Section L — this pass is
+  code-only; the new ComboBoxes' VH bindings and the full-reload-on-save path
+  for these three sections have not been exercised against a live backend.
+
+
+## Section N — CRUD Task 1 v3: In-Place Create (2026-08-22)
+
+Supersedes Section K entirely, per `design/prompts/CRUD Task 1 Prompt v3.md`
+and `design/Architecture change.md`. Full design rationale is in `NOTES.md`
+("CRUD Task 1 v3" entry); this is the audit-trail summary.
+
+- **Create dialog removed — DONE.** `controller/CreateRequestDialog.js`,
+  `view/fragments/CreateRequestDialog.fragment.xml`, `service/CreateRequestService.js`
+  deleted. `Master.controller.js#onCreateRequest` now navigates to a new
+  `"create"` route (same view/controller/target as `"detail"`,
+  `manifest.json`).
+- **Standard CRUD spine — DONE.** New `service/CreateOrderService.js`: a
+  transient list-binding context in a new deferred update group `vrCreate`
+  (`manifest.json` groupProperties + `ServiceSchema.createUpdateGroup`), one
+  `submitBatch("vrCreate")` on Save. No custom action, no payload contract —
+  `ServiceSchema`'s old `orderCreateAction`/`createPayloadFields` constants
+  (Section K) removed as dead code.
+- **All relevant sections simultaneously editable — DONE.** `sectionFlags`
+  gained a `/createMode` boolean; the four existing `editLive` sections
+  (Details/Items/Shipping/Org Data) get their `/{id}/editing` flag forced
+  `true` for createMode's duration — their existing Change-Mode Input/
+  ComboBox toggles (Section L/M) show with zero fragment changes.
+  `SectionFactory.js` suppresses per-section Edit/Save/Cancel while createMode
+  is on; a new global Save/Cancel pair lives on the DynamicPage title
+  (`Detail.view.xml`, visible only in createMode).
+- **Section visibility — DONE.** `SectionConfig.js` gained a `createVisible`
+  flag; sections without it are hidden entirely in createMode
+  (`SectionFactory.js` panel `visible` binding + matching anchor-strip
+  `Link` visibility). Two new sections added — `partiesInvolved`,
+  `attachments` — both always-read-only placeholders (no per-partner write
+  entity / no attachment entity exists in this service at all).
+- **Items table update-group rebind — DONE, the main technical solve.**
+  `Items.fragment.xml`'s static `$$updateGroupId: 'vrEdit'` binding parameter
+  removed (a nested list binding's group can't be an XML expression that
+  switches between the change-mode group and the create-mode group).
+  `Detail.controller.js#_rebindItemsGroup` rebinds it programmatically (reusing
+  the XML-declared template via `getBindingInfo("items")`) the first time the
+  Items panel's content loads, via a new `SectionFactory.js` content-loaded
+  callback hook fired regardless of user-expand vs. forced createMode-expand.
+- **Org Data createMode fields — DONE.** New ComboBoxes for
+  `SalesOrganization`/`DistributionChannel`/`OrganizationDivision`, visible
+  only when `/createMode` is true (independent of `/orgData/editing` — these
+  three are creatable-only, per Section M's finding that the backend rejects
+  PATCH on them for an existing order). Entity sets + `_Text` property names
+  confirmed in `design/so.xml`.
+- **Provider (`SoldToParty`) — DONE.** New required `Input` in
+  `Details.fragment.xml`, visible only in createMode (no VH — same
+  disproportionate-scope judgment as Section K).
+- **IoH — PARTIAL, stubbed by design (user-approved "build spine now, stub
+  the rest").** `Inventory.fragment.xml` gained a local-only editable table
+  (`ioh` JSONModel) in createMode; `CreateOrderService.js#submitIoH` is a
+  stub (`ServiceSchema.iohCreateAction` is `null`) that skips the call and
+  returns `{skipped:true}` — rows are not persisted. See
+  `OPEN_QUESTIONS.md` item 15.
+- **Enrichment action (Description/Status/Category/Contact) — PARTIAL,
+  stubbed by design, same approval.** `CreateOrderService.js#enrich` is a
+  stub (`ServiceSchema.enrichmentAction` is `null`); the affected fields stay
+  read-only in createMode too (`createEnrichmentUnavailable` tooltip). See
+  `OPEN_QUESTIONS.md` item 15.
+- **Partial-failure semantics — DONE.** Step ① (`submitBatch`) failing keeps
+  the user in createMode with messages
+  (`Detail.controller.js#onCreateSavePress`). Step ②/③ failing (only
+  reachable once the stubs above are replaced with real calls) exits into the
+  normal saved-order view with a message — no compensating deletes.
+- **Master list refresh — DONE.** `EventBus` channel `"app"`/`"orderCreated"`
+  (deliberately distinct from the `"vrCreate"` update-group literal, kept
+  confined to `CreateOrderService.js`/`ServiceSchema.js`/`manifest.json` per
+  grep isolation) — `Master.controller.js` subscribes and refreshes
+  `requestsTable`'s `rows` binding.
+- **`Enums.js` — left in place, now mostly dead code.** `PRIORITY`/
+  `ORDER_REASON`/`CATEGORY`/`INTENTION` arrays are unused (Order Reason
+  already uses a real VH; the other three remain hard BLOCKED-BY-SERVICE
+  regardless of createMode) — not deleted, harmless, only `MIN_ITEMS` is
+  still referenced (`CreateOrderService.js#hasMinItems`).
+- **TODO-VERIFY at runtime**: this pass is code-only (no dev-system access in
+  this environment) — the transient-context deep-create batch, the Items
+  table group-rebind, and the Org Data createMode ComboBoxes have not been
+  exercised against a live backend.
+
+
 ## Custom simplifications summary (vs. originally suggested SAPUI5 features)
 
 | Area | Suggested | Implemented instead | Why |

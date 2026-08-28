@@ -14,7 +14,29 @@ sap.ui.define([], function () {
       status: "OverallSDProcessStatus",
       salesOrderType: "SalesOrderType",
       deliveryBlockReason: "DeliveryBlockReason",
-      deliveryPriority: "DeliveryPriority"
+      deliveryPriority: "DeliveryPriority",
+      // CRUD Task 2 (Change Mode): SDDocumentReason has a real fixed-values VH
+      // (ValueListReferences -> c_slsdocallowedorderreasonvh) confirmed in
+      // design/so.xml/localService/metadata.xml, no Immutable/Computed annotation.
+      orderReason: "SDDocumentReason",
+      // CRUD Task 1 v4: Provider/Ship-To Value Help queried directly against this
+      // top-level entity set (one row per order's ship-to snapshot, keyed by
+      // SalesOrder - see HeaderShipToPartyType in metadata.xml), not via the
+      // per-order _ShipToParty navigation.
+      shipToParty: "HeaderShipToParty",
+      // CRUD Task 1 v4: Contact Value Help queried directly against this
+      // top-level entity set (one row per sales document's standard-contact
+      // snapshot, keyed by SalesDocument - see StandardPartnerContactInfoType
+      // in metadata.xml), not via the per-order _SoldToPartyContactInfo
+      // navigation. Also used to best-effort prefill the Contact field from the
+      // selected Provider's most recent order (no dedicated "main contact"
+      // master-data entity is exposed by this service).
+      contactInfo: "StandardPartnerContactInfo",
+      // CRUD Task 1 v5: NDC Code Value Help queried directly against this
+      // top-level entity set (ProductType, part of this same service - see
+      // so.xml) rather than the dedicated c_slsordprodbyslsorgdistrchnl F4
+      // service referenced by the Product property's ValueListReferences.
+      product: "Product"
     },
 
     navigation: {
@@ -100,6 +122,7 @@ sap.ui.define([], function () {
       phone: "InternationalPhoneNumber",
       mobilePhone: "InternationalMobilePhoneNumber",
       address: "FormattedPostalAddressDesc",
+      soldToParty: "SoldToParty",
       payerParty: "PayerParty",
       billToParty: "BillToParty",
       responsibleEmployee: "ResponsibleEmployee",
@@ -110,7 +133,8 @@ sap.ui.define([], function () {
     // direct "Partner" property on SalesOrderManageType itself.
     shipToPartyProperties: {
       id: "Partner",
-      fullName: "FullName"
+      fullName: "FullName",
+      address: "FormattedPostalAddressDesc"
     },
 
     // _PaymentMethodVH navigates to PaymentMethodType (BillingCompanyCode +
@@ -125,6 +149,15 @@ sap.ui.define([], function () {
     // _CreatedByUser / _LastChangedByUser navigate to UserType (UserID, UserDescription).
     createdByUserProperties: {
       name: "UserDescription"
+    },
+
+    // ProductType (this same service's own top-level Product EntitySet) - used
+    // for the NDC Code Value Help; ProductType has no base-UOM property, so
+    // RequestedQuantityUnit cannot be derived from the selected Product here
+    // (BLOCKED-BY-SERVICE, see itemsColumns>/uom usage in Items.fragment.xml).
+    productProperties: {
+      id: "Product",
+      text: "Product_Text"
     },
 
     itemProperties: {
@@ -143,7 +176,11 @@ sap.ui.define([], function () {
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
       fundType: null,
-      orderIntention: null,
+      // MVGR1 - real field (MaterialGroup1), but no ValueListReferences/fixed
+      // values exposed for it in this service; Order Intention Select values
+      // are a temporary hardcoded set (Adult/Pediatric/Adult+Pediatric) until
+      // a real value list is confirmed.
+      orderIntention: "MaterialGroup1",
       // No distinct "PO Reference" field at item level beyond PurchaseOrderByCustomer
       // (already used for ExIS ID) — BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md.
       poReference: null,
@@ -165,33 +202,92 @@ sap.ui.define([], function () {
       "ZKB"
     ],
 
-    // --- CRUD Task 1 (Create New Provider Order) — see design/NEwVaccReq.md ---
-    // TODO-VERIFY: no custom OrderCreate action exists in the current $metadata
-    // (confirmed 2026-08-19: only standard C_SALESORDERMANAGE_SD actions such as
-    // CreateWithSalesOrderType/CreateWithRefFromSlsQuotation are present — see
-    // NOTES.md "CRUD Task 1" entry, PAYLOAD_CONTRACT.md). This name is a
-    // placeholder for when the backend action ships; CreateRequestService.js
-    // falls back to a mock resolve until it's confirmed and corrected here.
-    orderCreateAction: "OrderCreate",
-
-    // Payload field names for the OrderCreate request contract (see
-    // PAYLOAD_CONTRACT.md) — kept here, not literal in CreateRequestService.js/
-    // CreateRequestDialog.js, so a contract change is a one-file edit and the
-    // grep isolation check stays meaningful.
-    createPayloadFields: {
-      provider: "provider",
-      description: "description",
-      contactId: "contactId",
-      priority: "priority",
-      orderReason: "orderReason",
-      category: "category",
-      exisId: "exisId",
-      itemNdc: "ndc",
-      itemQuantity: "quantity",
-      itemUom: "uom",
-      itemIntention: "intention"
-    },
+    // --- CRUD Task 1 v4 (Action-Based Create) — supersedes v3's "standard
+    // CRUD create" spine. Live testing (405 "Creating operations are
+    // disabled for entity ... SalesOrderManage") plus a static metadata fact
+    // confirmed the root cause: design/so.xml, Annotations
+    // Target="SAP__self.Container/SalesOrderManage", carries an
+    // unconditional `SAP__capabilities.InsertRestrictions.Insertable=false`
+    // — a raw POST/deep-insert against SalesOrderManage is permanently
+    // disabled by this service's design, not a config toggle. The sanctioned
+    // creation mechanism is the bound action below (also flagged via a
+    // Session.NewAction annotation pointing at it in the same metadata) — see
+    // NOTES.md and CreateOrderService.js for the full replay-based design
+    // this drives (the "vrCreate" transient context below is kept as a local
+    // scratchpad only; its own batch is never submitted). ---
+    createUpdateGroup: "vrCreate",
     createPayloadUom: "EA",
+
+    // Bound action CreateWithSalesOrderType (design/so.xml, EntitySetPath="_it",
+    // IsBound="true") — the only way this service allows a new SalesOrderManage
+    // row to come into existence. Invoked via the /SalesOrderManage list
+    // binding's header context (oListBinding.getHeaderContext()), per the
+    // standard OData V4 client pattern for actions bound to a collection.
+    createAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.CreateWithSalesOrderType",
+
+    // This entity set is SAP__session.StickySessionSupported (design/so.xml
+    // ~line 9983: NewAction=CreateWithSalesOrderType, EditAction=PrepareForEdit,
+    // SaveAction=SaveChanges, DiscardAction=DiscardChanges) - confirmed live
+    // 2026-08-27: CreateWithSalesOrderType's own response has SalesOrder=""
+    // (late numbering - the doc is only buffered in the sticky session, not
+    // yet persisted/numbered). The real key is assigned only once SaveChanges
+    // is called (CreateOrderService.js#save calls it immediately after the
+    // create action, before doing any header PATCH/item create).
+    saveAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.SaveChanges",
+
+    // Action parameter names, paired with the scratch-context header property
+    // each one is sourced from (CreateOrderService.js#save) — not always the
+    // same name: the action's own parameter is "SoldToPartyForCreate", but the
+    // scratch context (and every other header read/write in this app) calls
+    // that field "SoldToParty" (headerProperties.providerId). All five are
+    // Nullable="false" in design/so.xml, so all must be sent.
+    createActionParameters: [
+      { actionParam: "SalesOrderType", scratchProperty: "SalesOrderType" },
+      { actionParam: "SalesOrganization", scratchProperty: "SalesOrganization" },
+      { actionParam: "DistributionChannel", scratchProperty: "DistributionChannel" },
+      { actionParam: "OrganizationDivision", scratchProperty: "OrganizationDivision" },
+      { actionParam: "SoldToPartyForCreate", scratchProperty: "SoldToParty" }
+    ],
+
+    // Header properties a createMode fragment can set directly on the scratch
+    // transient context that the create action itself does NOT accept as a
+    // parameter — replayed as a PATCH onto the new real context right after
+    // creation (CreateOrderService.js#_replayHeaderAndItems). Every one of
+    // these is already confirmed PATCHable on an existing order by the normal
+    // Change Mode edit flow (EditRequestService.js/CRUD Task 2), so replaying
+    // them here reuses an already-working PATCH path.
+    createReplayHeaderProperties: [
+      "PurchaseOrderByCustomer",
+      "SalesOffice",
+      "SalesGroup",
+      "ShippingCondition",
+      "SDDocumentReason"
+    ],
+
+    // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
+    // definition extension action on the standard BO, name/params TBD once
+    // activated on-system) and step ③ IoH deep-create/createFromProposal
+    // (design/prompts/e008_ext_build.md — ZUI_VR_EXT companion service, not yet
+    // built/activated anywhere). Both are null = confirmed BLOCKED-BY-SERVICE,
+    // never invented — CreateOrderService.js degrades per the v3 prompt's own
+    // Step-0 rule (skip the call; affected fields stay read-only in createMode).
+    enrichmentAction: null,
+    iohCreateAction: null,
+
+    // Org Data fields confirmed creatable-only (writable at document creation,
+    // rejected by the backend on an existing order — see updatableHeaderProperties
+    // comment below/NOTES.md "CRUD Task 2 follow-up"). Real fixed-values VH
+    // entity sets confirmed in design/so.xml (SalesOrganizationType/
+    // DistributionChannelType/OrganizationDivisionType) — used only for the
+    // createMode-only ComboBoxes in OrgData.fragment.xml.
+    createOnlyOrgProperties: {
+      salesOrganizationCode: "SalesOrganization",
+      salesOrganizationText: "SalesOrganization_Text",
+      distributionChannelCode: "DistributionChannel",
+      distributionChannelText: "DistributionChannel_Text",
+      divisionCode: "Division",
+      divisionText: "Division_Text"
+    },
 
     statusProperties: {
       code: "OverallSDProcessStatus",
@@ -208,8 +304,63 @@ sap.ui.define([], function () {
       deliveryPriorityCode: "DeliveryPriority",
       deliveryPriorityText: "DeliveryPriority_Text",
       salesOrderTypeCode: "SalesOrderType",
-      salesOrderTypeText: "SalesOrderType_Text"
+      salesOrderTypeText: "SalesOrderType_Text",
+      orderReasonCode: "SDDocumentReason",
+      orderReasonText: "SDDocumentReason_Text",
+      // CRUD Task 2 follow-up (Shipping/Billing/Org Data) - all confirmed no
+      // Core.Immutable/Computed annotation in metadata.xml, each with a real
+      // fixed-values VH entity set (ShippingCondition, CustomerPaymentTerms,
+      // SalesOffice, SalesGroup all exist as top-level EntitySets).
+      shippingConditionCode: "ShippingCondition",
+      shippingConditionText: "ShippingCondition_Text",
+      paymentTermsCode: "CustomerPaymentTerms",
+      paymentTermsText: "CustomerPaymentTerms_Text",
+      salesOfficeCode: "SalesOffice",
+      salesOfficeText: "SalesOffice_Text",
+      salesGroupCode: "SalesGroup",
+      salesGroupText: "SalesGroup_Text"
     },
+
+    // --- CRUD Task 2 (Change Mode) — see design/Work Order 2 - CRUD Task 2 -
+    // Change Mode.md (v2). R_SalesOrderTP BDEF verified unmanaged/no-draft/late-
+    // numbering/lock-master/etag-master-LastChangeTime; confirmed independently
+    // against this bound service too (Core.OptimisticConcurrency on
+    // LastChangeDateTime, no IsActiveEntity key — see PHASE2_AUDIT.md P1).
+    // Edit is a plain PATCH/ETag flow, no draft actions/DraftAdministrativeData —
+    // if a draftActions block ever reappears here, delete it, it's wrong.
+    //
+    // Step-0 finding (deviates from the work order's assumption): Priority has
+    // NO header-level field at all (item-level only, see headerProperties.priority
+    // above) and Category has no real dedicated field (aliased to SalesOrderType
+    // for display only) — neither is wired as editable here. Wiring "Category" as
+    // editable would silently PATCH SalesOrderType on a live SD order. Only
+    // Order Reason and ExIS ID/Customer Reference are confirmed real, editable
+    // header fields (no Core.Immutable/Computed annotation in the metadata).
+    updatableHeaderProperties: {
+      orderReason: "SDDocumentReason",
+      exisId: "PurchaseOrderByCustomer",
+      // Shipping/Billing/Org Data follow-up (2026-08-21) - confirmed no
+      // Core.Immutable/Computed annotation.
+      shippingCondition: "ShippingCondition",
+      paymentTerms: "CustomerPaymentTerms",
+      salesOffice: "SalesOffice",
+      salesGroup: "SalesGroup"
+      // SalesOrganization/DistributionChannel/OrganizationDivision were tried
+      // here 2026-08-21 and reverted same day: backend rejects the PATCH with
+      // "Read-only fields must not be changed" on an existing order, despite
+      // no static Immutable/Computed annotation (dynamic FieldControl). See
+      // NOTES.md.
+    },
+
+    // Item Quantity is the only Step-0-confirmed editable item property
+    // (SAP__common.FieldControl-governed, no Immutable/Computed annotation).
+    updatableItemProperties: {
+      quantity: "RequestedQuantity"
+    },
+
+    // Update group for all edit-session PATCHes/creates (EditRequestService.js
+    // + Details.fragment.xml/Items.fragment.xml $$updateGroupId bindings).
+    editUpdateGroup: "vrEdit",
 
     showJurisdictionFilter: true,
     statusSource: "e008", // "standard" for temporary service, "e008" for swap-back

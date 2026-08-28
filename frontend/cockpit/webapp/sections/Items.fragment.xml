@@ -1,8 +1,16 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <Table id="itemsTable" items="{path: '_Item'}" growing="true" growingThreshold="20">
+  <!-- CRUD Task 1 v3 (In-Place Create): the update group for this nested
+       "_Item" navigation must match the header context's own group (edit
+       session vs. transient create), which XML binding parameters can't
+       express conditionally - no $$updateGroupId is declared here at all;
+       Detail.controller.js#_rebindItemsGroup rebinds it (with the right
+       literal group id) the first time this fragment's content loads, for
+       both the "detail" and "create" routes. -->
+  <Table id="itemsTable" items="{_Item}" growing="true" growingThreshold="20">
     <headerToolbar>
       <OverflowToolbar>
         <ToolbarSpacer />
+        <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}" press=".onItemsAddRow" />
         <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
         <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
       </OverflowToolbar>
@@ -36,15 +44,24 @@
               </Menu>
             </menu>
           </MenuButton>
-          <Text text="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}" />
+          <CheckBox selected="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}" />
           <Text text="{SalesOrderItem}" visible="{itemsColumns>/itemNumber}" />
-          <Text text="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}" />
+          <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}" />
           <Text text="{= '\u2014'}" visible="{itemsColumns>/brand}" />
-          <Text text="{Product}" visible="{itemsColumns>/ndcCode}" />
+          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. -->
+          <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !${SalesOrderItem} &amp;&amp; !${Product} }"
+            showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
           <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
-          <ObjectNumber number="{RequestedQuantity}" visible="{itemsColumns>/qty}" />
+          <Input value="{RequestedQuantity}" visible="{itemsColumns>/qty}"
+            editable="{sectionFlags>/items/editing}" type="Number" textAlign="End" />
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
-          <Text text="{= '\u2014'}" visible="{itemsColumns>/orderIntention}" />
+          <!-- MVGR1 - no fixed-values VH exposed by this service; temporary hardcoded options, mapping TBD. -->
+          <Select selectedKey="{MaterialGroup1}" visible="{itemsColumns>/orderIntention}">
+            <core:Item key="Adult" text="Adult" />
+            <core:Item key="Pediatric" text="Pediatric" />
+            <core:Item key="AdultPediatric" text="Adult, Pediatric" />
+          </Select>
           <Text text="{= '\u2014'}" visible="{itemsColumns>/fundType}" />
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />

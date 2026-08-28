@@ -1,3 +1,41 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <MessageStrip text="{i18n>inventoryPendingStandardService}" type="Information" showIcon="true" />
+  <!-- CRUD Task 1 v3 (In-Place Create, design/prompts/CRUD Task 1 Prompt v3.md,
+       ADDENDUM-001): IoH is a decoupled activity (CR-002) - the backend BO/
+       companion service (design/prompts/e008_ext_build.md, ZUI_VR_EXT) is not
+       activated on-system yet, so this is a local-only editable table (ioh
+       model, JSONModel {rows:[]}) that CreateOrderService.js#submitIoH skips
+       (BLOCKED-BY-SERVICE, {skipped:true}) on Save today. Not shown outside
+       createMode - the existing MessageStrip covers every other case. -->
+  <VBox visible="{sectionFlags>/createMode}">
+    <items>
+      <MessageStrip text="{i18n>inventoryCreateNote}" type="Information" showIcon="true" class="sapUiTinyMarginBottom" />
+      <Table id="iohTable" items="{ioh>/rows}" noDataText="{i18n>inventoryNoRows}">
+        <headerToolbar>
+          <OverflowToolbar>
+            <ToolbarSpacer />
+            <Button text="{i18n>iohAddRow}" icon="sap-icon://add" press=".onIohAddRow" />
+          </OverflowToolbar>
+        </headerToolbar>
+        <columns>
+          <Column><Text text="{i18n>iohNdc}" /></Column>
+          <Column><Text text="{i18n>iohLot}" /></Column>
+          <Column><Text text="{i18n>iohQty}" /></Column>
+          <Column><Text text="{i18n>iohExpiration}" /></Column>
+          <Column width="3rem" />
+        </columns>
+        <items>
+          <ColumnListItem>
+            <cells>
+              <Input value="{ioh>ndc}" />
+              <Input value="{ioh>lot}" />
+              <Input value="{ioh>quantity}" type="Number" />
+              <DatePicker value="{ioh>expirationDate}" />
+              <Button icon="sap-icon://delete" type="Transparent" press=".onIohDeleteRow" tooltip="{i18n>iohDeleteRow}" />
+            </cells>
+          </ColumnListItem>
+        </items>
+      </Table>
+    </items>
+  </VBox>
+  <MessageStrip text="{i18n>inventoryPendingStandardService}" type="Information" showIcon="true" visible="{= !${sectionFlags>/createMode} }" />
 </core:FragmentDefinition>

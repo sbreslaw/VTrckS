@@ -9,10 +9,16 @@ sap.ui.define([
 ], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast) {
   "use strict";
 
-  function SectionFactory(oView, aMeta) {
+  function SectionFactory(oView, aMeta, fnOnContentLoaded) {
     this._oView = oView;
     this._aMeta = aMeta || [];
     this._mLoaded = {};
+    // CRUD Task 1 v3 (In-Place Create): notified with (sSectionId, oPanel) once
+    // a section's fragment content finishes loading — lets Detail.controller.js
+    // react to a section becoming available (e.g. rebind the Items table to the
+    // right update group) regardless of whether it loaded via user expand or a
+    // forced createMode expand.
+    this._fnOnContentLoaded = fnOnContentLoaded;
   }
 
   SectionFactory.prototype.ensurePanels = function () {
@@ -22,23 +28,58 @@ sap.ui.define([
     }
 
     var oBundle = this._oView.getModel("i18n").getResourceBundle();
+    var oController = this._oView.getController();
     this._aMeta.forEach(function (oMeta, iIndex) {
       var aToolbarContent = [
-        new Title({ text: oBundle.getText(oMeta.titleKey), level: "H4" }),
+        new Title(this._oView.createId(oMeta.id + "-title"), { text: oBundle.getText(oMeta.titleKey), level: "H4" }),
         new ToolbarSpacer()
       ];
 
       // Non-editable sections (histories, totals, designed-empty placeholders)
       // get no Edit button at all (Phase 2 Prompt v2, item D).
       if (oMeta.editable) {
-        aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
-          text: oBundle.getText("sectionEdit"),
-          visible: "{sectionFlags>/" + oMeta.id + "/editVisible}",
-          enabled: "{sectionFlags>/" + oMeta.id + "/editEnabled}",
-          press: function () {
-            MessageToast.show(oBundle.getText("editAvailableLaterPhase"));
-          }
-        }));
+        if (oMeta.editLive) {
+          // CRUD Task 2 (Change Mode): a real per-section edit session. Edit
+          // hides itself once the session starts; Save/Cancel take its place.
+          // CRUD Task 1 v3: none of these three show at all in createMode —
+          // that mode uses the DynamicPage-title Save/Cancel instead (Detail.view.xml).
+          aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
+            text: oBundle.getText("sectionEdit"),
+            visible: {
+              parts: ["sectionFlags>/" + oMeta.id + "/editVisible", "sectionFlags>/" + oMeta.id + "/editing", "sectionFlags>/createMode"],
+              formatter: function (bVisible, bEditing, bCreateMode) { return !!bVisible && !bEditing && !bCreateMode; }
+            },
+            enabled: "{sectionFlags>/" + oMeta.id + "/editEnabled}",
+            press: function () { oController.onSectionEditPress(oMeta.id); }
+          }));
+          aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-saveBtn"), {
+            text: oBundle.getText("actionSave"),
+            type: "Emphasized",
+            visible: {
+              parts: ["sectionFlags>/" + oMeta.id + "/editing", "sectionFlags>/createMode"],
+              formatter: function (bEditing, bCreateMode) { return !!bEditing && !bCreateMode; }
+            },
+            press: function () { oController.onSectionSavePress(oMeta.id); }
+          }));
+          aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-cancelBtn"), {
+            text: oBundle.getText("actionCancel"),
+            visible: {
+              parts: ["sectionFlags>/" + oMeta.id + "/editing", "sectionFlags>/createMode"],
+              formatter: function (bEditing, bCreateMode) { return !!bEditing && !bCreateMode; }
+            },
+            press: function () { oController.onSectionCancelPress(oMeta.id); }
+          }));
+        } else {
+          aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
+            text: oBundle.getText("sectionEdit"),
+            visible: "{sectionFlags>/" + oMeta.id + "/editVisible}",
+            enabled: "{sectionFlags>/" + oMeta.id + "/editEnabled}",
+            tooltip: oBundle.getText("editAvailableLaterPhase"),
+            press: function () {
+              MessageToast.show(oBundle.getText("editAvailableLaterPhase"));
+            }
+          }));
+        }
       }
 
       var oToolbar = new OverflowToolbar({ content: aToolbarContent });
@@ -47,6 +88,13 @@ sap.ui.define([
         headerToolbar: oToolbar,
         expandable: true,
         expanded: iIndex === 0 || !!oMeta.expanded,
+        // CRUD Task 1 v3: sections not flagged createVisible in SectionConfig.js
+        // are hidden entirely while createMode is on (design/prompts/CRUD Task 1
+        // Prompt v3.md "All other sections: hidden ... per SectionConfig flag").
+        visible: {
+          path: "sectionFlags>/createMode",
+          formatter: function (bCreateMode) { return !bCreateMode || !!oMeta.createVisible; }
+        },
         expand: this._oView.getController().onExpandPanel.bind(this._oView.getController())
       });
 
@@ -75,12 +123,21 @@ sap.ui.define([
       return;
     }
 
+    var that = this;
     Fragment.load({
       id: sId,
       name: sFragment,
       controller: this._oView.getController()
     }).then(function (oContent) {
-      oPanel.addContent(oContent);
+      // Fragments with more than one root control (e.g. a form plus a sibling
+      // MessageStrip) resolve with an array - addContent only accepts one
+      // control at a time.
+      (Array.isArray(oContent) ? oContent : [oContent]).forEach(function (oControl) {
+        oPanel.addContent(oControl);
+      });
+      if (that._fnOnContentLoaded) {
+        that._fnOnContentLoaded(that._oView.getLocalId(sId) || sId, oPanel);
+      }
     });
   };
 
@@ -94,6 +151,19 @@ sap.ui.define([
         this.ensurePanelContent(oPanel);
       }
     }, this);
+  };
+
+  // CRUD Task 2 (Change Mode): keep a section's panel expanded and its content
+  // loaded \u2014 used after a failed Save so a panel-anchored message stays visible.
+  // In practice the editing section is already expanded (Save only fires from
+  // within it), but this keeps the behavior explicit for future callers.
+  SectionFactory.prototype.expandSection = function (sSectionId) {
+    var oPanel = this._oView.byId(sSectionId);
+    if (!oPanel) {
+      return;
+    }
+    oPanel.setExpanded(true);
+    this.ensurePanelContent(oPanel);
   };
 
   return SectionFactory;

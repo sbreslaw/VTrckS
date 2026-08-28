@@ -103,6 +103,80 @@
     4. Confirmation of the Priority/Order Reason/Category/Intention enum
        codes used in `webapp/model/Enums.js` (Intention likely maps to
        MVGR1).
+12. **CRUD Task 2 (Change Mode) backend dependencies** — added 2026-08-19,
+    see `NOTES.md` "CRUD Task 2 v2" entry for full detail:
+    1. **UpdateDescription/OrderUpdate micro-action** — no Description/KTEXT
+       write path exists on the bound service; if/when a micro-action ships,
+       record its name here and wire it as an additional Details save step.
+    2. **Partner-change (Contact/Employee Responsible) writability ruling** —
+       still unresolved; both fields stay read-only in edit mode this task.
+    3. **Category — functional ruling needed, not just technical.** No real
+       dedicated Category field exists on this service (`headerProperties.category`
+       is a `SalesOrderType` display alias only) — confirm whether a real
+       Category field is expected on `ZUI_VACCINEREQUEST_O4`, and if so,
+       whether it should be independently editable post-creation.
+    4. **Priority — confirm the item-level-only design intent** (same open
+       point as item 3 above, restated for the edit context): if Priority is
+       genuinely item-level only, there is no header field to ever make
+       editable here; if a header-level Priority is planned for
+       `ZUI_VACCINEREQUEST_O4`, note it as a new updatable-map entry when that
+       service lands.
+    5. **Item "Intention"** — confirmed no backing field anywhere in the
+       bound `$metadata` (same BLOCKED-BY-SERVICE status as Fund Type/PO
+       Reference/Brand); Add Item cannot set it. Confirm whether
+       `ZUI_VACCINEREQUEST_O4` will expose an item-level Intention field, and
+       whether `TS_B2-2_NDCVH.docx`'s NDC-default logic should drive its
+       initial value once it does.
+13. **CRUD Task 2 follow-up (Shipping/Org Data/Billing) — Sales Area fields —
+    RESOLVED (read-only) 2026-08-21.** `SalesOrganization`, `DistributionChannel`,
+    and `OrganizationDivision` were briefly wired editable per explicit user
+    request, then reverted the same day after live testing: saving any of the
+    three fails with `"Read-only fields must not be changed"`. Confirms their
+    `Common.FieldControl` dynamically resolves to read-only for an existing
+    sales order (the sales area is normally fixed at document creation in
+    standard SD) — no static metadata annotation says this, only live
+    behavior does. Back to read-only in `OrgData.fragment.xml`/`ServiceSchema.js`;
+    no further action needed unless a future backend change makes these
+    genuinely updatable.
+14. **Billing — Payer/Bill-To Party edit is a real feature gap, not a ruling
+    question** — added 2026-08-21, discovered while implementing "Billing:
+    all fields editable". `_SoldToPartyContactInfo` (`StandardPartnerContactInfoType`)
+    is explicitly `SAP__capabilities.UpdateRestrictions.Updatable = false` in
+    `$metadata` — a read-only convenience projection, confirmed not editable
+    under any circumstance via that path. The real write path for changing a
+    Payer/Bill-To partner is the separate `_Partner` collection
+    (`HeaderPartnerType`, keyed by `PartnerFunction`, e.g. `RG` = Payer) plus
+    its bound `CreatePartner` action — nothing in the app reads or writes that
+    collection today. If Payer/Bill-To edit is actually wanted, it needs to be
+    scoped as its own task (new fragment content bound to `_Partner`, likely a
+    partner-role picker + `CreatePartner`/update call), not a ComboBox bolted
+    onto the existing Billing form. Left read-only for now.
+15. **CRUD Task 1 v3 (In-Place Create) backend dependencies — added
+    2026-08-22** — supersedes item 11 above (the v2 `OrderCreate` action design
+    is void; see `NOTES.md` "CRUD Task 1 v3"). Two real, functional gaps remain
+    once the backend ships, tracked here so they aren't lost:
+    - **Enrichment action** (Description/Status/Category/Contact after create)
+      — per ADDENDUM-001, planned as a behavior-definition extension action on
+      the standard BO. Not yet activated on any bound service. Blocks: setting
+      Description/Category/an initial non-default Status at create time.
+      `ServiceSchema.enrichmentAction` is `null` pending the real action name.
+    - **IoH deep-create** — the IoH BO/companion service `ZUI_VR_EXT`
+      (`design/prompts/e008_ext_build.md`) is a build prompt only, nothing is
+      activated on-system. `Inventory.fragment.xml`'s createMode table collects
+      rows into a local `ioh` JSONModel; `CreateOrderService.js#submitIoH` is a
+      stub that skips the call and the rows are lost on exit. Once the backend
+      ships: wire a real deep-create/`createFromProposal` call, and revisit
+      whether IoH rows should survive a partial-failure exit (currently they do
+      not — the user re-enters them in a future IoH-specific screen/section).
+    - Neither gap blocks the standard-CRUD spine itself (header + items create
+      atomically today); both degrade to "field/section stays read-only or
+      inert", not a broken Save.
+16. **Parties Involved / Attachments (new sections, CRUD Task 1 v3)** — both
+    are read-only placeholders in every mode. Parties Involved has no
+    per-partner write entity wired (see item 14 above — same `_Partner`
+    gap); Attachments has no backing entity in this service or any confirmed
+    companion service at all. Both are out of scope for this pass; flagged
+    here in case a future task wants to scope either as real functionality.
 
 ## Swap-back readiness statement (target: `ZUI_VACCINEREQUEST_O4`)
 

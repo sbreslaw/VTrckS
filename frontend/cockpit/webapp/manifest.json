@@ -64,7 +64,15 @@
                 "settings": {
                     "operationMode": "Server",
                     "autoExpandSelect": true,
-                    "groupId": "$auto"
+                    "groupId": "$auto",
+                    "groupProperties": {
+                        "vrEdit": {
+                            "submit": "API"
+                        },
+                        "vrCreate": {
+                            "submit": "API"
+                        }
+                    }
                 }
             },
             "view": {
@@ -106,6 +114,15 @@
                 {
                     "name": "detail",
                     "pattern": "detail/{orderId}",
+                    "layout": "MidColumnFullScreen",
+                    "target": [
+                        "master",
+                        "detail"
+                    ]
+                },
+                {
+                    "name": "create",
+                    "pattern": "create",
                     "layout": "MidColumnFullScreen",
                     "target": [
                         "master",

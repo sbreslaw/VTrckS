@@ -43,6 +43,12 @@ sap.ui.define([
     "2C": "None"
   };
 
+  // SalesOrderType -> display label for the Details section title (only ZKB
+  // is a supported order type in this app - see ServiceSchema.js#fixedOrderTypes).
+  var mOrderTypeLabel = {
+    ZKB: "Vaccine Order"
+  };
+
 
   // Extracted as plain functions (not object methods) so status formatting
   // works correctly regardless of how the caller invokes it: some XML fragments
@@ -161,6 +167,19 @@ sap.ui.define([
       return oValue;
     },
 
+    // CRUD Task 1 v4: defaults the Details "Created At" field to today while
+    // in createMode (CreationDate is unset on a transient context - the real
+    // backend-assigned value is shown once the order is saved).
+    detailCreatedAt: function (oValue) {
+      if (oValue instanceof Date) {
+        return oDateFormat.format(oValue);
+      }
+      if (!oValue) {
+        return oDateFormat.format(new Date());
+      }
+      return oValue;
+    },
+
     // Employee Responsible name is not exposed by this service (only the personnel
     // number via the contact-info navigation's ResponsibleEmployee field) — title is BLOCKED-BY-SERVICE.
     masterEmployeeResponsibleTitle: function () {
@@ -221,6 +240,14 @@ sap.ui.define([
 
     detailStatusState: function (sCode) {
       return fnStatusState(sCode);
+    },
+
+    // Section Panel title = "<order type label> <section text>" (e.g. "Vaccine
+    // Order Details"/"Vaccine Order Items" for ZKB), falling back to the plain
+    // i18n section text for an unmapped/not-yet-known order type.
+    orderTypeSectionTitle: function (sOrderType, sSectionText) {
+      var sLabel = mOrderTypeLabel[sOrderType];
+      return sLabel ? (sLabel + " " + sSectionText) : sSectionText;
     },
 
     detailCreatedOnBy: function (sOn, sBy, sLabel) {

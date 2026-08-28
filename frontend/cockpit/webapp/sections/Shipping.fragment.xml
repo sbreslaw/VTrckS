@@ -1,12 +1,28 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
-  <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
+  <f:SimpleForm editable="{sectionFlags>/shipping/editing}" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
     <f:content>
-      <Label text="{i18n>shipTo}" />
-      <Text text="{_ShipToParty/Partner}" />
-      <Label text="{i18n>customerReference}" />
-      <Text text="{PurchaseOrderByCustomer}" />
+      <Label text="{i18n>shippingProvider}" />
+      <Text text="{_ShipToParty/FullName}" visible="{= !${sectionFlags>/createMode} }" />
+      <!-- CRUD Task 1 v5: no plain header property to PATCH/POST for _ShipToParty
+           (see NOTES.md), so this defaults to and stays in sync with the selected
+           Provider (createEnrich>/providerName) - same VH/handler as the General
+           Data Provider field (Detail.controller.js#onProviderValueHelpRequest). -->
+      <Input
+        value="{createEnrich>/providerName}"
+        showValueHelp="true"
+        valueHelpOnly="true"
+        editable="{= !${createEnrich>/providerName} }"
+        visible="{sectionFlags>/createMode}"
+        valueHelpRequest=".onProviderValueHelpRequest"
+        tooltip="{i18n>createEnrichmentUnavailable}" />
       <Label text="{i18n>shippingCondition}" />
-      <Text text="{ShippingCondition}" />
+      <Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/shipping/editing} }" />
+      <ComboBox
+        selectedKey="{ShippingCondition}"
+        visible="{sectionFlags>/shipping/editing}"
+        items="{path: '/ShippingCondition'}">
+        <core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
+      </ComboBox>
       <Label text="{i18n>deliveryStatus}" />
       <Text text="{OverallDeliveryStatus}" />
       <Label text="{i18n>deliveryBlockStatus}" />

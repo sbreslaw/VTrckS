@@ -1,16 +1,53 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
-  <f:SimpleForm editable="false" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
+  <f:SimpleForm editable="{sectionFlags>/orgData/editing}" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
     <f:content>
       <Label text="{i18n>salesOrg}" />
-      <Text text="{SalesOrganization}" />
+      <!-- read-only outside createMode: backend rejects PATCH with "Read-only
+           fields must not be changed" on an existing order (confirmed
+           2026-08-21) - these three are creatable-only, so the ComboBox below
+           checks /createMode directly, not /orgData/editing (unlike
+           SalesOffice/SalesGroup, which stay editable in normal edit sessions
+           too). Entity sets + Text properties confirmed in design/so.xml
+           (SalesOrganizationType/DistributionChannelType/OrganizationDivisionType). -->
+      <Text text="{_SalesOrganization/SalesOrganization_Text}" visible="{= !${sectionFlags>/createMode} }" />
+      <ComboBox
+        selectedKey="{SalesOrganization}"
+        visible="{sectionFlags>/createMode}"
+        items="{path: '/SalesOrganization'}">
+        <core:Item key="{SalesOrganization}" text="{SalesOrganization_Text}" />
+      </ComboBox>
       <Label text="{i18n>distributionChannel}" />
-      <Text text="{DistributionChannel}" />
+      <Text text="{_DistributionChannel/DistributionChannel_Text}" visible="{= !${sectionFlags>/createMode} }" />
+      <ComboBox
+        selectedKey="{DistributionChannel}"
+        visible="{sectionFlags>/createMode}"
+        items="{path: '/DistributionChannel'}">
+        <core:Item key="{DistributionChannel}" text="{DistributionChannel_Text}" />
+      </ComboBox>
       <Label text="{i18n>division}" />
-      <Text text="{OrganizationDivision}" />
+      <Text text="{_OrganizationDivision/Division_Text}" visible="{= !${sectionFlags>/createMode} }" />
+      <ComboBox
+        selectedKey="{OrganizationDivision}"
+        visible="{sectionFlags>/createMode}"
+        items="{path: '/OrganizationDivision'}">
+        <core:Item key="{Division}" text="{Division_Text}" />
+      </ComboBox>
       <Label text="{i18n>salesOffice}" />
-      <Text text="{SalesOffice}" />
+      <Text text="{_SalesOffice/SalesOffice_Text}" visible="{= !${sectionFlags>/orgData/editing} }" />
+      <ComboBox
+        selectedKey="{SalesOffice}"
+        visible="{sectionFlags>/orgData/editing}"
+        items="{path: '/SalesOffice'}">
+        <core:Item key="{SalesOffice}" text="{SalesOffice_Text}" />
+      </ComboBox>
       <Label text="{i18n>salesGroup}" />
-      <Text text="{SalesGroup}" />
+      <Text text="{_SalesGroup/SalesGroup_Text}" visible="{= !${sectionFlags>/orgData/editing} }" />
+      <ComboBox
+        selectedKey="{SalesGroup}"
+        visible="{sectionFlags>/orgData/editing}"
+        items="{path: '/SalesGroup'}">
+        <core:Item key="{SalesGroup}" text="{SalesGroup_Text}" />
+      </ComboBox>
       <Label text="{i18n>serviceOrgUnit}" />
       <Text text="{= '\u2014'}" />
       <Label text="{i18n>serviceOrganization}" />

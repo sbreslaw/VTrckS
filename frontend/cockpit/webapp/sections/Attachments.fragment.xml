@@ -1,0 +1,8 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- CRUD Task 1 v3 (In-Place Create, design/prompts/CRUD Task 1 Prompt v3.md):
+       new section. No attachment/document-storage entity is exposed by this
+       service (or any confirmed companion service) - BLOCKED-BY-SERVICE in
+       every mode, not just createMode. Placeholder only, matching the
+       existing Inventory.fragment.xml pattern. -->
+  <MessageStrip text="{= ${sectionFlags>/createMode} ? ${i18n>attachmentsCreateNote} : ${i18n>attachmentsPendingStandardService} }" type="Information" showIcon="true" />
+</core:FragmentDefinition>

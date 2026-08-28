@@ -6,8 +6,10 @@ sap.ui.define([], function () {
   // texts are resolved from i18n keys by the caller, never hardcoded here.
 
   // TODO: replace with backend value help; keys pending config confirmation
+  // (CRUD Task 1 v4: revived as a createMode Select - see Details.fragment.xml)
   var PRIORITY = [
-    { key: "NORMAL", i18nKey: "enumPriorityNormal" },
+    { key: "LOW", i18nKey: "enumPriorityLow" },
+    { key: "MEDIUM", i18nKey: "enumPriorityMedium" },
     { key: "HIGH", i18nKey: "enumPriorityHigh" }
   ];
 
@@ -19,7 +21,9 @@ sap.ui.define([], function () {
   ];
 
   // TODO: replace with backend value help; keys pending config confirmation
+  // (CRUD Task 1 v4: revived as a createMode Select - "ExIS" added per request)
   var CATEGORY = [
+    { key: "EXIS", i18nKey: "enumCategoryExis" },
     { key: "INTERNET_SALES", i18nKey: "enumCategoryInternetSales" },
     { key: "PROVIDER_EMAILED", i18nKey: "enumCategoryProviderEmailed" },
     { key: "PROVIDER_FAXED", i18nKey: "enumCategoryProviderFaxed" },
@@ -35,11 +39,22 @@ sap.ui.define([], function () {
     { key: "PEDIATRIC", i18nKey: "enumIntentionPediatric" }
   ];
 
+  // CRUD Task 1 v4 (Create Order field adjustments): hardcoded Status list for
+  // the createMode Select in Details.fragment.xml - VH is TBD, keys/texts as
+  // given in the work order.
+  var STATUS = [
+    { key: "1A", i18nKey: "enumStatus1A" },
+    { key: "1B", i18nKey: "enumStatus1B" },
+    { key: "1E", i18nKey: "enumStatus1E" },
+    { key: "1F", i18nKey: "enumStatus1F" }
+  ];
+
   return {
     PRIORITY: PRIORITY,
     ORDER_REASON: ORDER_REASON,
     CATEGORY: CATEGORY,
     INTENTION: INTENTION,
+    STATUS: STATUS,
     INTENTION_DEFAULT: "PED_AND_ADULT",
     MIN_ITEMS: 1
   };
