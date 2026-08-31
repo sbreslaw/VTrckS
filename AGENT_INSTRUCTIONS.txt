@@ -61,7 +61,7 @@ FULL INSTRUCTIONS (give this to the agent)
 
 
 ================================================================================
-WHERE TO FIND THESE FILES (all in responsable-api repo)
+WHERE TO FIND THESE FILES (all in this repo)
 ================================================================================
 
 AGENT_INSTRUCTIONS.txt   This file — instructions only
