@@ -3,6 +3,11 @@
   xmlns:core="sap.ui.core" 
   xmlns:f="sap.ui.layout.form" 
   xmlns:l="sap.ui.layout">
+			<!-- v5 Required Fix 4 (design/E008_CRUD1_v5_Sticky_Amendment.md): adding a
+			     new editable createMode field to this fragment requires adding its
+			     property name to ServiceSchema.updatableHeaderProperties -
+			     createReplayHeaderProperties is auto-derived from that list
+			     (ServiceSchema.js), so there is nothing else to keep in sync. -->
 			<f:Form width="auto" editable="{sectionFlags>/details/editing}">
 				<f:layout>
 					<f:ResponsiveGridLayout 
@@ -69,9 +74,10 @@
                        provider NAME. Create-only editable (SoldToParty is not in
                        updatableHeaderProperties - the backend rejects changing
                        the customer on an existing order). Value Help queries the
-                       live HeaderShipToParty (C_SalesOrderShipToPtyMng) entity
-                       set; the picker sets the real SoldToParty code on the
-                       transient context, createEnrich>/providerName+
+                       live CustomerSalesArea entity set, filtered to the fixed
+                       salesArea triplet (design/prompts/E008_CRUD1_Fix_Sequencing
+                       _Prompt.md); the picker sets the real SoldToParty code on
+                       the transient context, createEnrich>/providerName+
                        /providerAddress are display-only mirrors of the picked
                        row (see Detail.controller.js#onProviderValueHelpRequest). -->
                   <Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }" />
@@ -81,6 +87,7 @@
                     valueHelpOnly="true"
                     editable="{= !${createEnrich>/providerName} }"
                     visible="{sectionFlags>/createMode}"
+                    tooltip="{i18n>providerLockedTooltip}"
                     valueHelpRequest=".onProviderValueHelpRequest" />
 								</f:fields>
 							</f:FormElement>
@@ -95,11 +102,13 @@
 								</f:label>
 
 								<f:fields>
-                  <!-- CRUD Task 1 v4: sourced from _ShipToParty (HeaderShipToParty
-                       / C_SalesOrderShipToPtyMng), same entity set the Provider
-                       Value Help now queries - read-only in every mode; in
-                       createMode the order has no backend context yet, so the
-                       address mirrors whatever the VH picker returned
+                  <!-- CRUD Task 1 v4: non-create-mode address sourced from
+                       _ShipToParty (HeaderShipToPartyType) - the real per-order
+                       ship-to snapshot, unrelated to the Provider picker (which
+                       queries CustomerSalesArea, no FormattedPostalAddressDesc
+                       field there) - read-only in every mode; in createMode the
+                       order has no backend context yet, so the address mirrors
+                       whatever the VH picker returned
                        (createEnrich>/providerAddress). -->
                   <Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} }" />
                   <Text text="{createEnrich>/providerAddress}" visible="{sectionFlags>/createMode}" />
@@ -120,10 +129,12 @@
                   <!-- CRUD Task 1 v4: VH temporarily removed - StandardPartnerContactInfo
                        rejects any standalone query with 501 Not Implemented (confirmed
                        live), so the picker dialog can never list results; plain free-text
-                       entry until a working data source is found. -->
+                       entry until a working data source is found. v5 UX phasing: locked
+                       until a Provider is picked (createState>/providerChosen). -->
                   <Input
                     value="{createEnrich>/contactName}"
                     visible="{sectionFlags>/createMode}"
+                    enabled="{createState>/providerChosen}"
                     tooltip="{i18n>createEnrichmentUnavailable}" />
 								</f:fields>
 							</f:FormElement>
@@ -142,12 +153,14 @@
                   <!-- Stub Value Help based on SAP user name (USR02) - hardcoded
                        picker for now; defaults to the current user
                        (sap.ushell.Container UserInfo service) on entering
-                       createMode, local-only until the enrichment action is live. -->
+                       createMode, local-only until the enrichment action is live.
+                       v5 UX phasing: locked until a Provider is picked. -->
                   <Input
                     value="{createEnrich>/employeeResponsibleName}"
                     showValueHelp="true"
                     valueHelpOnly="true"
                     visible="{sectionFlags>/createMode}"
+                    enabled="{createState>/providerChosen}"
                     valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
                     tooltip="{i18n>createEnrichmentUnavailable}" />
 								</f:fields>
@@ -170,6 +183,7 @@
                   <Select
                     selectedKey="{createEnrich>/priority}"
                     visible="{sectionFlags>/createMode}"
+                    enabled="{createState>/providerChosen}"
                     tooltip="{i18n>createEnrichmentUnavailable}"
                     items="{enums>/PRIORITY}">
                     <core:Item key="{enums>key}" text="{enums>text}" />
@@ -188,9 +202,12 @@
 
 								<f:fields>
                   <Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }" />
+                  <!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+                       unaffected outside createMode (normal Change-Mode editing). -->
                   <ComboBox
                     selectedKey="{SDDocumentReason}"
                     visible="{sectionFlags>/details/editing}"
+                    enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
                     items="{path: '/SDDocumentReason'}">
                     <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
                   </ComboBox>
@@ -214,6 +231,7 @@
                   <Select
                     selectedKey="{createEnrich>/category}"
                     visible="{sectionFlags>/createMode}"
+                    enabled="{createState>/providerChosen}"
                     tooltip="{i18n>createEnrichmentUnavailable}"
                     items="{enums>/CATEGORY}">
                     <core:Item key="{enums>key}" text="{enums>text}" />
@@ -239,6 +257,7 @@
                   <Select
                     selectedKey="{createEnrich>/status}"
                     visible="{sectionFlags>/createMode}"
+                    enabled="{createState>/providerChosen}"
                     tooltip="{i18n>createEnrichmentUnavailable}"
                     items="{enums>/STATUS}">
                     <core:Item key="{enums>key}" text="{enums>text}" />
@@ -257,7 +276,8 @@
 
 								<f:fields>
                   <Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }" />
-                  <Input value="{PurchaseOrderByCustomer}" visible="{sectionFlags>/details/editing}" />
+                  <Input value="{PurchaseOrderByCustomer}" visible="{sectionFlags>/details/editing}"
+                    enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
 								</f:fields>
 							</f:FormElement>
 

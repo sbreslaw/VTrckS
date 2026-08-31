@@ -26,12 +26,13 @@ sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/model/Enums",
+  "cdc/vaccreq/model/MessageExtractor",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
   List, CustomListItem, CheckBox, HBox, SelectDialog, StandardListItem, Fragment,
-  Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums,
+  Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor,
   EditRequestService, CreateOrderService
 ) {
   "use strict";
@@ -94,6 +95,12 @@ sap.ui.define([
       // payload at Save (still a no-op today, see CreateOrderService.js#enrich).
       this.getView().setModel(new JSONModel(this._createEnrichDefaults()), "createEnrich");
       this.getView().setModel(this._createEnumsModel(), "enums");
+      // v5 ("UX phasing + triad sourcing"): createMode opens with only the
+      // Provider field enabled; every other createMode field/Add-row button
+      // binds `enabled` off this flag and unlocks once a Provider is picked
+      // (onProviderValueHelpRequest below) - reset each time createMode is
+      // (re-)entered, see _setCreateMode.
+      this.getView().setModel(new JSONModel({ providerChosen: false }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
 
     },
@@ -277,6 +284,14 @@ sap.ui.define([
     },
 
     onMessagePopoverPress: function (oEvent) {
+      this._openMessagePopover(oEvent.getSource());
+    },
+
+    // Fix 4 (Corrective Work Order): shared so create-flow failures
+    // (MessageExtractor.extract) can pop the SAME popover open programmatically
+    // instead of a MessageToast — oControl defaults to the header message
+    // button so it always has somewhere to anchor to.
+    _openMessagePopover: function (oControl) {
       if (!this._oMessagePopover) {
         this._oMessagePopover = new MessagePopover({
           items: {
@@ -291,7 +306,7 @@ sap.ui.define([
         });
         this.getView().addDependent(this._oMessagePopover);
       }
-      this._oMessagePopover.toggle(oEvent.getSource());
+      this._oMessagePopover.toggle(oControl || this.byId("messagePopoverBtn"));
     },
 
     // --- CRUD Task 2 (Change Mode): per-section edit sessions (Details/Items
@@ -447,12 +462,17 @@ sap.ui.define([
     _setCreateMode: function (bOn) {
       var oFlags = this.getView().getModel("sectionFlags");
       oFlags.setProperty("/createMode", bOn);
+      // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): all createMode
+      // sections are editable immediately — there is no separate
+      // "bootstrapped" state anymore (the scratch context from _onCreateMatched
+      // is already a real, if transient, binding target for every fragment).
       this._aCreateModeEditingSections.forEach(function (sId) {
         oFlags.setProperty("/" + sId + "/editing", bOn);
       });
       if (bOn) {
         this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
+        this.getView().getModel("createState").setProperty("/providerChosen", false);
       }
     },
 
@@ -541,40 +561,73 @@ sap.ui.define([
       oDialog.open();
     },
 
-    // CRUD Task 1 v4: Provider/Ship-To VH backed by the real, top-level
-    // `/HeaderShipToParty` (C_SalesOrderShipToPtyMng) entity set - one row per
-    // order's ship-to snapshot, searchable by name/partner ID regardless of the
-    // (possibly transient/create-mode) current order context.
+    // v5 ("UX phasing + triad sourcing"): Provider VH backed by the real,
+    // top-level `/CustomerSalesArea` entity set - keyed by Customer +
+    // SalesOrganization + DistributionChannel + Division (design/so.xml
+    // ~line 1131), the same KNVV-shaped row this service's own SoldToParty
+    // ValueListReferences point at. No longer filtered down to the fixed
+    // salesArea triplet - only soft pre-filtered by SalesOrganization, so a
+    // customer extended to multiple distribution channels/divisions within
+    // that sales org surfaces as multiple, disambiguated rows (area triad
+    // shown as the list item's `info`); the picked row's own triad becomes
+    // the real CreateWithSalesOrderType params (see
+    // Detail.controller.js#onProviderValueHelpRequest / CreateOrderService.js#save).
     _openShipToPartyValueHelpDialog: function (sTitle, fnApply) {
-      var oProps = ServiceSchema.shipToPartyProperties;
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oArea = ServiceSchema.salesArea;
+      var aAreaFilters = [
+        new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)
+      ];
       var oDialog = new SelectDialog({
         title: sTitle,
         growing: true,
         items: {
-          path: "/" + ServiceSchema.entitySets.shipToParty,
+          path: "/" + ServiceSchema.entitySets.customerSalesArea,
           parameters: {
-            $select: [oProps.id, oProps.fullName, oProps.address].join(",")
+            $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
+              oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
           },
+          filters: aAreaFilters,
           template: new StandardListItem({
-            title: "{" + oProps.fullName + "}",
-            description: "{" + oProps.id + "}"
+            title: "{" + oProps.customerName + "}",
+            description: "{" + oProps.customer + "}",
+            info: {
+              parts: [oProps.salesOrganization, oProps.distributionChannel, oProps.division],
+              formatter: function (sOrg, sChannel, sDivision) {
+                return sOrg + " / " + sChannel + " / " + sDivision;
+              }
+            }
           })
         },
         search: function (oEvent) {
           var sValue = oEvent.getParameter("value");
           var oBinding = oEvent.getSource().getBinding("items");
-          oBinding.filter(sValue ? new Filter({
-            filters: [
-              new Filter(oProps.fullName, FilterOperator.Contains, sValue),
-              new Filter(oProps.id, FilterOperator.Contains, sValue)
-            ],
-            and: false
-          }) : []);
+          var aFilters = aAreaFilters.slice();
+          if (sValue) {
+            aFilters.push(new Filter({
+              filters: [
+                new Filter(oProps.customerName, FilterOperator.Contains, sValue),
+                new Filter(oProps.customer, FilterOperator.Contains, sValue)
+              ],
+              and: false
+            }));
+          }
+          oBinding.filter(aFilters);
         },
         confirm: function (oEvent) {
           var oSelectedItem = oEvent.getParameter("selectedItem");
           if (oSelectedItem) {
-            fnApply(oSelectedItem.getBindingContext().getObject());
+            var oRow = oSelectedItem.getBindingContext().getObject();
+            fnApply({
+              id: oRow[oProps.customer],
+              fullName: oRow[oProps.customerName],
+              address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+                .filter(function (sPart) { return !!sPart; })
+                .join(", "),
+              salesOrganization: oRow[oProps.salesOrganization],
+              distributionChannel: oRow[oProps.distributionChannel],
+              division: oRow[oProps.division]
+            });
           }
           oDialog.destroy();
         },
@@ -677,22 +730,33 @@ sap.ui.define([
       this.getView().getModel("createEnrich").setProperty("/contactName", "");
     },
 
-    // Sets the real SoldToParty header property on the transient context (the
-    // one field in this batch with an actual writable backing field) plus the
-    // display-only name/address mirrors (createEnrich>/providerName,
-    // createEnrich>/providerAddress), then best-effort prefills the Contact
-    // field from that provider's own most recent order.
+    // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the Provider-first
+    // bootstrap mandate is void — there is no backend call here at all.
+    // Provider selection sets the scratch context's SoldToParty property
+    // AND ("UX phasing + triad sourcing") the real SalesOrganization/
+    // DistributionChannel/Division harvested off the picked VH row - these
+    // overwrite the display-only constants CreateOrderService.js#enter
+    // seeded, and are what save() actually sends to CreateWithSalesOrderType.
+    // Also flips createState>/providerChosen, unlocking every other
+    // createMode field/row-action per the phased-entry UX.
     onProviderValueHelpRequest: function () {
       var that = this;
-      var oProps = ServiceSchema.shipToPartyProperties;
       var oBundle = this.getResourceBundle();
+      var oContext = this.getView().getBindingContext();
+      // _openShipToPartyValueHelpDialog's fnApply gets a normalized
+      // {id, fullName, address, salesOrganization, distributionChannel,
+      // division} shape (composed from CustomerSalesArea's fields), not a raw
+      // ServiceSchema property-name lookup.
       this._openShipToPartyValueHelpDialog(oBundle.getText("providerPickerTitle"), function (oItem) {
-        var oContext = that.getView().getBindingContext();
-        oContext.setProperty(ServiceSchema.headerProperties.providerId, oItem[oProps.id]);
+        oContext.setProperty(ServiceSchema.headerProperties.providerId, oItem.id);
+        oContext.setProperty(ServiceSchema.headerProperties.salesOrganization, oItem.salesOrganization);
+        oContext.setProperty(ServiceSchema.headerProperties.distributionChannel, oItem.distributionChannel);
+        oContext.setProperty(ServiceSchema.headerProperties.division, oItem.division);
         var oEnrichModel = that.getView().getModel("createEnrich");
-        oEnrichModel.setProperty("/providerName", oItem[oProps.fullName]);
-        oEnrichModel.setProperty("/providerAddress", oItem[oProps.address]);
-        that._prefillMainContact(oItem[oProps.id]);
+        oEnrichModel.setProperty("/providerName", oItem.fullName);
+        oEnrichModel.setProperty("/providerAddress", oItem.address);
+        that.getView().getModel("createState").setProperty("/providerChosen", true);
+        that._prefillMainContact(oItem.id);
       });
     },
 
@@ -766,6 +830,9 @@ sap.ui.define([
       oModel.setProperty("/rows", aRows);
     },
 
+    // v5: Cancel is always the scratch-context case — nothing was ever sent
+    // to the backend (its group is never submitted), so this is a plain local
+    // delete + navigate-back (CreateOrderService.cancel/_destroyCreateContext).
     onCreateCancelPress: function () {
       var that = this;
       var oBundle = this.getResourceBundle();
@@ -790,6 +857,12 @@ sap.ui.define([
       }
     },
 
+    // v5: Save replays the scratch context for real (CreateOrderService.js#save,
+    // steps ①-④) — the order does not exist until that resolves, so any
+    // rejection from it means nothing was created; stay in createMode to
+    // retry. Enrichment/IoH failing AFTER that (the order already exists) is
+    // the actual partial-failure case: exit createMode into the saved order
+    // for completion via Change Mode.
     onCreateSavePress: function () {
       var that = this;
       var oBundle = this.getResourceBundle();
@@ -804,25 +877,6 @@ sap.ui.define([
         return;
       }
 
-      // CreateWithSalesOrderType (the bound action that actually creates the
-      // order — CreateOrderService.js#save) declares SalesOrganization/
-      // DistributionChannel/OrganizationDivision Nullable="false"; a blank
-      // value here isn't a UI nicety anymore, the action call itself fails
-      // without it.
-      var aRequiredOrgFields = [
-        ServiceSchema.headerProperties.salesOrganization,
-        ServiceSchema.headerProperties.distributionChannel,
-        ServiceSchema.headerProperties.division
-      ];
-      var bOrgDataMissing = aRequiredOrgFields.some(function (sProperty) {
-        return !oContext.getProperty(sProperty);
-      });
-      if (bOrgDataMissing) {
-        MessageToast.show(oBundle.getText("createRequestFieldRequired"));
-        this._oSectionFactory.expandSection("orgData");
-        return;
-      }
-
       var oItemsTable = this._byIdInSection("items", "itemsTable");
       var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
       if (!CreateOrderService.hasMinItems(oItemsBinding)) {
@@ -833,12 +887,12 @@ sap.ui.define([
 
       this.getView().setBusy(true);
       var sNewId;
+
       CreateOrderService.save(oContext, oItemsBinding)
         // Step ① succeeded — the order now exists (oNewContext is the real,
-        // persisted context; oContext/the scratch context is already
-        // discarded by CreateOrderService.save()). Steps ②/③ failing from
-        // here on is a partial-failure: the order stays created (design/
-        // prompts/CRUD Task 1 Prompt v3.md "Partial-failure semantics").
+        // persisted context; the scratch context is already discarded by
+        // CreateOrderService.save()). Enrichment/IoH failing from here on is a
+        // partial-failure: the order stays created.
         .then(function (oNewContext) {
           sNewId = oNewContext.getProperty(ServiceSchema.keys.orderId);
           var oEnrich = that.getView().getModel("createEnrich").getData();
@@ -866,24 +920,28 @@ sap.ui.define([
           that._completeCreate(sNewId);
         }, function (oError) {
           that.getView().setBusy(false);
+          // Fix 4 (MessageExtractor.js): targeted messages in the popover,
+          // never a generic toast, kept from the Corrective Work Order.
+          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath());
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
           if (oError && oError.orderCreatedId) {
-            // Step \u2461/\u2462 failed but the order exists \u2014 exit createMode into the
-            // saved order; user completes the rest via Change Mode (no
-            // compensating deletes, per the v3 prompt).
+            // Enrichment/IoH failed but the order + its edits ARE committed —
+            // exit createMode into the saved order; user completes the rest
+            // via Change Mode (no compensating deletes).
             MessageToast.show(oBundle.getText("createPartialFailure", [oError.orderCreatedId]));
             that._completeCreate(oError.orderCreatedId);
-          } else {
-            // Step \u2460 failed \u2014 nothing exists; stay in createMode, messages are
-            // already bound onto the matching fields via the message model.
-            MessageToast.show(oBundle.getText("createSaveError"));
-            that._oSectionFactory.expandSection("details");
           }
+          // else: step ① (CreateOrderService.save) itself failed — nothing was
+          // created, stay in createMode to retry; messages already shown above.
         });
     },
 
-    // Step \u2463: rebind to the new order's real key, exit createMode, refresh
-    // the master list (EventBus, channel "app" — Master.controller.js owns its
-    // own table; deliberately distinct from the "vrCreate" update-group literal,
+    // Rebind to the new order's real key, exit createMode, refresh the master
+    // list (EventBus, channel "app" — Master.controller.js owns its own
+    // table; deliberately distinct from the "vrCreate" update-group literal,
     // see CreateOrderService.js/ServiceSchema.js).
     _completeCreate: function (sNewId) {
       this._oCreateListBinding = null;
@@ -941,9 +999,10 @@ sap.ui.define([
       this._oSectionFactory.rebind();
     },
 
-    // CRUD Task 1 v3 (In-Place Create): "create" route \u2014 a transient list-
-    // binding context stands in for the bindElement path the "detail" route
-    // uses. No backend contact until Save (CreateOrderService.js#enter).
+    // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the "create" route
+    // stands up a transient list-binding context (CreateOrderService.js#enter)
+    // as a pure local scratchpad — a stand-in for the bindElement path the
+    // "detail" route uses. No backend contact happens until Save.
     _onCreateMatched: function () {
       this._destroyCreateContext();
       var oResult = CreateOrderService.enter(this.getView().getModel());
@@ -952,7 +1011,7 @@ sap.ui.define([
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
       this._bindDetailHeader();
-      // All createMode-visible sections are expanded/loaded simultaneously \u2014
+      // All createMode-visible sections are expanded/loaded simultaneously —
       // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
       // Prompt v3.md "Sections in edit simultaneously").
       this._aSectionMeta.forEach(function (oMeta) {
@@ -964,7 +1023,8 @@ sap.ui.define([
 
     // Cleans up a previous transient create context (e.g. the user leaves the
     // create route via the Close button/browser back instead of Save/Cancel) -
-    // nothing was ever sent to the backend, so a local delete is enough.
+    // nothing was ever sent to the backend (its group is never submitted), so
+    // a local delete is enough (CreateOrderService.cancel).
     _destroyCreateContext: function () {
       if (this._oCreateListBinding) {
         var oContext = this.getView().getBindingContext();

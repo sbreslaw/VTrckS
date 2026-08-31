@@ -71,6 +71,9 @@
                         },
                         "vrCreate": {
                             "submit": "API"
+                        },
+                        "vrCreateReplay": {
+                            "submit": "API"
                         }
                     }
                 }

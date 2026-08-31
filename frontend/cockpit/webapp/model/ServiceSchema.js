@@ -19,11 +19,28 @@ sap.ui.define([], function () {
       // (ValueListReferences -> c_slsdocallowedorderreasonvh) confirmed in
       // design/so.xml/localService/metadata.xml, no Immutable/Computed annotation.
       orderReason: "SDDocumentReason",
-      // CRUD Task 1 v4: Provider/Ship-To Value Help queried directly against this
-      // top-level entity set (one row per order's ship-to snapshot, keyed by
-      // SalesOrder - see HeaderShipToPartyType in metadata.xml), not via the
-      // per-order _ShipToParty navigation.
+      // Real per-order Ship-To snapshot (HeaderShipToPartyType, keyed by
+      // SalesOrder) - used ONLY via the _ShipToParty navigation to display an
+      // EXISTING order's ship-to address (Master.controller.js,
+      // Details.fragment.xml). Do NOT use as a customer picker source: it is
+      // keyed by SalesOrder, not Partner, so querying it top-level returns one
+      // row per past order (a customer with N orders returns N rows) - this
+      // was the cause of the Provider picker's duplicate-row bug; the picker
+      // now uses customerSalesArea below instead.
       shipToParty: "HeaderShipToParty",
+      // CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md, "UX phasing +
+      // triad sourcing"): Provider Value Help queried against this top-level
+      // entity set - keyed by Customer + SalesOrganization + DistributionChannel
+      // + Division (design/so.xml ~line 1131), the same KNVV-shaped row this
+      // service's own SoldToParty ValueListReferences point at
+      // (c_soldtoslsorgdistrchnldivvh). No longer filtered down to one fixed
+      // triplet - a customer extended to multiple sales areas returns multiple
+      // rows, one per area (soft pre-filtered to salesArea.salesOrganization
+      // only, to keep the result set reasonable); the row the user picks
+      // supplies the REAL SalesOrganization/DistributionChannel/Division for
+      // that Save, not just Customer (see Detail.controller.js#
+      // onProviderValueHelpRequest / CreateOrderService.js#save).
+      customerSalesArea: "CustomerSalesArea",
       // CRUD Task 1 v4: Contact Value Help queried directly against this
       // top-level entity set (one row per sales document's standard-contact
       // snapshot, keyed by SalesDocument - see StandardPartnerContactInfoType
@@ -137,6 +154,20 @@ sap.ui.define([], function () {
       address: "FormattedPostalAddressDesc"
     },
 
+    // CustomerSalesAreaType (design/so.xml ~line 1131) - the Provider picker's
+    // source. No single formatted-address field exists here (unlike
+    // HeaderShipToPartyType), so the picker composes one from city/postal/country.
+    customerSalesAreaProperties: {
+      customer: "Customer",
+      customerName: "CustomerName",
+      cityName: "CityName",
+      postalCode: "PostalCode",
+      countryText: "Country_Text",
+      salesOrganization: "SalesOrganization",
+      distributionChannel: "DistributionChannel",
+      division: "Division"
+    },
+
     // _PaymentMethodVH navigates to PaymentMethodType (BillingCompanyCode +
     // PaymentMethod key, plus description/name text) — the header PaymentMethod
     // property is a single SD payment-method *code*, not a stored card/instrument;
@@ -202,67 +233,87 @@ sap.ui.define([], function () {
       "ZKB"
     ],
 
-    // --- CRUD Task 1 v4 (Action-Based Create) — supersedes v3's "standard
-    // CRUD create" spine. Live testing (405 "Creating operations are
-    // disabled for entity ... SalesOrderManage") plus a static metadata fact
-    // confirmed the root cause: design/so.xml, Annotations
-    // Target="SAP__self.Container/SalesOrderManage", carries an
-    // unconditional `SAP__capabilities.InsertRestrictions.Insertable=false`
-    // — a raw POST/deep-insert against SalesOrderManage is permanently
-    // disabled by this service's design, not a config toggle. The sanctioned
-    // creation mechanism is the bound action below (also flagged via a
-    // Session.NewAction annotation pointing at it in the same metadata) — see
-    // NOTES.md and CreateOrderService.js for the full replay-based design
-    // this drives (the "vrCreate" transient context below is kept as a local
-    // scratchpad only; its own batch is never submitted). ---
+    // --- CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — the
+    // "Provider-first bootstrap" mandate (Fix-Sequencing Prompt/v4) is VOID:
+    // CreateWithSalesOrderType alone can never be a standalone, user-visible
+    // step — this service is SAP__session.StickySessionSupported (design/
+    // so.xml ~9983); the action only opens a buffered, not-yet-numbered
+    // session (confirmed live: its own response has SalesOrder=""), and
+    // nothing persists until SaveChanges commits it. Reinstated design: the
+    // scratch transient list-binding context (CRUD Task 1 v3/v4) is the
+    // createMode UI's only backing store — every fragment binds to it,
+    // directly, in this deferred "vrCreate" group, and that group's batch is
+    // NEVER submitted (Insertable=false on SalesOrderManage — see below).
+    // Save harvests the scratch values and replays them for real (see
+    // createReplayGroup/CreateOrderService.js#save). ---
     createUpdateGroup: "vrCreate",
     createPayloadUom: "EA",
 
+    // v5 Required Fix 1 (group isolation): every request the replay at Save
+    // sends — the CreateWithSalesOrderType call, the item deep-creates on the
+    // sticky session, SaveChanges, and the header-extras PATCH — shares this
+    // ONE dedicated group, never "vrEdit". Mixing replay into vrEdit was the
+    // v4-era bug this fix closes: a stray pending change-mode edit could ride
+    // the same changeset as the create replay. manifest.json registers this
+    // as submit:"API" (deferred, explicit submitBatch), same as vrCreate/vrEdit.
+    createReplayGroup: "vrCreateReplay",
+
     // Bound action CreateWithSalesOrderType (design/so.xml, EntitySetPath="_it",
     // IsBound="true") — the only way this service allows a new SalesOrderManage
-    // row to come into existence. Invoked via the /SalesOrderManage list
-    // binding's header context (oListBinding.getHeaderContext()), per the
-    // standard OData V4 client pattern for actions bound to a collection.
+    // row to come into existence (InsertRestrictions.Insertable=false on the
+    // entity set itself — a raw POST/deep-insert 405s regardless of payload).
+    // Invoked via the /SalesOrderManage list binding's header context
+    // (oListBinding.getHeaderContext()), per the standard OData V4 client
+    // pattern for actions bound to a collection.
     createAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.CreateWithSalesOrderType",
 
-    // This entity set is SAP__session.StickySessionSupported (design/so.xml
-    // ~line 9983: NewAction=CreateWithSalesOrderType, EditAction=PrepareForEdit,
-    // SaveAction=SaveChanges, DiscardAction=DiscardChanges) - confirmed live
-    // 2026-08-27: CreateWithSalesOrderType's own response has SalesOrder=""
-    // (late numbering - the doc is only buffered in the sticky session, not
-    // yet persisted/numbered). The real key is assigned only once SaveChanges
-    // is called (CreateOrderService.js#save calls it immediately after the
-    // create action, before doing any header PATCH/item create).
+    // Sticky-session SaveAction (design/so.xml ~line 9994,
+    // SAP__session.StickySessionSupported/SaveAction), bound action on the
+    // entity itself (design/so.xml ~line 2318, EntitySetPath="_it", no extra
+    // parameters). This is what actually commits the document and assigns
+    // the real SalesOrder key — called only once the sticky session already
+    // has its items attached (CreateOrderService.js#save), since SaveChanges
+    // is the real SD commit (like VA01/VA02) and is expected to reject a
+    // header-only order with zero items (hasMinItems() enforces this
+    // client-side first).
     saveAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.SaveChanges",
 
-    // Action parameter names, paired with the scratch-context header property
-    // each one is sourced from (CreateOrderService.js#save) — not always the
-    // same name: the action's own parameter is "SoldToPartyForCreate", but the
-    // scratch context (and every other header read/write in this app) calls
-    // that field "SoldToParty" (headerProperties.providerId). All five are
-    // Nullable="false" in design/so.xml, so all must be sent.
-    createActionParameters: [
-      { actionParam: "SalesOrderType", scratchProperty: "SalesOrderType" },
-      { actionParam: "SalesOrganization", scratchProperty: "SalesOrganization" },
-      { actionParam: "DistributionChannel", scratchProperty: "DistributionChannel" },
-      { actionParam: "OrganizationDivision", scratchProperty: "OrganizationDivision" },
-      { actionParam: "SoldToPartyForCreate", scratchProperty: "SoldToParty" }
-    ],
+    // Unbound DiscardAction (design/so.xml ~line 2251/2692, ActionImport
+    // "DiscardChanges" — no bound "_it" parameter exists for it at all). v5
+    // Required Fix 2 (session hygiene): on any Save failure AFTER
+    // CreateWithSalesOrderType has already opened a sticky session (item
+    // deep-create or SaveChanges itself rejected), this is called to discard
+    // that buffered session server-side rather than leaving it to expire on
+    // its own timeout. Invoke via the unqualified ActionImport path — per the
+    // OData V4 sticky-session protocol the model correlates it to whichever
+    // session THIS model instance currently has open (the SAP-ContextId
+    // header the framework already tracks from the NewAction's response),
+    // not a path this app addresses directly. TODO-VERIFY on first live
+    // forced-failure test (v5 verification trace: "forced failure at ② or ③
+    // → DiscardChanges observed, nothing in VBAK").
+    discardAction: "/DiscardChanges",
 
-    // Header properties a createMode fragment can set directly on the scratch
-    // transient context that the create action itself does NOT accept as a
-    // parameter — replayed as a PATCH onto the new real context right after
-    // creation (CreateOrderService.js#_replayHeaderAndItems). Every one of
-    // these is already confirmed PATCHable on an existing order by the normal
-    // Change Mode edit flow (EditRequestService.js/CRUD Task 2), so replaying
-    // them here reuses an already-working PATCH path.
-    createReplayHeaderProperties: [
-      "PurchaseOrderByCustomer",
-      "SalesOffice",
-      "SalesGroup",
-      "ShippingCondition",
-      "SDDocumentReason"
-    ],
+    // DEMOTED (v5 amendment, "UX phasing + triad sourcing"): no longer the
+    // primary source for CreateWithSalesOrderType's sales-area params — the
+    // Provider VH row now supplies the real SalesOrganization/
+    // DistributionChannel/Division for whichever area the user actually
+    // picks (Detail.controller.js#onProviderValueHelpRequest,
+    // CreateOrderService.js#save). This constant survives only as (a) the
+    // soft pre-filter on the VH query (entitySets.customerSalesArea comment
+    // above) and (b) a fallback if a picked VH row somehow lacked area
+    // columns (TODO-VERIFY(B4) — should never happen in practice; originally
+    // seeded from a live, working ZKB order, session 2026-08-27, provider
+    // "TALBERT MEDICAL GROUP", customer 40000421). OrgData.fragment.xml still
+    // renders the triad read-only in createMode (backend rejects them as
+    // PATCHable org fields on an existing order — see updatableHeaderProperties
+    // below), but now displays whatever CreateOrderService.js#enter seeded
+    // (this constant) until a Provider row overwrites it with the harvested
+    // real values.
+    salesArea: {
+      salesOrganization: "1000",
+      distributionChannel: "10",
+      organizationDivision: "10"
+    },
 
     // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
     // definition extension action on the standard BO, name/params TBD once
@@ -276,18 +327,13 @@ sap.ui.define([], function () {
 
     // Org Data fields confirmed creatable-only (writable at document creation,
     // rejected by the backend on an existing order — see updatableHeaderProperties
-    // comment below/NOTES.md "CRUD Task 2 follow-up"). Real fixed-values VH
-    // entity sets confirmed in design/so.xml (SalesOrganizationType/
-    // DistributionChannelType/OrganizationDivisionType) — used only for the
-    // createMode-only ComboBoxes in OrgData.fragment.xml.
-    createOnlyOrgProperties: {
-      salesOrganizationCode: "SalesOrganization",
-      salesOrganizationText: "SalesOrganization_Text",
-      distributionChannelCode: "DistributionChannel",
-      distributionChannelText: "DistributionChannel_Text",
-      divisionCode: "Division",
-      divisionText: "Division_Text"
-    },
+    // comment below/NOTES.md "CRUD Task 2 follow-up"). Still not user-editable
+    // ComboBoxes in createMode — SalesOrganization/DistributionChannel/
+    // OrganizationDivision are set as a SIDE EFFECT of the Provider VH pick
+    // (harvested triad, v5 amendment), not typed in directly, so
+    // OrgData.fragment.xml keeps rendering them read-only in every mode (the
+    // createOnlyOrgProperties VH-code/text map this used to back is gone —
+    // nothing else referenced it).
 
     statusProperties: {
       code: "OverallSDProcessStatus",
@@ -369,6 +415,20 @@ sap.ui.define([], function () {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";
     }
   };
+
+  // v5 Required Fix 4 (replay-list drift guard): step ④ of the create replay
+  // (CreateOrderService.js#_replayHeaderProperties) PATCHes exactly the
+  // fields the backend already confirms are PATCHable on an EXISTING order
+  // (updatableHeaderProperties, above — Order Reason/ExIS ID/Shipping
+  // Condition/Payment Terms/Sales Office/Sales Group). Deriving this list
+  // FROM that map (instead of hand-maintaining a second, parallel array)
+  // means adding a new editable createMode field to updatableHeaderProperties
+  // is the ONLY step required to also replay it after Save — there is no
+  // second list to remember to update, and nothing to drift out of sync.
+  ServiceSchema.createReplayHeaderProperties = Object.keys(ServiceSchema.updatableHeaderProperties)
+    .map(function (sKey) {
+      return ServiceSchema.updatableHeaderProperties[sKey];
+    });
 
   return ServiceSchema;
 });

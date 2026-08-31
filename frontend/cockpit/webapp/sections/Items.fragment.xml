@@ -10,7 +10,8 @@
     <headerToolbar>
       <OverflowToolbar>
         <ToolbarSpacer />
-        <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}" press=".onItemsAddRow" />
+        <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
+          enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" press=".onItemsAddRow" />
         <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
         <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
       </OverflowToolbar>
@@ -44,20 +45,27 @@
               </Menu>
             </menu>
           </MenuButton>
-          <CheckBox selected="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}" />
+          <CheckBox selected="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}"
+            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
           <Text text="{SalesOrderItem}" visible="{itemsColumns>/itemNumber}" />
-          <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}" />
+          <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
+            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
           <Text text="{= '\u2014'}" visible="{itemsColumns>/brand}" />
-          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. -->
+          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !${SalesOrderItem} &amp;&amp; !${Product} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !${SalesOrderItem} &amp;&amp; !${Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }"
             showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
           <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
           <Input value="{RequestedQuantity}" visible="{itemsColumns>/qty}"
-            editable="{sectionFlags>/items/editing}" type="Number" textAlign="End" />
-          <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" type="Number" textAlign="End" />
+          <!-- ServiceSchema.createPayloadUom ("EA") is only a starting default (onItemsAddRow) -
+               materials not maintained for EA reject at SaveChanges (RAP_SD_SLS_COMMON/007,
+               "Sales unit EA is not defined for item..."), so this must be user-correctable. -->
+          <Input value="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
           <!-- MVGR1 - no fixed-values VH exposed by this service; temporary hardcoded options, mapping TBD. -->
-          <Select selectedKey="{MaterialGroup1}" visible="{itemsColumns>/orderIntention}">
+          <Select selectedKey="{MaterialGroup1}" visible="{itemsColumns>/orderIntention}"
+            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }">
             <core:Item key="Adult" text="Adult" />
             <core:Item key="Pediatric" text="Pediatric" />
             <core:Item key="AdultPediatric" text="Adult, Pediatric" />

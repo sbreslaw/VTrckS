@@ -1,4 +1,8 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
+  <!-- v5 Required Fix 4: adding a new editable createMode field here requires
+       adding it to ServiceSchema.updatableHeaderProperties -
+       createReplayHeaderProperties is auto-derived from that list, see
+       ServiceSchema.js. -->
   <f:SimpleForm editable="{sectionFlags>/shipping/editing}" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
     <f:content>
       <Label text="{i18n>shippingProvider}" />
@@ -14,12 +18,13 @@
         editable="{= !${createEnrich>/providerName} }"
         visible="{sectionFlags>/createMode}"
         valueHelpRequest=".onProviderValueHelpRequest"
-        tooltip="{i18n>createEnrichmentUnavailable}" />
+        tooltip="{i18n>providerLockedTooltip}" />
       <Label text="{i18n>shippingCondition}" />
       <Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/shipping/editing} }" />
       <ComboBox
         selectedKey="{ShippingCondition}"
         visible="{sectionFlags>/shipping/editing}"
+        enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
         items="{path: '/ShippingCondition'}">
         <core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
       </ComboBox>

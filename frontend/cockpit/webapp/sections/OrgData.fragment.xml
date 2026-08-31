@@ -1,4 +1,8 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
+  <!-- v5 Required Fix 4: adding a new editable createMode field here requires
+       adding it to ServiceSchema.updatableHeaderProperties -
+       createReplayHeaderProperties is auto-derived from that list, see
+       ServiceSchema.js. -->
   <f:SimpleForm editable="{sectionFlags>/orgData/editing}" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
     <f:content>
       <Label text="{i18n>salesOrg}" />
@@ -10,33 +14,23 @@
            too). Entity sets + Text properties confirmed in design/so.xml
            (SalesOrganizationType/DistributionChannelType/OrganizationDivisionType). -->
       <Text text="{_SalesOrganization/SalesOrganization_Text}" visible="{= !${sectionFlags>/createMode} }" />
-      <ComboBox
-        selectedKey="{SalesOrganization}"
-        visible="{sectionFlags>/createMode}"
-        items="{path: '/SalesOrganization'}">
-        <core:Item key="{SalesOrganization}" text="{SalesOrganization_Text}" />
-      </ComboBox>
+      <!-- Fix 1 (Corrective Work Order): no longer user input in createMode -
+           this is one of the sales-area constants CreateWithSalesOrderType
+           sends (ServiceSchema.salesArea, TODO-VERIFY(B4)); fixed by the
+           action, read-only here. -->
+      <Text text="{SalesOrganization}" visible="{sectionFlags>/createMode}" />
       <Label text="{i18n>distributionChannel}" />
       <Text text="{_DistributionChannel/DistributionChannel_Text}" visible="{= !${sectionFlags>/createMode} }" />
-      <ComboBox
-        selectedKey="{DistributionChannel}"
-        visible="{sectionFlags>/createMode}"
-        items="{path: '/DistributionChannel'}">
-        <core:Item key="{DistributionChannel}" text="{DistributionChannel_Text}" />
-      </ComboBox>
+      <Text text="{DistributionChannel}" visible="{sectionFlags>/createMode}" />
       <Label text="{i18n>division}" />
       <Text text="{_OrganizationDivision/Division_Text}" visible="{= !${sectionFlags>/createMode} }" />
-      <ComboBox
-        selectedKey="{OrganizationDivision}"
-        visible="{sectionFlags>/createMode}"
-        items="{path: '/OrganizationDivision'}">
-        <core:Item key="{Division}" text="{Division_Text}" />
-      </ComboBox>
+      <Text text="{OrganizationDivision}" visible="{sectionFlags>/createMode}" />
       <Label text="{i18n>salesOffice}" />
       <Text text="{_SalesOffice/SalesOffice_Text}" visible="{= !${sectionFlags>/orgData/editing} }" />
       <ComboBox
         selectedKey="{SalesOffice}"
         visible="{sectionFlags>/orgData/editing}"
+        enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
         items="{path: '/SalesOffice'}">
         <core:Item key="{SalesOffice}" text="{SalesOffice_Text}" />
       </ComboBox>
@@ -45,6 +39,7 @@
       <ComboBox
         selectedKey="{SalesGroup}"
         visible="{sectionFlags>/orgData/editing}"
+        enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
         items="{path: '/SalesGroup'}">
         <core:Item key="{SalesGroup}" text="{SalesGroup_Text}" />
       </ComboBox>

@@ -1,5 +1,274 @@
 # NOTES
 
+## v5 Sticky Amendment realignment — scratch-context/replay restored (2026-08-28)
+
+`design/E008_CRUD1_v5_Sticky_Amendment.md` VOIDS the "Provider-first
+bootstrap" mandate (Fix-Sequencing Prompt) that the section below described.
+It reinstates CRUD Task 1 v4's original scratch-context + replay design as
+the accepted architecture — confirmed to be exactly what was git-committed
+before the Corrective Work Order (`git show 9c23e67`) — with four required
+fixes layered on top:
+
+1. **Group isolation**: the create replay (action call, item deep-creates,
+   SaveChanges, header-extras PATCH) now runs entirely in a new dedicated
+   group, `vrCreateReplay` (manifest.json + `ServiceSchema.createReplayGroup`),
+   never `vrEdit`.
+2. **Session hygiene**: `CreateOrderService.js#save` now calls the unbound
+   `DiscardChanges` action (`ServiceSchema.discardAction`) as a best-effort
+   cleanup whenever a replay step fails AFTER `CreateWithSalesOrderType` has
+   already opened a sticky session.
+3. **Sessionless PATCH persistence — UNVERIFIED, live-test task**: step ④
+   (the header-extras replay) PATCHes the new, fully-numbered context with no
+   `PrepareForEdit`/`SaveChanges` bracket around it. Needs a live check: set
+   an `updatableHeaderProperties` field (e.g. Order Reason) during create,
+   hard-refresh, VA03-check. If it doesn't persist, wrap that PATCH in an
+   edit-session bracket instead (`EditRequestService.js`'s pattern).
+4. **Replay-list drift guard**: `ServiceSchema.createReplayHeaderProperties`
+   is now derived from `updatableHeaderProperties` (not hand-maintained), so
+   there is nothing to keep in sync manually.
+
+`CreateOrderService.js` and `Detail.controller.js`'s create-flow are rewritten
+back to the scratch-context pattern (`enter()`/`save(oScratchContext,
+oItemsBinding)`/`cancel()`, `_onCreateMatched` using
+`CreateOrderService.enter()` + `setBindingContext()`, no more
+`sectionFlags>/bootstrapped` gating anywhere). Two post-commit improvements
+were preserved on top of the restored baseline (NOT reverted): the
+`CustomerSalesArea`-based Provider picker (see section below) and
+`MessageExtractor.js`-based error handling in `onCreateSavePress`.
+
+This supersedes the "RAISE_SHORTDUMP resolved... SaveChanges re-added to
+bootstrap" note that used to be here: that patch (chaining `SaveChanges`
+directly into a standalone bootstrap-on-Provider-pick call) was built on the
+now-void Provider-first-bootstrap architecture. The underlying finding it was
+chasing (`CreateWithSalesOrderType` alone returns `SalesOrder:""`, `SaveChanges`
+is what actually assigns the key) is still correct and is preserved — it's
+just applied in the right place now: `SaveChanges` fires from
+`CreateOrderService.js#save`, AFTER item deep-creates, at Save time, not
+immediately after Provider is picked.
+
+## v5 amendment update — UX phasing + triad sourcing (2026-08-28)
+
+`design/E008_CRUD1_v5_Sticky_Amendment.md` was updated with a second layer of
+design decisions, both implemented this session:
+
+1. **Phased entry as pure UI gating**: createMode now opens with only the
+   Provider field enabled; every other createMode field/Items row-action/IoH
+   control is bound `enabled="{createState>/providerChosen}"` (new local
+   JSONModel, reset false each time createMode is (re-)entered — see
+   `Detail.controller.js#_setCreateMode`/`onInit`) and unlocks the instant a
+   Provider is picked. Fields also used in normal Change-Mode editing (e.g.
+   Order Reason, Sales Office/Group, Shipping Condition, item Qty/NDC) use the
+   combined expression `{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }`
+   so this gating only applies during createMode, never during a normal edit
+   session. Save's ①–④ choreography (`CreateOrderService.js#save`) is
+   untouched by this — it's presentation-only.
+2. **Sales-area triad sourced from the Provider picker, not hardcoded
+   constants**: `_openShipToPartyValueHelpDialog` (Detail.controller.js) no
+   longer filters `/CustomerSalesArea` down to the fixed
+   `ServiceSchema.salesArea` triplet — only a soft pre-filter on
+   SalesOrganization remains. A customer extended to multiple distribution
+   channels/divisions now surfaces as multiple, disambiguated rows (area
+   triad shown in the list item's `info`). The picked row's own
+   `SalesOrganization`/`DistributionChannel`/`Division` are harvested onto
+   the scratch context (`onProviderValueHelpRequest`) alongside `SoldToParty`,
+   overwriting the constants `CreateOrderService.js#enter` seeded for display
+   purposes only. `CreateOrderService.js#save` now reads these three off the
+   scratch context first, falling back to `ServiceSchema.salesArea` only if a
+   picked row somehow lacked them (should never happen in practice —
+   TODO-VERIFY(B4) is kept as a fallback-only note, not deleted). This makes
+   the "sold-to not defined for sales area" failure class unconstructible, as
+   the design doc intended.
+3. Required Fix 4 (replay-list drift guard) already had the stronger
+   auto-derivation fix (`ServiceSchema.createReplayHeaderProperties` computed
+   from `updatableHeaderProperties`); added the doc's requested short comment
+   blocks to `Details.fragment.xml`/`OrgData.fragment.xml`/`Shipping.fragment.xml`
+   on top of that, pointing at the auto-derivation.
+
+## Provider picker showed duplicate rows for the same customer (2026-08-28)
+
+`HeaderShipToParty` (backing the Provider/Ship-To value help,
+`Detail.controller.js#_openShipToPartyValueHelpDialog`) is keyed by
+`SalesOrder`, not `Partner` (design/so.xml ~line 1902) — it's a per-order
+snapshot, so a customer with N past orders returned N rows, one per order.
+
+**Proper fix (2026-08-28, supersedes an earlier client-side dedup
+workaround)**: query the right entity set instead of masking symptoms on the
+wrong one. Switched the picker to `/CustomerSalesArea` (design/so.xml ~line
+1131), keyed by `Customer`+`SalesOrganization`+`DistributionChannel`+
+`Division`, filtered to the fixed `ServiceSchema.salesArea` triplet that
+`CreateWithSalesOrderType` requires anyway. That key structure makes
+`(Customer, 1000, 10, 10)` unique per customer, so no dedup logic is needed
+at all, and as a bonus only customers actually extended to that sales area
+are selectable (previously any past ship-to could be picked, sales-area
+extension or not). No `FormattedPostalAddressDesc` field exists on
+`CustomerSalesAreaType`, so the picker now composes a display address from
+`CityName`/`PostalCode`/`Country_Text` instead. See
+`ServiceSchema.customerSalesAreaProperties`/`entitySets.customerSalesArea`.
+
+
+
+## Correction — the shortdump is IN the bootstrap action call itself, not a follow-up batch (2026-08-28)
+
+Re-testing after the fix below still shows the shortdump — but with the
+circular-JSON logging bug also fixed, the console now shows it cleanly for
+what it is: `CreateOrderService.bootstrap: CreateWithSalesOrderType failed`,
+caused by `Error: HTTP request was not processed because $batch failed`,
+itself caused by `Error: ABAP Runtime error 'RAISE_SHORTDUMP'`. This is the
+**bootstrap action's own request** — there is no second batch involved this
+time; the "second batch" theory in the section below was a real bug (worth
+keeping fixed) but was NOT this dump's cause.
+
+This is an **unhandled backend exception** (an ABAP short dump, not a normal
+business-rule rejection) — it cannot be fixed or worked around from the UI5
+app. **RULED OUT (2026-08-28)**: the `TODO-VERIFY(B4)` sales-area triplet in
+`ServiceSchema.js` (`salesArea: {"1000","10","10"}`) was suspected as an
+unverified customer-extension mismatch — confirmed (by the user, backend
+side) that customer 40000421 IS extended (KNVV) to sales org 1000/
+distribution channel 10/division 10, so this is NOT the shortdump's cause.
+The hardcoding of that triplet itself is a deliberate, spec-mandated design
+choice (`design/prompts/E008_CRUD1_Fix_Sequencing_Prompt.md`, Fix 1 pt.1 —
+"seed with the values that worked in backend debugging"), not something
+invented in this app; a real per-customer lookup entity (`/CustomerSalesArea`,
+keyed by Customer+SalesOrganization+DistributionChannel+Division) exists in
+`design/so.xml` (~line 1131) as a future option, but switching to it was
+explicitly deferred by the user for now.
+
+Remaining hypotheses (unconfirmed — need an ST22 dump to narrow down further,
+browser console can't retrieve the actual dump/callstack, only the generic
+"RAISE_SHORTDUMP" runtime error class): (a) sales order type `ZKB` not
+customized/assigned to sales area 1000/10/10 (OVAZ — "assign sales order
+types permitted per sales area" — a different check than customer
+extension); (b) a RAP behavior-implementation bug specific to invoking
+`CreateWithSalesOrderType` standalone/immediately.
+
+To help correlate against an ST22 dump when one is available,
+`CreateOrderService.bootstrap()`'s error log now also prints the exact 5
+parameters sent (`SalesOrderType`/`SalesOrganization`/`DistributionChannel`/
+`OrganizationDivision`/`SoldToPartyForCreate`) alongside the error.
+`MessageExtractor.extract()` was also taught to walk the error's `cause`
+chain so the popover shows "ABAP Runtime error 'RAISE_SHORTDUMP'" instead of
+the uninformative generic "$batch failed" wrapper text.
+
+**Action needed (not something this app can self-resolve)**: get the actual
+ST22 dump (runtime error class/callstack) for this request from the backend
+team — that's the only way to get a definitive root cause from here.
+
+## Corrective Work Order follow-up — shortdump on the rebind after bootstrap (2026-08-28)
+
+Live testing of the sequencing fix below surfaced a second bug: `CreateWithSalesOrderType`
+itself completed fine (200, own `$auto` batch), but an immediate SECOND
+`$batch` right after it came back `500` with an ABAP `RAISE_SHORTDUMP`. Root
+cause was `_bootstrapCreate` rebinding the view with
+`getView().setBindingContext(oNewContext)` where `oNewContext` was a bare
+`Context` from an orphan `oModel.bindContext(...)` never attached to any
+element binding — child property bindings in that state don't inherit the
+context binding's `$$updateGroupId`, they fall back to the model's default
+`"$auto"` group, so every header property in the view fired its own
+immediate GET the instant the context was assigned, all merged into one
+unwanted `$batch` — that's the request that hit the shortdump. Fix:
+`CreateOrderService.bootstrap()` now resolves with the plain new order id
+(a string) instead of a Context, and `_bootstrapCreate` rebinds via
+`getView().unbindElement()` + `getView().bindElement({path, parameters:
+{$$updateGroupId: "vrCreate"}})` — the same proven pattern
+`_reloadHeaderContext`/`_onObjectMatched` already use for the change-mode
+spine, so header property reads correctly stay deferred under `vrCreate`
+instead of auto-firing.
+
+Also fixed while investigating: the diagnostic `console.error(...,
+JSON.stringify(Messaging.getMessageModel().getData(), null, 2))` calls added
+for Fix 1/2 could themselves throw `Converting circular structure to JSON`
+(`sap.ui.core.message.Message#processor` points back at the model itself) —
+this was masking the real backend error in the console with an unrelated
+`TypeError` and made the shortdump above harder to diagnose than it should
+have been. Fixed by passing the live message array/objects straight to
+`console.error` instead of stringifying them — devtools renders circular
+objects fine natively.
+
+## Corrective Work Order — Create Flow Sequencing Fix (2026-08-28)
+
+Follow-up to v4 below: v4's own design had a group-contamination bug baked
+in — `CreateWithSalesOrderType` rode inside the Save batch, under `vrEdit`
+(the change-mode group), alongside unrelated header PATCHes/item creates. A
+failure anywhere in that shared changeset (a bad item row, a rejected PATCH)
+produced one generic `createSaveError` toast indistinguishable from an actual
+bootstrap failure, and there was no clean way to tell "order was never
+created" apart from "order was created but a later step in the same batch
+failed" — both surfaced identically.
+
+**Sequencing correction**: `CreateWithSalesOrderType` now fires alone, the
+instant Provider is confirmed in the value-help picker (createMode only) —
+never inside Save, never under `vrEdit`, and never under `vrCreate` either.
+It runs in its own group, `bootstrapGroup: "$auto"` (`ServiceSchema.js`),
+which submits immediately and can't be batched with anything else — see
+`CreateOrderService.js#bootstrap`. On success the Detail view is rebound
+directly to the real, canonical `/SalesOrderManage(key)` context the action
+returns (no more transient scratch context/replay-at-Save — every createMode
+fragment now binds straight to the real entity, two-way, in the deferred
+`vrCreate` group), and `sectionFlags>/bootstrapped` flips true to unlock the
+rest of the form (`Detail.controller.js#_bootstrapCreate`). Save
+(`onCreateSavePress`) is now just `submitBatch("vrCreate")` — the header
+PATCHes/item creates that batch already accumulated — followed by the
+existing enrichment/IoH follow-up steps. Cancel after a successful bootstrap
+discards that batch and deletes the just-created skeleton order
+(`CreateOrderService.cancel`); cancel before bootstrap is a plain
+navigate-back, since nothing exists yet.
+
+**Field gating (Fix 3)**: pre-bootstrap, only the Provider field is enabled —
+everything else (Details/Shipping/OrgData inputs, the Items toolbar, the
+whole IoH table) is disabled via the `bootstrapped` flag, not just
+`visible`. Post-bootstrap, the three sales-area fields
+(SalesOrganization/DistributionChannel/OrganizationDivision) are fixed by the
+action and now render as read-only `Text` in createMode too (previously
+user-editable ComboBoxes) — see `OrgData.fragment.xml`. Provider itself stays
+read-only once bootstrapped, with a tooltip explaining that changing it means
+cancelling and starting over (`providerLockedTooltip`, i18n).
+
+**Sales-area constants**: `ServiceSchema.salesArea`
+(`salesOrganization`/`distributionChannel`/`organizationDivision` = "1000"/
+"10"/"10") is new — sourced from a live backend-debugging session
+(2026-08-27, provider "TALBERT MEDICAL GROUP") rather than invented. Tagged
+`TODO-VERIFY(B4)` in `ServiceSchema.js`: the correct sales-area combination
+for a brand-new order is a backend business rule, and this triplet needs to
+be re-confirmed live before being treated as final — a wrong value here
+fails `CreateWithSalesOrderType` itself, and Fix 4's `MessageExtractor` (not
+a generic toast) is what will surface that rejection if so.
+
+**Group-contamination risk note**: this is the root cause the whole
+corrective work order exists to fix — `$auto` (bootstrap), `vrCreate`
+(create-mode Save), and `vrEdit` (change-mode Save) must never mix. Mixing
+an immediate/auto-submit action into a deferred batch, or a create-mode
+batch into an edit-mode group, reproduces exactly the "one failure looks
+like every other failure" symptom this fix addresses. Grep check: `vrEdit`
+should only appear in change-mode paths (`EditRequestService.js`,
+`Detail.controller.js` comments about the change-mode spine) — confirmed
+clean as of this pass.
+
+**Shared error extraction (Fix 4)**: new `model/MessageExtractor.js` parses
+OData V4 action/batch error bodies (lead `message` + `details[]`, each
+optionally carrying a `target`) into `sap/ui/core/Messaging`, maps
+recognized targets to their owning section (`details`/`orgData`/`items`) so
+it can be auto-expanded, and returns the list of section ids touched.
+Bootstrap failure and Save/enrichment/IoH failure both route through it now
+— the generic `createSaveError` toast is gone from every create-flow failure
+path; only the message popover (`_openMessagePopover`, extracted from the
+old `onMessagePopoverPress`) surfaces them.
+
+**SaveChanges — open risk, needs live re-verification**: repo memory
+(`/memories/repo/vtrcks-create-order-sticky-session.md`) documents a live
+test one day before this pass (2026-08-27) showing
+`CreateWithSalesOrderType` alone returns `SalesOrder:""` — i.e. this entity
+set is `SAP__session.StickySessionSupported`, and the action only opens a
+buffered sticky session; the sticky `SaveAction` (`SaveChanges`) was
+required to actually assign a real key in that test. This corrective work
+order's Fix 1 explicitly calls for the action alone to be sufficient, and
+per an explicit decision at the start of this pass, **`SaveChanges` was
+dropped** — `bootstrap()` in `CreateOrderService.js` now throws if
+`CreateWithSalesOrderType`'s own result still comes back with an empty key,
+with a `TODO-VERIFY(B4)` comment spelling out exactly what to re-add
+(`SaveChanges`, still as one ungated, immediate operation next to the
+action — never deferred into `vrCreate`/`vrEdit`) if that empty-key symptom
+recurs against the live backend. Treat this as unverified until re-tested.
+
 ## CRUD Task 1 v4 — Action-Based Create supersedes v3's spine (2026-08-26)
 
 Live testing surfaced `405 Method Not Allowed` / "Creating operations are
