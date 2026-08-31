@@ -114,4 +114,4 @@ Frontend agents: work in `frontend/`; the app runs against the dev-system servic
 
 ---
 
-*Companion: `E008_UI5_V4_PLAYBOOK.md` for frontend patterns. The LMI workspace docs (Vercel hosting, dual-mode, V2 patterns, UI5 1.71) do NOT apply here.*
+*Companion: `E008_UI5_V4_PLAYBOOK.md` for frontend patterns. Any other workspace docs (Vercel hosting, dual-mode, V2 patterns, UI5 1.71) do NOT apply here.*
