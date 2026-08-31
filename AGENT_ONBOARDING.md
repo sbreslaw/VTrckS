@@ -44,7 +44,7 @@ E008 replaces a CRM_UI (WebDynpro) vaccine ordering application for the CDC. Use
 
 ## 3. Hard Guardrails (violations = rejected work)
 
-1. **No external hosting of anything.** No Vercel/CDN-hosted UI5 libraries, no externally hosted mock services, no third-party runtime dependencies. This is a federal (CDC) system: SAPUI5 is served **by the S/4 system / FLP**; all services run on the dev landscape. The `ui5.blckrbbt.host` pattern from other workspaces is explicitly banned here.
+1. **No external hosting of anything.** No Vercel/CDN-hosted UI5 libraries, no externally hosted mock services, no third-party runtime dependencies. This is a federal (CDC) system: SAPUI5 is served **by the S/4 system / FLP**; all services run on the dev landscape. 
 2. **No mock-data architecture.** Development and prototyping run against the **real MVP-1 read service** (`ZUI_VACCINEREQUEST_O4`) on the dev system. A hardcoded local stub is permitted only as a ≤1-week bridge while the read service activates — it must never grow branching logic (`_isJSONModel()`-style dual paths are banned).
 3. **No draft.** No draft artifacts in any BDEF; unsaved-state protection is client-side; concurrency = ETag (412 handling mandatory in the UI).
 4. **Persistence only via `ZCL_VR_SD_ADAPTER`.** Any direct write to VBAK/VBAP/VBKD/VBPA or other SD tables, anywhere, is a failed build. No `COMMIT WORK` outside the RAP framework.
