@@ -1,8 +1,9 @@
 sap.ui.define([
   "sap/ui/core/Messaging",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/Enums"
-], function (Messaging, ServiceSchema, Enums) {
+  "cdc/vaccreq/model/Enums",
+  "cdc/vaccreq/model/MessageExtractor"
+], function (Messaging, ServiceSchema, Enums, MessageExtractor) {
   "use strict";
 
   // CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — reinstates
@@ -43,7 +44,8 @@ sap.ui.define([
     ServiceSchema.itemProperties.quantity,
     ServiceSchema.itemProperties.unit,
     ServiceSchema.itemProperties.exisId,
-    ServiceSchema.itemProperties.orderIntention
+    ServiceSchema.itemProperties.orderIntention,
+    ServiceSchema.itemProperties.fundType
   ];
 
   // Never JSON.stringify the message model's data in a log statement —
@@ -143,11 +145,21 @@ sap.ui.define([
     // DiscardChanges runs first for any failure from step ① onward (v5
     // Required Fix 2).
     save: function (oScratchContext, oItemsBinding) {
+      // Message Accuracy & Hygiene task, Gap 1 - pre-attempt clearing: a
+      // stale extractor/technical message from a PRIOR failed save attempt
+      // must never carry over and look like part of THIS ①–④ attempt.
+      MessageExtractor.clearStaleMessages();
       var oModel = oScratchContext.getModel();
       var oScratchData = oScratchContext.getObject() || {};
 
       var oHeaderListBinding = oModel.bindList("/" + ServiceSchema.entitySets.header);
-      var oAction = oModel.bindContext(ServiceSchema.createAction + "(...)", oHeaderListBinding.getHeaderContext());
+      // Message Accuracy & Hygiene task, Gap 0: SAP__Messages is opt-in via
+      // $select (RAP's bound-message channel, not returned by default) -
+      // explicit $select, not $$inheritExpandSelect, per the workaround
+      // bindings already in play here.
+      var oAction = oModel.bindContext(ServiceSchema.createAction + "(...)", oHeaderListBinding.getHeaderContext(), {
+        $select: "SAP__Messages"
+      });
       // SalesOrderType is a fixed constant (Nullable="false", one value in
       // fixedOrderTypes). The sales-area triad and SoldToPartyForCreate are
       // both real user choices now (v5 amendment, "UX phasing + triad
@@ -219,8 +231,13 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           var aScratchItemContexts = (oItemsBinding && oItemsBinding.getCurrentContexts) ? oItemsBinding.getCurrentContexts() : [];
+          // Gap 0 correction (live network evidence): item-level validation
+          // messages (e.g. VI-028/FI-759) attach to the _Item entity itself, not
+          // the header - the create action's $select above never covered this
+          // separate POST, so it was still coming back with no SAP__Messages.
           var oStickyItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyPlainContext, undefined, undefined, {
-            $$updateGroupId: CREATE_REPLAY_GROUP
+            $$updateGroupId: CREATE_REPLAY_GROUP,
+            $select: "SAP__Messages"
           });
           aScratchItemContexts.forEach(function (oItemContext) {
             var oItemData = oItemContext.getObject() || {};
@@ -257,8 +274,13 @@ sap.ui.define([
               // force it. Sent standalone/immediately outside our explicit
               // changeset, which is the likely cause of the backend's SAVE
               // handler seeing a disconnected/blank buffer.
+              // Gap 0 (Message Accuracy & Hygiene task): same $select opt-in as
+              // the create action above - SaveChanges is the real SD commit and
+              // the most likely place VI-028/FI-759-style business messages
+              // actually arrive on this channel.
               var oSaveAction = oModel.bindContext(ServiceSchema.saveAction + "(...)", oStickyPlainContext, {
-                $$updateGroupId: CREATE_REPLAY_GROUP
+                $$updateGroupId: CREATE_REPLAY_GROUP,
+                $select: "SAP__Messages"
               });
               // oStickyPlainContext was never read via GET, so the model has
               // no ETag cached for it - SaveChanges then 428s ("required to

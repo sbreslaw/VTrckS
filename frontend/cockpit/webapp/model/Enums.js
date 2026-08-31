@@ -49,12 +49,41 @@ sap.ui.define([], function () {
     { key: "1F", i18nKey: "enumStatus1F" }
   ];
 
+  // Client requirement (2026-08-31, VBAP-MVGR2/MaterialGroup2 - Items.fragment.xml
+  // Fund Type column). Codes confirmed by the client (2026-08-31) - real
+  // MaterialGroup2 domain values, all fit the Edm.String MaxLength=3
+  // (design/so.xml/metadata.xml).
+  var FUND_TYPE = [
+    { key: "VFC", i18nKey: "enumFundTypeVfc" },
+    { key: "317", i18nKey: "enumFundType317" },
+    { key: "S/L", i18nKey: "enumFundTypeState" },
+    { key: "CHP", i18nKey: "enumFundTypeChip" },
+    { key: "SPL", i18nKey: "enumFundTypeSplit" },
+    { key: "PAN", i18nKey: "enumFundTypePan" },
+    { key: "ARR", i18nKey: "enumFundTypeArr" },
+    { key: "N/A", i18nKey: "enumFundTypeNa" }
+  ];
+
+  // Which FUND_TYPE keys are selectable per Order Intention (MaterialGroup1) -
+  // Adult is a strict subset of Pediatric, so the combined "AdultPediatric"
+  // intention uses the Pediatric set. ARR/N/A/PAN are intentionally NOT gated
+  // by intention - no business rule was given for them (PAN's own auto-default
+  // source, the NDC's Pan indicator from Material Master, is not exposed by
+  // this service yet).
+  var FUND_TYPE_BY_INTENTION = {
+    Adult: ["317", "S/L", "SPL"],
+    Pediatric: ["VFC", "317", "S/L", "CHP", "SPL"],
+    AdultPediatric: ["VFC", "317", "S/L", "CHP", "SPL"]
+  };
+
   return {
     PRIORITY: PRIORITY,
     ORDER_REASON: ORDER_REASON,
     CATEGORY: CATEGORY,
     INTENTION: INTENTION,
     STATUS: STATUS,
+    FUND_TYPE: FUND_TYPE,
+    FUND_TYPE_BY_INTENTION: FUND_TYPE_BY_INTENTION,
     INTENTION_DEFAULT: "PED_AND_ADULT",
     MIN_ITEMS: 1
   };

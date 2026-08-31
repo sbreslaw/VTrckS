@@ -70,7 +70,24 @@
             <core:Item key="Pediatric" text="Pediatric" />
             <core:Item key="AdultPediatric" text="Adult, Pediatric" />
           </Select>
-          <Text text="{= '\u2014'}" visible="{itemsColumns>/fundType}" />
+          <!-- MVGR2 - no fixed-values VH exposed by this service; codes confirmed by the
+               client (2026-08-31, matches MaterialGroup2's MaxLength=3). Adult vs Pediatric
+               gating (VFC/CHP) per the client's stated sets; ARR/N/A have no stated gating
+               rule so are left always-selectable, same as PAN (whose own auto-default source,
+               the NDC's Pan indicator from Material Master, is not exposed by this service yet). -->
+          <Select selectedKey="{MaterialGroup2}" visible="{itemsColumns>/fundType}"
+            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }">
+            <core:Item key="VFC" text="{i18n>enumFundTypeVfc}"
+              enabled="{= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
+            <core:Item key="317" text="{i18n>enumFundType317}" />
+            <core:Item key="S/L" text="{i18n>enumFundTypeState}" />
+            <core:Item key="CHP" text="{i18n>enumFundTypeChip}"
+              enabled="{= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
+            <core:Item key="SPL" text="{i18n>enumFundTypeSplit}" />
+            <core:Item key="PAN" text="{i18n>enumFundTypePan}" />
+            <core:Item key="ARR" text="{i18n>enumFundTypeArr}" />
+            <core:Item key="N/A" text="{i18n>enumFundTypeNa}" />
+          </Select>
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
           <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" visible="{itemsColumns>/netValue}" />

@@ -1,6 +1,7 @@
 sap.ui.define([
-  "sap/ui/core/Messaging"
-], function (Messaging) {
+  "sap/ui/core/Messaging",
+  "cdc/vaccreq/model/MessageExtractor"
+], function (Messaging, MessageExtractor) {
   "use strict";
 
   // CRUD Task 2 v2 (Change Mode, design/Work Order 2 - CRUD Task 2 - Change
@@ -32,6 +33,10 @@ sap.ui.define([
     // isConflict=true when the failure looks like a 412 (stale ETag), else
     // isConflict=false for ordinary validation/business errors.
     save: function (oContext) {
+      // Message Accuracy & Hygiene task, Gap 1 - pre-attempt clearing: a
+      // stale extractor/technical message from a PRIOR failed save attempt
+      // must never carry over and look like part of THIS attempt's result.
+      MessageExtractor.clearStaleMessages();
       var oModel = oContext.getModel();
       return oModel.submitBatch(UPDATE_GROUP).then(function () {
         if (oModel.hasPendingChanges(UPDATE_GROUP)) {

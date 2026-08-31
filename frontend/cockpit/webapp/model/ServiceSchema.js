@@ -206,7 +206,12 @@ sap.ui.define([], function () {
       deliveryStatusText: "DeliveryStatus_Text",
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
-      fundType: null,
+      // MVGR2 - real field (MaterialGroup2), client requirement (2026-08-31):
+      // Fund Type (VFC/317/S/L/CHP/SPL/PAN/ARR/N/A - see Enums.js
+      // FUND_TYPE/FUND_TYPE_BY_INTENTION), gated by Adult vs Pediatric.
+      // Codes confirmed by the client (2026-08-31), all fit MaxLength=3
+      // (design/so.xml/metadata.xml).
+      fundType: "MaterialGroup2",
       // MVGR1 - real field (MaterialGroup1), but no ValueListReferences/fixed
       // values exposed for it in this service; Order Intention Select values
       // are a temporary hardcoded set (Adult/Pediatric/Adult+Pediatric) until

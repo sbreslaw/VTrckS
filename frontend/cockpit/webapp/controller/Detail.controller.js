@@ -204,7 +204,7 @@ sap.ui.define([
           qty: oCtx.getProperty(ServiceSchema.itemProperties.quantity),
           uom: oCtx.getProperty(ServiceSchema.itemProperties.unit),
           orderIntention: "\u2014",
-          fundType: "\u2014",
+          fundType: oCtx.getProperty(ServiceSchema.itemProperties.fundType),
           poReference: "\u2014",
           deliveryStatus: oCtx.getProperty(ServiceSchema.navigation.itemToDeliveryStatus + "/" + ServiceSchema.itemProperties.deliveryStatusText),
           netValue: oCtx.getProperty(ServiceSchema.itemProperties.netAmount),
@@ -294,6 +294,11 @@ sap.ui.define([
     _openMessagePopover: function (oControl) {
       if (!this._oMessagePopover) {
         this._oMessagePopover = new MessagePopover({
+          // Gap 4 (Message Accuracy & Hygiene task) - group by severity,
+          // errors first, warnings collapsible: sap.m.MessagePopover's own
+          // groupItems feature does exactly this, no custom grouping code
+          // needed.
+          groupItems: true,
           items: {
             path: "message>/",
             template: new MessageItem({
@@ -367,11 +372,14 @@ sap.ui.define([
         if (oError.isConflict) {
           that._showConflictDialog(oContext, sSectionId);
         } else {
-          // Edit session stays open for correction; backend messages are
-          // already bound onto the matching fields via the message model
-          // (Detail.controller.js `message` model + matching binding paths).
-          MessageToast.show(oBundle.getText("editSaveError"));
-          that._oSectionFactory.expandSection(sSectionId);
+          // Message Accuracy & Hygiene task: same MessageExtractor-driven
+          // popover the create flow uses, replacing the generic toast this
+          // used to show for every change-mode save failure alike.
+          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), oBundle);
+          (aSectionIds.length ? aSectionIds : [sSectionId]).forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
         }
       });
     },
@@ -801,7 +809,10 @@ sap.ui.define([
       if (!oBindingInfo) {
         return;
       }
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId });
+      // Gap 0 correction: same item-level SAP__Messages opt-in as the create
+      // replay's deep-create binding (CreateOrderService.js), for change-mode
+      // item edits/adds through this same _Item navigation.
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $select: "SAP__Messages" });
       oTable.bindItems(oBindingInfo);
     },
 
@@ -922,20 +933,25 @@ sap.ui.define([
           that.getView().setBusy(false);
           // Fix 4 (MessageExtractor.js): targeted messages in the popover,
           // never a generic toast, kept from the Corrective Work Order.
-          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath());
+          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), oBundle);
           aSectionIds.forEach(function (sId) {
             that._oSectionFactory.expandSection(sId);
           });
-          that._openMessagePopover();
           if (oError && oError.orderCreatedId) {
             // Enrichment/IoH failed but the order + its edits ARE committed —
             // exit createMode into the saved order; user completes the rest
-            // via Change Mode (no compensating deletes).
-            MessageToast.show(oBundle.getText("createPartialFailure", [oError.orderCreatedId]));
+            // via Change Mode (no compensating deletes). Message Accuracy &
+            // Hygiene task: a tracked Messaging note, not a MessageToast, so
+            // it shows in the same popover alongside the real backend
+            // messages instead of a separate, easy-to-miss channel.
+            MessageExtractor.addNote(oBundle.getText("createPartialFailure", [oError.orderCreatedId]), "Information");
+            that._openMessagePopover();
             that._completeCreate(oError.orderCreatedId);
+          } else {
+            // step ① (CreateOrderService.save) itself failed — nothing was
+            // created, stay in createMode to retry; messages already shown above.
+            that._openMessagePopover();
           }
-          // else: step ① (CreateOrderService.save) itself failed — nothing was
-          // created, stay in createMode to retry; messages already shown above.
         });
     },
 
@@ -992,7 +1008,13 @@ sap.ui.define([
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
         // no $$updateGroupId of their own (unsupported on ODataPropertyBinding) -
         // they inherit this context binding's update group instead.
-        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup }
+        // Message Accuracy & Hygiene task, Gap 0: SAP__Messages (Common.v1.Messages,
+        // RAP's bound-message channel) is opt-in via $select, not returned by
+        // default - explicit $select here (not $$inheritExpandSelect, per the
+        // workaround bindings already in play on this view) so a change-mode
+        // PATCH failure can surface the same detailed backend messages F3893
+        // receives automatically.
+        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: "SAP__Messages" }
       });
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();

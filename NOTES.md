@@ -1,5 +1,367 @@
 # NOTES
 
+## Fund Type (MaterialGroup2 / VBAP-MVGR2) opened for entry — 2026-08-31
+
+Client requirement: the Items table's Fund Type column (previously a static
+"—" placeholder, `ServiceSchema.itemProperties.fundType: null`) is now a real,
+editable field mapped to `MaterialGroup2` (VBAP-MVGR2) — same pattern already
+used for Order Intention/`MaterialGroup1` (no fixed-values VH exposed by this
+service, hardcoded `Select` options).
+
+- **Selectable values, gated by Order Intention** (client-specified): Adult →
+  317/S/L/SPL; Pediatric → VFC/317/S/L/CHP/SPL. Implemented as per-`core:Item`
+  `enabled` expressions in `Items.fragment.xml` keyed off the row's own
+  `MaterialGroup1` (VFC/CHP disabled unless Pediatric or the combined
+  "AdultPediatric" intention — the other three are common to both, always
+  enabled). `Enums.js` gained `FUND_TYPE` (the 8 real domain codes) and
+  `FUND_TYPE_BY_INTENTION` (the map) for reuse.
+- **Real backend codes confirmed by the client (2026-08-31)** — resolves the
+  MaxLength=3 concern originally flagged (the client's first-pass wording
+  used full words like "STATE"/"SPLIT"/"CHIP" that don't fit
+  `MaterialGroup2`'s `Edm.String MaxLength="3"`): `317:317`, `ARR:ARRA`,
+  `CHP:CHIP`, `N/A:N/A`, `PAN:PANDEMIC`, `S/L:STATE`, `SPL:SPLIT`, `VFC:VFC`.
+  `ARR`/`N/A` weren't part of the original Adult/Pediatric business rule, so
+  they're included as always-selectable (no gating rule given for them),
+  matching how existing data using those codes would need to display.
+- **PAN auto-default from the NDC's Pan indicator — NOT implemented, per the
+  prompt's own "(TBD)" caveat.** This service's `Product`/NDC value help
+  entity (`ProductType`) exposes only `Product`/`Product_Text`
+  (`ServiceSchema.productProperties`) — no Pan-indicator-shaped property
+  anywhere in `design/so.xml`/`metadata.xml` (confirmed by grep before
+  implementing). There is nothing to read yet, so no auto-default logic was
+  written — PAN is left as a normal, always-selectable manual option instead.
+  **Next step, backend-side**: expose the Material Master Pan indicator
+  through this service (or the NDC value help) before this can be wired up;
+  do not invent a property name for it in the meantime.
+- Also wired: `CreateOrderService.js`'s `ITEM_PROPERTIES` now includes
+  `fundType` so a value picked during create-mode item entry is actually
+  replayed in the item deep-create payload (mirrors how `orderIntention` was
+  already wired in). Change-mode edits need no separate service code — the
+  Items table's cells are already live two-way bindings against a real
+  context, same as the sibling Order Intention Select. Also fixed
+  `onItemsExport`'s Fund Type column to read the real property instead of a
+  hardcoded "—" (introduced by this same change; left the pre-existing,
+  unrelated `orderIntention` export placeholder alone — out of this task's
+  scope).
+
+## Message Accuracy & Hygiene (Create/Edit Flows) — 2026-08-31
+
+Session scope per `COPILOT_PROMPT_TEMPLATE.md`-style prompt: message
+extraction/dedup/attribution/presentation only — `CreateOrderService.js#save`'s
+①–④ choreography, the sticky-session/scratch-context pattern, the Provider
+picker, and `EditRequestService.js`'s PATCH/ETag mechanics were NOT touched.
+`design/E008_CRUD1_v5_Sticky_Amendment.md` remains the sole create-flow
+architecture authority and was not contradicted by anything in this pass.
+
+### Step-0 reconciliation deltas
+- `model/MessageExtractor.js`, cause-chain walking, target→section map, and
+  its invocation from `Detail.controller.js`'s create-save error path all
+  verified present and correct, exactly as the prompt assumed — extended in
+  place, not rewritten.
+- `MessagePopover` confirmed bound to `Messaging.getMessageModel()` (named
+  model `"message"`, set in `Detail.controller.js#onInit`) — unchanged.
+- `design/prompts/E008_CRUD1_Fix_Sequencing_Prompt.md` **deleted** this
+  session (Step-0 required it) — it was superseded by
+  `design/E008_CRUD1_v5_Sticky_Amendment.md` and must stop being citable; the
+  v5 amendment is confirmed as sole create-flow authority going forward.
+- **Live fixture run (VI-028/FI-759) — NOT executed this session.** This
+  workspace has no connection to the live SAP backend from this environment;
+  the baseline-vs-after popover comparison the prompt asks for could not be
+  captured here. All work below is implemented and reviewed statically; it
+  still needs a live pass against the real fixture before being considered
+  verified (same status as several open items already tracked in
+  `/memories/repo/vtrcks-create-order-sticky-session.md`).
+- **Does the V4 model auto-add its own technical messages to `Messaging` on
+  a failed request? UNCONFIRMED** — no live backend access this session.
+  The dedup/clearing design below (Gap 1/2) is written to be correct either
+  way (it doesn't assume the answer), but the "how much Gap 2 matters"
+  question the prompt asks for is still open — needs a live double-failure
+  test with devtools open on `Messaging.getMessageModel().getData()` to
+  settle.
+
+### Gap 0 — Enable the bound-message channel (implemented this pass; previously missed)
+- A prior pass of this task implemented Gaps 1–5 and the `MessageToast`
+  removal but never actually added `SAP__Messages` to any `$select` — Gap 0
+  is the reason the wire lacked specifics in the first place, so without it
+  Gaps 1–4 can only ever dedupe/attribute whatever generic text already
+  reaches the client today. Closed this pass: added explicit
+  `$select: "SAP__Messages"` (never `$$inheritExpandSelect`, per the prompt's
+  own preference given the workaround bindings already in play) to:
+  - the Detail context binding, change mode (`Detail.controller.js#_onObjectMatched`'s
+    `bindElement` call),
+  - the create action's operation binding (`CreateOrderService.js#save`'s
+    `oAction = oModel.bindContext(ServiceSchema.createAction + "(...)", ...)`),
+  - the `SaveChanges` operation binding on its plain-path binding
+    (`CreateOrderService.js#save`'s `oSaveAction`).
+- **F3893 verification experiment — NOT executed.** Same constraint as the
+  rest of this task: no live SAP backend reachable from this environment, so
+  the prompt's "diff F3893's SaveChanges batch part vs ours" experiment could
+  not be run. The `$select` additions above are the correct, standard V4
+  mechanism for opting into a `Common.v1.Messages`-annotated bound-message
+  property (design/so.xml confirms `SAP__common.Messages` annotations
+  pointing at `SAP__Messages` on the relevant entity types) and are applied
+  on faith that this matches F3893's behavior, but this is UNVERIFIED against
+  a live response and needs the live diff before being trusted as complete.
+  If a live test shows `SAP__Messages` is empty/absent even with `$select`
+  applied, that is the tail-branch condition the prompt describes (SAP
+  implementation gap → OSS-incident evidence package), not a client bug to
+  re-diagnose here.
+- Not touched: `EditRequestService.js` has no operation binding of its own
+  (change-mode save is a plain PATCH via `submitBatch`, no bound action) — so
+  the Detail context binding's `$select` above is the only Gap 0 change that
+  applies to the change-mode path; there is no second binding to add it to.
+
+### Gap 0 correction (live test, 2026-08-31): item-level messages missed entirely
+- **Live network evidence** (user-supplied batch trace): the create action's
+  request correctly showed `?sap-client=100&$select=SAP__Messages`, but the
+  very next batch part — `POST SalesOrderManage(SalesOrder='')/_Item` (the
+  item deep-create, `CreateOrderService.js#save`'s `oStickyItemsBinding`) —
+  had NO `$select` at all. The live fixture's actual failures (VI-028/FI-759)
+  are ITEM-level validations, not header/whole-SO validations, so they attach
+  to the `_Item` entity's own `SAP__Messages`, not the header's — this is
+  exactly why the first Gap 0 pass (header/action bindings only) showed no
+  change: it never touched the one binding that mattered for this fixture.
+- Fixed: added `$select: "SAP__Messages"` to `oStickyItemsBinding` in
+  `CreateOrderService.js#save` (the create-flow item deep-create list
+  binding). Also added the same to `Detail.controller.js#_rebindItemsGroup`
+  (the Items table's `_Item` list binding, used by BOTH change-mode item
+  edits/adds and the createMode Items table — the actual runtime rebind
+  point; the static XML binding in `Items.fragment.xml` carries no group/
+  select of its own, this function is where it's set).
+- Still needs a live re-test to confirm `SAP__Messages` now actually comes
+  back populated on the `_Item` POST — not yet done as of this note.
+
+### Gap 2 correction (live test, 2026-08-31): "Save failed" still showing twice alongside the real message
+- **Live result after the item-binding fix above**: the real message ("Fund
+  does not exist in FM area 1000", VI-028) now correctly arrives, but the
+  popover showed it sandwiched between TWO generic `"Save failed"` entries -
+  net 3 messages for 1 actual error.
+- Root cause, both self-inflicted (not the backend's fault this time): (1)
+  `extract()` always added `oBody.message` (the top-level wrapper, literally
+  `"Save failed"` here) as its OWN separate message in addition to whatever
+  `oBody.details[]` contained - redundant noise whenever details actually
+  carry the real message(s). (2) `removeDuplicateAutoMessages()` only
+  removed an untagged (model-auto) duplicate when its TEXT matched one we'd
+  just added - the model's own auto-added technical message for this same
+  failure evidently uses different generic wrapper text than our own, so the
+  text-substring match never fired and it was never removed.
+- Fixed (both in `MessageExtractor.js`): `extract()` now only adds the
+  top-level `oBody.message` when `oBody.details` is empty (never drops the
+  only message available; simply stops duplicating it when something more
+  specific exists). `removeDuplicateAutoMessages()` no longer requires a text
+  match - once we've added at least one real message this attempt, ANY
+  remaining untagged message with `technicalDetails.httpStatus` set (the
+  same trusted model-auto signal Gap 1/`_hasConflictMessage` already rely
+  on) is removed outright as noise.
+- Still needs a live re-test to confirm exactly one message (the real
+  VI-028 one) now shows for this fixture - not yet done as of this note.
+
+### Gap 2 correction #2 (live test, 2026-08-31): a SECOND, genuinely different "Save failed" — from SaveChanges, not the item POST
+- **Live result**: the item-level fixes above worked — exactly one item
+  message now shows ("Fund does not exist in FM area 1000", VI-028), auto-
+  surfaced by the V4 model itself from the item POST's `SAP__Messages`
+  (confirms Gap 0's premise: enabling the channel lets the model push bound
+  messages into `Messaging` with no extractor code needed for THAT step).
+  But a second message still appeared: `"Save failed" (RAP_SD_SLS_COMMON/007)`
+  — traced (user-supplied evidence) to a SEPARATE, LATER batch call, the
+  `SaveChanges` request itself (`$select=SAP__Messages` present, confirming
+  the Gap 0 header-action fix reached the wire) — its response is a genuine
+  HTTP error body `{"error":{"code":"RAP_SD_SLS_COMMON/007","message":"Save
+  failed","target":"$Parameter/_it",...}}`, no `details[]`. This is the SAME
+  message class/number/target already seen and diagnosed in the 2026-08-28
+  round-6/7 live tests (`/memories/repo/vtrcks-create-order-sticky-session.md`)
+  — RAP's generic "whole-document commit rejected" wrapper, text redacted by
+  the gateway, thrown whenever ANY buffered validation issue (here, the same
+  VI-028 fund problem) blocks the final commit. It is not new information —
+  just the SAME underlying failure reported a second time, from a later step,
+  with no specifics of its own.
+- This is NOT a text-match duplicate of the item message (different code,
+  different target, different request) — Gap 2's existing dedup logic
+  (matches on target/text) correctly did NOT suppress it as such. Per the
+  user's explicit direction ("Only actual error messages need to be
+  displayed. Do not include 'Save Failed'"), the fix generalizes beyond
+  literal duplicate detection: `MessageExtractor.js` now recognizes bare
+  generic-wrapper text (`isGenericWrapper()`, prefix-matches `"save failed"`
+  — extend this list if a new bare-wrapper string surfaces live) and skips
+  adding it, in BOTH the "no details[]" and "no parsed error body at all"
+  branches of `extract()`, whenever `hasRealMessage()` finds at least one
+  OTHER, non-generic message already in `Messaging` (i.e. the real cause was
+  already surfaced by an earlier step in the SAME save attempt). If nothing
+  else is present, the generic wrapper is still added — never drop the only
+  message available.
+- Trade-off, noted deliberately: the `RAP_SD_SLS_COMMON/007` CODE is now
+  silently dropped along with its wrapper text when suppressed — acceptable
+  since a bare code with no text conveys nothing actionable on its own and
+  the user explicitly asked for it gone; if a future need arises to retain
+  it for diagnostics, log it to console rather than resurrecting it in the
+  popover.
+- Still needs a live re-test to confirm exactly ONE message (VI-028) now
+  shows end-to-end for this fixture - not yet done as of this note.
+
+### Gap 2 correction #3 (live test, 2026-08-31): opposite symptom — the REAL message vanished, only "Save failed" survived
+- **Live evidence**: `CreateOrderService.js`'s own pre-extract debug dump
+  (`logMessages()`, which reads `Messaging` BEFORE `MessageExtractor.extract()`
+  ever runs) proved the V4 model had ALREADY auto-added BOTH the real
+  message ("Total Split Qty - 0 does not match the Order Qty - 3") AND "Save
+  failed" to `Messaging` straight from `SAP__Messages` on the failed
+  SaveChanges response — Gap 0 working exactly as intended. The bug was
+  entirely inside `extract()`: `oBody.details[]` on the thrown error also
+  carried both of these same two messages; `isDuplicate()` correctly matched
+  the REAL one against the model's already-present copy and skipped
+  re-adding it (so it stayed untagged — no `SOURCE_TAG`), but the generic
+  wrapper detail did NOT match as a duplicate (e.g. target shape differs)
+  and got freshly re-added WITH `SOURCE_TAG`. That made the old
+  `removeDuplicateAutoMessages(aAdded)` run (guarded on "was anything added
+  this pass") and blanket-remove EVERY untagged message with
+  `technicalDetails.httpStatus` set — collaterally wiping out the real,
+  untagged, duplicate-skipped message right along with the actual noise.
+- **Fix**: `removeDuplicateAutoMessages()` now targets ONLY messages whose
+  own text is itself `isGenericWrapper()` (never a blanket tag+httpStatus
+  removal), and is gated on `hasRealMessage()` instead of "did extract() add
+  something new this call" — the `aAdded` tracking that used to drive that
+  guard was removed entirely, no longer needed. It's now structurally
+  impossible for this cleanup step to remove a real business message,
+  regardless of how `isDuplicate()` classified it.
+- **Lesson**: "was something added this pass" is the wrong trigger for a
+  cleanup/removal step — a message can be simultaneously real AND untagged
+  (because it was correctly recognized as an existing duplicate and skipped).
+  Any removal logic must judge each candidate message on its OWN merits
+  (here: is its own text generic noise), never on a side-channel signal
+  about unrelated work that happened in the same function call.
+
+
+### Gap 1 — Pre-attempt clearing
+`MessageExtractor.clearStaleMessages()` (new) removes only (a) messages this
+module added, identified by `technicalDetails.source === "vrExtract"`, and
+(b) technical messages the OData model itself added, identified by
+`technicalDetails.httpStatus !== undefined` (the same signal
+`EditRequestService.js#_hasConflictMessage` already relies on for its 412
+check, so this reuses an existing, already-trusted convention rather than
+inventing a new one). Called at the top of `CreateOrderService.js#save`
+(create chain ①–④ entry point) and `EditRequestService.js#save` (change-mode
+save entry point) — both are the actual entry points of their respective
+save attempts, so no caller in `Detail.controller.js` needed to change to
+get this coverage.
+
+### Gap 2 — Duplicate suppression (tagging + dedup scheme, as implemented)
+- **Tagging**: every message `MessageExtractor.extract()`/`addNote()` adds
+  carries `technicalDetails: { source: "vrExtract", code, numericSeverity }`
+  — `MessageExtractor.SOURCE_TAG` exports the literal string `"vrExtract"`
+  for reuse/grep.
+- **Add-time dedup** (`isDuplicate()`): before adding, an existing message is
+  treated as a duplicate if its `target` matches (when either side has one),
+  its `technicalDetails.code` doesn't conflict, and its display text
+  *contains* the new message's raw (undecorated) text. Substring match, not
+  equality, because our own decorated text embeds the raw text inside an
+  item/field-label prefix and a `(CODE)` suffix (see Gap 3/4), while a
+  model-auto message would carry the bare raw text only.
+- **Post-add cleanup** (`removeDuplicateAutoMessages()`): after our tagged
+  message(s) for this error are added, any *other*, untagged message already
+  in `Messaging` matching the same (target, raw text) is actively removed
+  from the shared message model — implemented as active removal from
+  `Messaging` rather than a popover-only view filter, since `Messaging` is
+  the single source feeding both the message-button badge
+  (`formatter.messagePopoverButtonText/Type`) and the popover; removing
+  duplicates there keeps both in sync automatically with no extra binding
+  logic needed in `Detail.controller.js`/`Detail.view.xml`.
+- `sap.m.MessagePopover`'s own `groupItems: true` (now set in
+  `Detail.controller.js#_openMessagePopover`) covers the presentation half of
+  Gap 4 (errors first, warnings collapsible) essentially for free.
+
+### Gap 3 — Item/field attribution (implemented)
+- `MessageExtractor` gained `ITEM_TARGET_RE` to match a target reaching
+  through `_Item(SalesOrder='...',SalesOrderItem='000010')/...`, capturing
+  and de-zero-padding the item number → prefixes `"Item 10: <text>"`
+  (i18n key `msgItemPrefix`, format `"Item {0}"`).
+- Header-only targets (never reachable through `_Item`) get a short field
+  label prefix from a new `HEADER_FIELD_LABEL_I18N` map (`SoldToParty`/
+  `SoldToPartyForCreate` → `msgFieldProvider`, `SalesOrderType` →
+  `msgFieldOrderType`, `SalesOrganization` → `msgFieldSalesOrg`,
+  `DistributionChannel` → `msgFieldDistributionChannel`,
+  `OrganizationDivision` → `msgFieldDivision`). Unresolvable targets render
+  the raw text untouched — never dropped, per the prompt's own rule.
+- `extract()` gained an optional 3rd parameter, `oBundle` (a resource
+  bundle), needed for the i18n'd prefixes above; both call sites
+  (`onCreateSavePress`, and the now-newly-wired `onSectionSavePress`, see
+  Gap "MessageToast removal" below) pass `this.getResourceBundle()`. Existing
+  behavior is preserved if `oBundle` is omitted (attribution is skipped,
+  text still shown as before) — backward compatible, not a breaking change
+  to the function's existing contract.
+
+### Gap 4 — Code + severity fidelity (implemented, with a documented gap)
+- **Code**: `sap.ui.core.message.Message`'s public API was NOT confirmed to
+  expose a first-class, renderable `code` property in this UI5 version
+  (Onboarding guardrail 7 — never invent an API without verifying it) — the
+  code is stashed in `technicalDetails.code` (safe, arbitrary bag, also used
+  for dedup matching) AND appended to the display text as `"(VI/028)"`,
+  per the prompt's own fallback instruction ("if the popover item doesn't
+  render the code property, append it to the text instead") — confirmed the
+  current `MessageItem` template in `_openMessagePopover` only binds
+  `type`/`message`/`additionalText`/`description`, never a `code` property,
+  so the fallback path is the one actually exercised today.
+- **Severity mapping table** (`SEVERITY_MAP` in `MessageExtractor.js`):
+
+  | `@Common.numericSeverity` | UI5 `MessageType` |
+  |---|---|
+  | 1 | Success |
+  | 2 | Information |
+  | 3 | Warning |
+  | 4 | Error |
+  | absent / unrecognized | Error (fail-loud default, per the prompt) |
+
+  **TODO-VERIFY**: the exact annotation key/casing (`@Common.numericSeverity`)
+  has not been seen on a live error body from this backend yet — this is
+  the literal key name the prompt specified; flagging it as unverified
+  rather than silently assuming it's correct.
+- **Grouping**: `groupItems: true` on the `MessagePopover` (see Gap 2 above)
+  — errors first, warnings collapsible, via the control's own built-in
+  severity grouping rather than custom code.
+
+### Gap 5 — Success-with-messages: OBSERVED BEHAVIOR NOT CAPTURED
+No live backend access this session — could not exercise a real
+successful-save-with-transition-warnings scenario to observe whether
+`sap-messages`/action-response warnings land in `Messaging` automatically or
+whether the badge reflects them. Per the prompt's own instruction, nothing
+was built for this (no custom header parsing added). **Needs a live test**:
+save a change that's expected to succeed but carry a backend warning, then
+check `Messaging.getMessageModel().getData()` and the message button badge
+immediately after.
+
+### MessageToast removal from backend-failure paths
+- `Detail.controller.js#onSectionSavePress`'s non-conflict failure branch
+  previously showed a generic `MessageToast` (`editSaveError`) for every
+  change-mode save failure alike — this was the one still-generic backend-
+  failure path in the app and is now routed through the same
+  `MessageExtractor.extract()` + `_openMessagePopover()` pattern the create
+  flow already used, auto-expanding whichever section(s) the extracted
+  messages resolved to (falling back to the section being saved if none
+  resolved). The `editSaveError` i18n key is now unused but left in place
+  (not deleted — out of this task's scope to prune unrelated i18n).
+- `onCreateSavePress`'s `createPartialFailure` notice (order created despite
+  an enrichment/IoH failure) was also converted from a `MessageToast` to a
+  tracked `MessageExtractor.addNote(..., "Information")` call, so it shows
+  in the same popover (grouped as Information, per Gap 4) instead of a
+  separate, easy-to-miss toast channel, and gets cleared automatically by
+  Gap 1 on the next save attempt like any other extractor-added message.
+- Remaining `MessageToast` calls in `Detail.controller.js` (Validate button,
+  Items Excel-export failure, both save-success toasts, both pre-flight
+  client-side validation guards before any network call) are NOT
+  backend-failure paths and were deliberately left alone — grep for
+  `MessageToast\.show` in that file to re-verify this claim after any future
+  change.
+
+### Grep-check state (self-verified, static — not live-tested)
+- `source: "vrExtract"` tagging: present on every message
+  `MessageExtractor.extract()`/`addNote()` adds (verified by reading the
+  code — `SOURCE_TAG` is the one and only place the literal string is
+  defined, exported as `MessageExtractor.SOURCE_TAG`).
+- `MessageToast` absent from backend-failure paths in create/edit flows:
+  verified by grep — see "MessageToast removal" above for what's left and
+  why each is out of scope.
+- Sequencing prompt file: confirmed deleted (`file_search` found zero
+  matches after deletion).
+
+
 ## v5 Sticky Amendment realignment — scratch-context/replay restored (2026-08-28)
 
 `design/E008_CRUD1_v5_Sticky_Amendment.md` VOIDS the "Provider-first
