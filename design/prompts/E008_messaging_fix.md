@@ -12,7 +12,16 @@ On conflict: this file wins for this task's scope; the v5 amendment wins for cre
 - [ ] Reproduce the live fixture once before changing anything: create an order that triggers VI-028/FI-759; screenshot/record what the popover currently shows (baseline for the DoD comparison).
 - [ ] Check whether the V4 model auto-adds its own technical messages to Messaging on the same failure (count popover entries vs. distinct backend messages) — this determines how much Gap 2 matters.
 
-## 3. THE WORK (five gaps, in this order)
+## 3. THE WORK (Gap 0 first — it changes what the other gaps receive)
+
+### Gap 0 — Enable the bound-message channel (the reason the wire lacked specifics)
+The service declares `SAP__Messages` (Common.v1.Messages) on its entity types — RAP's bound-message channel, which freestyle apps must OPT INTO via `$select`. Our requests never did; F3893 (Fiori Elements) does automatically — that is how it receives the detailed messages from the same backend.
+- Add `SAP__Messages` to `$select` on: the Detail context binding (change mode), the SaveChanges operation binding (explicit `parameters: {$select: 'SAP__Messages'}` on its plain-path binding), and the create action's operation binding. Prefer explicit `$select` over `$$inheritExpandSelect` given the workaround bindings in play.
+- Verification experiment (do this FIRST, 15 min): reproduce the same failing order in F3893, network tab open; diff its SaveChanges batch part vs ours — URL `$select`/`$expand`, Prefer headers, and where the VI-028 text appears in the response (error body vs SAP__Messages vs header). Replicate the delta; record it in NOTES as the empirical message-channel spec.
+- After enabling: the V4 model auto-pushes bound messages into Messaging with resolved targets — Gaps 1–2 (clearing + dedupe) become load-bearing since messages now arrive on two channels.
+- Tail branch: if F3893 shows the SAME generic-only behavior for this case → SAP implementation gap → package evidence for an OSS incident (batch diff + debugger observation of FILL_FAILED_AND_REPORTED) and note in the ledger; continue with Gaps 1–5 against whatever channel does deliver.
+
+### The five gaps (in this order)
 
 ### Gap 1 — Pre-attempt clearing (stale messages)
 Before EVERY save attempt (create chain ①–④ entry point and change-mode save): remove prior messages that (a) were added by MessageExtractor — tag them on add via `technicalDetails: { source: "vrExtract" }` so they're surgically identifiable — or (b) are technical messages whose processor is the OData model. Do NOT blanket-clear `Messaging`: client-side validation messages from other sources must survive.
