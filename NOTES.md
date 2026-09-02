@@ -1,5 +1,54 @@
 # NOTES
 
+## Header Description/Net/Gross value + Item Brand (Industry Standard Name) — 2026-09-01
+
+Client requirement: wire up several new custom SDH (Sales Document Header)
+fields and a Product VH extension, none of which are yet reflected in the
+local cached metadata mirrors (`localService/metadata.xml`/`design/so.xml`)
+— trusted directly per the client's explicit field-name instruction, same as
+the Fund Type task's confirmed codes. **TODO-VERIFY on first live save**:
+`ZZ_KTEXT_SDH`/`ZZ_NET_VALUE_SDH`/`ZZ_GROSS_VALUE_SDH` (header) have no
+metadata confirmation in this repo yet - if the deploy 400s on any of these
+three, the real field name differs from what was given.
+
+- **`headerProperties.description` → `ZZ_KTEXT_SDH`**, opened for entry
+  ONLY in create mode (`Details.fragment.xml` - `Input` visible only when
+  `sectionFlags>/createMode`, gated by `createState>/providerChosen`; a plain
+  `Text` otherwise) — matches the client's literal ask ("Open this field for
+  entry on Create new order"), NOT wired as change-mode-editable. Added to
+  `ServiceSchema.updatableHeaderProperties` anyway — that map is also the
+  sole source of `createReplayHeaderProperties`
+  (`CreateOrderService.js#_replayHeaderProperties`, step ④'s header PATCH
+  after `SaveChanges`), the ONLY mechanism that can persist a value entered
+  during create (there is no create-action parameter for it). Flagged in a
+  code comment that this does NOT mean change-mode PATCHability is
+  confirmed - verify separately before ever adding a change-mode Input.
+- **`headerProperties.netValue`**: `TotalNetAmount` → `ZZ_NET_VALUE_SDH`
+  (bound in `Details.fragment.xml` and via `Detail.controller.js`'s
+  `detailNetValue` `ObjectNumber`, the latter already resolves through the
+  `ServiceSchema` constant so needed no direct edit).
+- **`headerProperties.grossAmount`**: `null` → `ZZ_GROSS_VALUE_SDH` (was
+  BLOCKED-BY-SERVICE; static "—" placeholder in `Details.fragment.xml`
+  replaced with a real `ObjectNumber`). `taxAmount` stays `null` - not part
+  of this request, still no header-level Tax field in the metadata.
+- **`itemProperties.brand` → `ZZIndustryStandardName`** (was `null`) and
+  **`productProperties.industryStandardName` → `IndustryStandardName`** (new)
+  — per the client, `I_ProductStdVH` is extended by `ZI_PRODUCTSTDVH_EXT` to
+  add this field to the NDC value help. Unlike the header fields above,
+  BOTH of these properties are already present in the cached metadata
+  mirror (`ZZIndustryStandardName` on `SalesOrderItemType`,
+  `IndustryStandardName` on `ProductType`) - no TODO-VERIFY needed here.
+  Wired: `Detail.controller.js#_openProductValueHelpDialog`'s `$select` now
+  includes `IndustryStandardName`; `onItemNdcValueHelpRequest` carries it
+  over onto the row's `ZZIndustryStandardName` alongside Product/
+  SalesOrderItemText. `Items.fragment.xml`'s Brand column cell is now a
+  read-only `Text` bound to the real property (never manually typed, only
+  ever set via NDC selection, per the client's "carried over" wording).
+  Also added `brand` to `CreateOrderService.js`'s item deep-create
+  `ITEM_PROPERTIES` (so a brand value picked during create-mode item entry
+  actually persists) and fixed `onItemsExport`'s Brand column to read the
+  real property instead of a hardcoded "—" (introduced by this same change).
+
 ## Fund Type (MaterialGroup2 / VBAP-MVGR2) opened for entry — 2026-08-31
 
 Client requirement: the Items table's Fund Type column (previously a static

@@ -198,7 +198,7 @@ sap.ui.define([
           optOut: oCtx.getProperty(ServiceSchema.itemProperties.optOutAncillary),
           itemNumber: oCtx.getProperty(ServiceSchema.itemProperties.itemNumber),
           exisId: oCtx.getProperty(ServiceSchema.itemProperties.exisId),
-          brand: "\u2014",
+          brand: oCtx.getProperty(ServiceSchema.itemProperties.brand),
           ndcCode: oCtx.getProperty(ServiceSchema.itemProperties.material),
           ndcDescription: oCtx.getProperty(ServiceSchema.itemProperties.itemText),
           qty: oCtx.getProperty(ServiceSchema.itemProperties.quantity),
@@ -429,6 +429,9 @@ sap.ui.define([
       this._openProductValueHelpDialog(oBundle.getText("ndcCodePickerTitle"), function (oItem) {
         oRowContext.setProperty(ServiceSchema.itemProperties.material, oItem[oProps.id]);
         oRowContext.setProperty(ServiceSchema.itemProperties.itemText, oItem[oProps.text]);
+        // Client requirement (2026-09-01): ZI_PRODUCTSTDVH_EXT - carry the NDC's
+        // IndustryStandardName over to the item's own brand field.
+        oRowContext.setProperty(ServiceSchema.itemProperties.brand, oItem[oProps.industryStandardName]);
       });
     },
 
@@ -695,7 +698,7 @@ sap.ui.define([
         items: {
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
-            $select: [oProps.id, oProps.text].join(",")
+            $select: [oProps.id, oProps.text, oProps.industryStandardName].join(",")
           },
           template: new StandardListItem({
             title: "{" + oProps.id + "}",
@@ -882,6 +885,13 @@ sap.ui.define([
         return;
       }
 
+      // Guard against a double-click firing the ①-④ replay (and its backend
+      // SaveChanges commit) twice before setBusy(true)'s overlay blocks input.
+      var oSaveBtn = this.getView().byId("createSaveBtn");
+      if (oSaveBtn && !oSaveBtn.getEnabled()) {
+        return;
+      }
+
       if (!oContext.getProperty(ServiceSchema.headerProperties.providerId)) {
         MessageToast.show(oBundle.getText("createRequestFieldRequired"));
         this._oSectionFactory.expandSection("details");
@@ -896,6 +906,9 @@ sap.ui.define([
         return;
       }
 
+      if (oSaveBtn) {
+        oSaveBtn.setEnabled(false);
+      }
       this.getView().setBusy(true);
       var sNewId;
 
@@ -904,8 +917,9 @@ sap.ui.define([
         // persisted context; the scratch context is already discarded by
         // CreateOrderService.save()). Enrichment/IoH failing from here on is a
         // partial-failure: the order stays created.
-        .then(function (oNewContext) {
-          sNewId = oNewContext.getProperty(ServiceSchema.keys.orderId);
+        .then(function (oResult) {
+          var oNewContext = oResult.context;
+          sNewId = oResult.orderId;
           var oEnrich = that.getView().getModel("createEnrich").getData();
           return CreateOrderService.enrich(oNewContext, {
             contactId: oEnrich.contactId,
@@ -931,6 +945,9 @@ sap.ui.define([
           that._completeCreate(sNewId);
         }, function (oError) {
           that.getView().setBusy(false);
+          if (oSaveBtn) {
+            oSaveBtn.setEnabled(true);
+          }
           // Fix 4 (MessageExtractor.js): targeted messages in the popover,
           // never a generic toast, kept from the Corrective Work Order.
           var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), oBundle);

@@ -45,7 +45,8 @@ sap.ui.define([
     ServiceSchema.itemProperties.unit,
     ServiceSchema.itemProperties.exisId,
     ServiceSchema.itemProperties.orderIntention,
-    ServiceSchema.itemProperties.fundType
+    ServiceSchema.itemProperties.fundType,
+    ServiceSchema.itemProperties.brand
   ];
 
   // Never JSON.stringify the message model's data in a log statement —
@@ -104,6 +105,11 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.distributionChannel] = ServiceSchema.salesArea.distributionChannel;
       oInitialData[ServiceSchema.headerProperties.division] = ServiceSchema.salesArea.organizationDivision;
       var oContext = oListBinding.create(oInitialData);
+      // Deleting this transient, never-submitted context later (Cancel, or
+      // save()'s own cleanup after replay) cancels its still-pending POST,
+      // which rejects created()'s promise - swallow it here since nothing
+      // else awaits it; otherwise it surfaces as an uncaught rejection.
+      oContext.created().catch(function () {});
       return { listBinding: oListBinding, context: oContext };
     },
 
@@ -331,8 +337,23 @@ sap.ui.define([
                     $$updateGroupId: CREATE_REPLAY_GROUP
                   }).getBoundContext();
                   return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData).then(function () {
-                    oScratchContext.delete();
-                    return oNewContext;
+                    // Both SaveChanges above and this PATCH just succeeded,
+                    // each re-running the same backend validation - collapse
+                    // the resulting exact-duplicate messages (see
+                    // MessageExtractor.dedupeMessages doc comment).
+                    MessageExtractor.dedupeMessages();
+                    // oScratchContext is a still-pending, never-submitted
+                    // transient create (deferred "vrCreate" group, nothing
+                    // was ever POSTed for it) - deleting it locally always
+                    // rejects with "Request canceled", which is expected/
+                    // benign here and must never surface as an uncaught error.
+                    oScratchContext.delete().catch(function () {});
+                    // oNewContext was only ever bound to a path, never GET'd -
+                    // getProperty() on it is a synchronous cache read that
+                    // fails ("invalid segment") since nothing populated the
+                    // cache yet. Return the already-known sNewId alongside it
+                    // instead of making callers call getProperty() on it.
+                    return { context: oNewContext, orderId: sNewId };
                   });
                 });
             });

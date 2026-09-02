@@ -18,25 +18,25 @@
     </headerToolbar>
     <columns>
       <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
-      <Column visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
-      <Column visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
-      <Column visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
-      <Column visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
-      <Column visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
-      <Column visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" /></Column>
-      <Column hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" /></Column>
-      <Column visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" /></Column>
-      <Column visible="{itemsColumns>/orderIntention}"><Text text="{i18n>colOrderIntention}" /></Column>
-      <Column visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" /></Column>
-      <Column visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
-      <Column visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
-      <Column hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
-      <Column visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
+      <Column width="4rem" visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
+      <Column width="4rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
+      <Column width="5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
+      <Column width="8rem" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
+      <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
+      <Column width="15rem" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" /></Column>
+      <Column width="6rem" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" /></Column>
+      <Column width="3rem" visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" /></Column>
+      <Column width="10rem" visible="{itemsColumns>/orderIntention}"><Text text="{i18n>colOrderIntention}" /></Column>
+      <Column width="7rem" visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" /></Column>
+      <Column width="7rem" visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
+      <Column width="7rem" visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
+      <Column width="6rem" hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
+      <Column width="10rem" visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
     </columns>
     <items>
       <ColumnListItem>
         <cells>
-          <MenuButton text="" icon="sap-icon://overflow" type="Transparent" visible="{itemsColumns>/rowAction}">
+          <MenuButton text="" icon="sap-icon://menu2" type="Transparent" visible="{itemsColumns>/rowAction}">
             <menu>
               <Menu>
                 <MenuItem text="{i18n>rowActionEdit}" enabled="false" />
@@ -50,10 +50,13 @@
           <Text text="{SalesOrderItem}" visible="{itemsColumns>/itemNumber}" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
             enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
-          <Text text="{= '\u2014'}" visible="{itemsColumns>/brand}" />
+          <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
+               carried over from the NDC's own IndustryStandardName on product
+               selection (onItemNdcValueHelpRequest) - never typed in directly. -->
+          <Text text="{ZZIndustryStandardName}" visible="{itemsColumns>/brand}" />
           <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !${SalesOrderItem} &amp;&amp; !${Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }"
+            editable="{:= ${sectionFlags>/items/editing} &amp;&amp; !${SalesOrderItem} &amp;&amp; !${Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }"
             showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
           <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
           <Input value="{RequestedQuantity}" visible="{itemsColumns>/qty}"
@@ -78,11 +81,11 @@
           <Select selectedKey="{MaterialGroup2}" visible="{itemsColumns>/fundType}"
             enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }">
             <core:Item key="VFC" text="{i18n>enumFundTypeVfc}"
-              enabled="{= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
+              enabled="{:= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
             <core:Item key="317" text="{i18n>enumFundType317}" />
             <core:Item key="S/L" text="{i18n>enumFundTypeState}" />
             <core:Item key="CHP" text="{i18n>enumFundTypeChip}"
-              enabled="{= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
+              enabled="{:= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
             <core:Item key="SPL" text="{i18n>enumFundTypeSplit}" />
             <core:Item key="PAN" text="{i18n>enumFundTypePan}" />
             <core:Item key="ARR" text="{i18n>enumFundTypeArr}" />

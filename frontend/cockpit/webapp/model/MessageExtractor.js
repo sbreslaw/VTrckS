@@ -252,6 +252,31 @@ sap.ui.define([
   var MessageExtractor = {
     SOURCE_TAG: SOURCE_TAG,
 
+    // Live evidence (2026-09-01): the create flow's own SaveChanges (step ③)
+    // and header PATCH replay (step ④) are TWO separate, both-successful
+    // requests that re-run the SAME backend user-exit/validation - each one
+    // legitimately carries its own SAP__Messages/sap-messages, so the V4
+    // model's automatic message handling adds the identical "has been
+    // saved"/"Document is incomplete" pair a second time verbatim, alongside
+    // whatever new message the second call actually introduces. Nothing here
+    // is an error to extract (both calls succeeded) - call once after the
+    // whole ①-④ replay settles to collapse exact repeats down to one.
+    dedupeMessages: function () {
+      var oSeen = {};
+      var aToRemove = Messaging.getMessageModel().getData().filter(function (oMessage) {
+        var sCode = oMessage.getCode ? oMessage.getCode() : "";
+        var sKey = sCode + "|" + (oMessage.getMessage ? oMessage.getMessage() : "");
+        if (oSeen[sKey]) {
+          return true;
+        }
+        oSeen[sKey] = true;
+        return false;
+      });
+      if (aToRemove.length) {
+        Messaging.removeMessages(aToRemove);
+      }
+    },
+
     // Gap 1 - pre-attempt clearing: call before EVERY save attempt (create
     // chain ①–④ entry point, change-mode save entry point). Removes only
     // (a) messages this module added (technicalDetails.source === SOURCE_TAG)

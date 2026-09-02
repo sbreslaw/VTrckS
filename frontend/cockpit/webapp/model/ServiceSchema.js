@@ -87,12 +87,14 @@ sap.ui.define([], function () {
       userStatus: "UserStatusDerived",
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
-      netValue: "TotalNetAmount",
-      // No header-level Tax/Gross amount field exists on SalesOrderManageType in
-      // design/so.xml (only TotalNetAmount) — TaxAmount/GrossAmount exist only on
-      // SalesOrderItemType. BLOCKED-BY-SERVICE at header level; see PHASE2_AUDIT.md.
+      // Client requirement (2026-09-01): real custom header fields (SDH -
+      // Sales Document Header - append), replacing the standard TotalNetAmount.
+      netValue: "ZZ_NET_VALUE_SDH",
+      // No header-level Tax field exists on SalesOrderManageType in design/so.xml
+      // (TaxAmount only exists on SalesOrderItemType) - still BLOCKED-BY-SERVICE.
       taxAmount: null,
-      grossAmount: null,
+      // Client requirement (2026-09-01): real custom header field (SDH append).
+      grossAmount: "ZZ_GROSS_VALUE_SDH",
       currency: "TransactionCurrency",
       paymentMethod: "PaymentMethod",
       salesOrderType: "SalesOrderType",
@@ -117,9 +119,12 @@ sap.ui.define([], function () {
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
-      // Not present on SalesOrderManageType in design/so.xml — no free-text
-      // "description"/"category" field found at header level. BLOCKED-BY-SERVICE.
-      description: "SalesOrder",
+      // Client requirement (2026-09-01): real custom header field (SDH append),
+      // open for entry on Create (Details.fragment.xml) - see
+      // updatableHeaderProperties below for the create-replay persistence note.
+      description: "ZZ_KTEXT_SDH",
+      // No real dedicated "category" field - aliased to SalesOrderType for
+      // display only, not wired as editable (see updatableHeaderProperties note).
       category: "SalesOrderType"
     },
 
@@ -188,7 +193,12 @@ sap.ui.define([], function () {
     // (BLOCKED-BY-SERVICE, see itemsColumns>/uom usage in Items.fragment.xml).
     productProperties: {
       id: "Product",
-      text: "Product_Text"
+      text: "Product_Text",
+      // Client requirement (2026-09-01): I_ProductStdVH extended by
+      // ZI_PRODUCTSTDVH_EXT to add this field - carried over to the item's
+      // own ZZIndustryStandardName (brand) on NDC selection, see
+      // onItemNdcValueHelpRequest in Detail.controller.js.
+      industryStandardName: "IndustryStandardName"
     },
 
     itemProperties: {
@@ -220,7 +230,10 @@ sap.ui.define([], function () {
       // No distinct "PO Reference" field at item level beyond PurchaseOrderByCustomer
       // (already used for ExIS ID) — BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md.
       poReference: null,
-      brand: null
+      // Client requirement (2026-09-01): real field, carried over from the NDC's
+      // own IndustryStandardName (productProperties above) on product selection,
+      // never typed in directly - see onItemNdcValueHelpRequest.
+      brand: "ZZIndustryStandardName"
     },
 
     customHeaderFields: [],
@@ -395,7 +408,15 @@ sap.ui.define([], function () {
       shippingCondition: "ShippingCondition",
       paymentTerms: "CustomerPaymentTerms",
       salesOffice: "SalesOffice",
-      salesGroup: "SalesGroup"
+      salesGroup: "SalesGroup",
+      // Client requirement (2026-09-01): needed here ONLY so the create-replay
+      // step (CreateOrderService.js#_replayHeaderProperties) actually PATCHes
+      // the value entered during Create - Description is deliberately NOT
+      // rendered as an editable Input in change mode (Details.fragment.xml
+      // shows create-mode-only), so its PATCHability on an EXISTING order is
+      // still unconfirmed/out of this task's scope - verify before ever
+      // wiring a change-mode Input for it.
+      description: "ZZ_KTEXT_SDH"
       // SalesOrganization/DistributionChannel/OrganizationDivision were tried
       // here 2026-08-21 and reverted same day: backend rejects the PATCH with
       // "Read-only fields must not be changed" on an existing order, despite

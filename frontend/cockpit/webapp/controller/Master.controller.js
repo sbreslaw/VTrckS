@@ -395,9 +395,10 @@ sap.ui.define([
           }
         },
         {
-          key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "40rem",
+          key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "50rem",
           createCell: function () {
-            return new Text({ text: formatter.masterDescription() });
+            return new Text({ text: { path: ServiceSchema.headerProperties.description, formatter: formatter.masterDescription.bind(formatter) } });
+            // return new Text({ text: formatter.masterDescription() });
           }
         },
         {
@@ -582,7 +583,7 @@ sap.ui.define([
         oTable.addColumn(oColumn);
       });
 
-      oTable.setFixedColumnCount(Math.min(FIXED_COLUMN_KEYS.length, aVisibleDefs.length));
+      // oTable.setFixedColumnCount(Math.min(FIXED_COLUMN_KEYS.length, aVisibleDefs.length));
       oTable.setVisibleRowCount(oLayout.rowCount || 12);
       this._iLastPersistedRowCount = oLayout.rowCount || 12;
 

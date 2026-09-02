@@ -148,8 +148,8 @@ sap.ui.define([
     },
 
     // BLOCKED-BY-SERVICE: no free-text order description on the header entity.
-    masterDescription: function () {
-      return EM_DASH;
+    masterDescription: function (sValue) {
+      return sValue || EM_DASH;
     },
 
     masterContact: function (sFullName) {

@@ -54,8 +54,12 @@
 								</f:label>
 
 								<f:fields>
-                  <!-- CRUD Task 2: no real Description/KTEXT field or update micro-action exists on this service - stays read-only (see ServiceSchema.js headerProperties.description note). -->
-                  <Text text="{SalesOrder}" tooltip="{i18n>editDescriptionUnavailable}" />
+                  <!-- Client requirement (2026-09-01): real field (ZZ_KTEXT_SDH),
+                       open for entry on Create only - change-mode PATCHability is
+                       unconfirmed, see ServiceSchema.js updatableHeaderProperties. -->
+                  <Text text="{ZZ_KTEXT_SDH}" visible="{= !${sectionFlags>/createMode} }" />
+                  <Input value="{ZZ_KTEXT_SDH}" visible="{sectionFlags>/createMode}"
+                    enabled="{createState>/providerChosen}" />
 								</f:fields>
 							</f:FormElement>
 
@@ -85,7 +89,7 @@
                     value="{createEnrich>/providerName}"
                     showValueHelp="true"
                     valueHelpOnly="true"
-                    editable="{= !${createEnrich>/providerName} }"
+                    editable="{:= !${createEnrich>/providerName} }"
                     visible="{sectionFlags>/createMode}"
                     tooltip="{i18n>providerLockedTooltip}"
                     valueHelpRequest=".onProviderValueHelpRequest" />
@@ -334,7 +338,7 @@
 									</Label>
 								</f:label>
  								<f:fields>
-                  <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" />
+                  <ObjectNumber number="{ZZ_NET_VALUE_SDH}" unit="{TransactionCurrency}" />
 								</f:fields>
 
               </f:FormElement>
@@ -363,8 +367,8 @@
 									</Label>
 								</f:label>
  								<f:fields>
-                  <Text text="{= '\u2014'}" />
-                  <!-- <ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}" /> -->
+                  <!-- Client requirement (2026-09-01): real field (ZZ_GROSS_VALUE_SDH). -->
+                  <ObjectNumber number="{ZZ_GROSS_VALUE_SDH}" unit="{TransactionCurrency}" />
 								</f:fields>
 
               </f:FormElement>
