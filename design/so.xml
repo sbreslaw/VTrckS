@@ -1,3 +1,4 @@
+This XML file does not appear to have any style information associated with it. The document tree is shown below.
 <edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" xmlns="http://docs.oasis-open.org/odata/ns/edm" Version="4.0">
 <edmx:Reference Uri="/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/Vocabularies(TechnicalName='%2FIWBEP%2FVOC_COMMUNICATION',Version='0001',SAP__Origin='LOCAL')/$value">
 <edmx:Include Namespace="com.sap.vocabularies.Communication.v1" Alias="Communication"/>
@@ -493,7 +494,6 @@
 <Property Name="UICT_LegacyOutputCntrl" Type="Edm.Boolean" Nullable="false"/>
 <Property Name="UserStatusDerived" Type="Edm.String" Nullable="false" MaxLength="30"/>
 <Property Name="ZZ_KTEXT_SDH" Type="Edm.String" Nullable="false" MaxLength="40"/>
-<Property Name="ZZ_BSARK_SDH" Type="Edm.String" Nullable="false" MaxLength="4"/>
 <Property Name="ZZ_NET_VALUE_SDH" Type="Edm.Decimal" Nullable="false" Precision="15" Scale="variable"/>
 <Property Name="ZZ_GROSS_VALUE_SDH" Type="Edm.Decimal" Nullable="false" Precision="15" Scale="variable"/>
 <Property Name="__CreateByAssociationControl" Type="com.sap.gateway.srvd.c_salesordermanage_sd.v0001.SalesOrderManageCbAControl"/>
@@ -1620,6 +1620,7 @@
 <Property Name="Product_Text" Type="Edm.String" Nullable="false" MaxLength="40"/>
 <Property Name="ProductExternalID" Type="Edm.String" Nullable="false" MaxLength="40"/>
 <Property Name="IndustryStandardName" Type="Edm.String" Nullable="false" MaxLength="18"/>
+<Property Name="BaseUnit" Type="Edm.String" Nullable="false" MaxLength="3"/>
 </EntityType>
 <EntityType Name="ShippingPointType">
 <Key>
@@ -3973,32 +3974,33 @@
 </Annotations>
 <Annotations Target="SAP__self.SalesOrderItemType/MaterialGroup1">
 <Annotation Term="SAP__common.IsUpperCase"/>
-<Annotation Term="SAP__common.Label" String="Material Group 1"/>
-<Annotation Term="SAP__common.Heading" String="MG 1"/>
+<Annotation Term="SAP__common.Label" String="Ordering Intention"/>
+<Annotation Term="SAP__common.Heading" String="Or I"/>
 <Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=MVGR1"/>
 </Annotations>
 <Annotations Target="SAP__self.SalesOrderItemType/MaterialGroup2">
 <Annotation Term="SAP__common.IsUpperCase"/>
-<Annotation Term="SAP__common.Label" String="Material Group 2"/>
-<Annotation Term="SAP__common.Heading" String="MG 2"/>
+<Annotation Term="SAP__common.Label" String="Fund Type"/>
+<Annotation Term="SAP__common.Heading" String="Fund"/>
 <Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=MVGR2"/>
 </Annotations>
 <Annotations Target="SAP__self.SalesOrderItemType/MaterialGroup3">
 <Annotation Term="SAP__common.IsUpperCase"/>
-<Annotation Term="SAP__common.Label" String="Material Group 3"/>
-<Annotation Term="SAP__common.Heading" String="MG 3"/>
+<Annotation Term="SAP__common.Label" String="Budget Exc"/>
+<Annotation Term="SAP__common.Heading" String="BExc"/>
 <Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=MVGR3"/>
 </Annotations>
 <Annotations Target="SAP__self.SalesOrderItemType/MaterialGroup4">
 <Annotation Term="SAP__common.IsUpperCase"/>
-<Annotation Term="SAP__common.Label" String="Material Group 4"/>
-<Annotation Term="SAP__common.Heading" String="MG 4"/>
+<Annotation Term="SAP__common.Label" String="Pandemic Indicator"/>
+<Annotation Term="SAP__common.Heading" String="PANI"/>
 <Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=MVGR4"/>
 </Annotations>
 <Annotations Target="SAP__self.SalesOrderItemType/MaterialGroup5">
 <Annotation Term="SAP__common.IsUpperCase"/>
-<Annotation Term="SAP__common.Label" String="Material Group 5"/>
-<Annotation Term="SAP__common.Heading" String="MG 5"/>
+<Annotation Term="SAP__common.Label" String="EUA Indicator"/>
+<Annotation Term="SAP__common.Heading" String="EUA"/>
+<Annotation Term="SAP__common.QuickInfo" String="Emergency Use Authorization Indicator"/>
 <Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=MVGR5"/>
 </Annotations>
 <Annotations Target="SAP__self.SalesOrderItemType/ZZIndustryStandardName">
@@ -8837,13 +8839,6 @@
 <Annotation Term="SAP__common.Label" String="User Status"/>
 <Annotation Term="SAP__core.Computed"/>
 </Annotations>
-<Annotations Target="SAP__self.SalesOrderManageType/ZZ_BSARK_SDH">
-<Annotation Term="SAP__common.IsUpperCase"/>
-<Annotation Term="SAP__common.Label" String="Purchase Order Type"/>
-<Annotation Term="SAP__common.Heading" String="POtyp"/>
-<Annotation Term="SAP__common.QuickInfo" String="Customer Purchase Order Type"/>
-<Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=BSARK"/>
-</Annotations>
 <Annotations Target="SAP__self.SalesOrderManageType/ZZ_NET_VALUE_SDH">
 <Annotation Term="SAP__common.Label" String="Net Value"/>
 <Annotation Term="SAP__core.Computed"/>
@@ -11757,10 +11752,6 @@
 <PropertyValue Property="Value" Path="ZZ_KTEXT_SDH"/>
 </Record>
 <Record Type="SAP__UI.DataField">
-<PropertyValue Property="Label" String="Customer PO Type"/>
-<PropertyValue Property="Value" Path="ZZ_BSARK_SDH"/>
-</Record>
-<Record Type="SAP__UI.DataField">
 <PropertyValue Property="Label" String="Net Value"/>
 <PropertyValue Property="Value" Path="ZZ_NET_VALUE_SDH"/>
 </Record>
@@ -11845,10 +11836,6 @@
 <Record Type="SAP__UI.DataField">
 <PropertyValue Property="Label" String="Sales Order Text"/>
 <PropertyValue Property="Value" Path="ZZ_KTEXT_SDH"/>
-</Record>
-<Record Type="SAP__UI.DataField">
-<PropertyValue Property="Label" String="Customer PO Type"/>
-<PropertyValue Property="Value" Path="ZZ_BSARK_SDH"/>
 </Record>
 <Record Type="SAP__UI.DataField">
 <PropertyValue Property="Label" String="Net Value"/>
@@ -20311,6 +20298,13 @@
 <Annotation Term="SAP__common.Heading" String="Industry Std Desc."/>
 <Annotation Term="SAP__common.QuickInfo" String="Industry Standard Description (such as ANSI or ISO)"/>
 <Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=NORMT"/>
+</Annotations>
+<Annotations Target="SAP__self.ProductType/BaseUnit">
+<Annotation Term="SAP__common.IsUnit"/>
+<Annotation Term="SAP__common.Label" String="Base Unit of Measure"/>
+<Annotation Term="SAP__common.Heading" String="BUn"/>
+<Annotation Term="SAP__common.QuickInfo" String="Base Unit of Measure"/>
+<Annotation Term="SAP__common.DocumentationRef" String="urn:sap-com:documentation:key?=type=DE&id=MEINS"/>
 </Annotations>
 <Annotations Target="SAP__self.ProductType">
 <Annotation Term="SAP__common.Label" String="Product Value Help"/>
