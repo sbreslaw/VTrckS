@@ -413,7 +413,11 @@ sap.ui.define([
       oBinding.create({
         Product: "",
         RequestedQuantity: null,
-        RequestedQuantityUnit: ServiceSchema.createPayloadUom
+        RequestedQuantityUnit: ServiceSchema.createPayloadUom,
+        // Nullable="false" (design/so.xml) - seeded here too, not just on
+        // change (onProdQtyChange), so a row never carries an unset Int32.
+        ZZVFCQTY: 0,
+        ZZSTATEQTY: 0
       });
     },
 
@@ -434,6 +438,23 @@ sap.ui.define([
         oRowContext.setProperty(ServiceSchema.itemProperties.brand, oItem[oProps.industryStandardName]);
       });
     },
+
+    onProdQtyChange: function( oEvent) {
+      var oRowContext = oEvent.getSource().getBindingContext();
+      var sQty = oEvent.getParameter('value');
+      // ZZVFCQTY is Edm.Int32 (design/so.xml) - RequestedQuantity is
+      // Edm.Decimal, so this Input's own "value" here is that type's
+      // formatted decimal string (e.g. "67.000"); sending that verbatim
+      // for an Int32 property fails with "invalid value", and the Gateway's
+      // OWN error response for that failure comes back malformed enough
+      // that the client can't even parse it ("Error while parsing an XML
+      // stream") - always send a real, rounded integer instead.
+      var iQty = Math.round(parseFloat(sQty));
+      oRowContext.setProperty(ServiceSchema.itemProperties.stateQty, isNaN(iQty) ? 0 : iQty);
+      
+      oRowContext.setProperty('ZZ1_SKIPADDANC_SDI', true);
+    },
+
 
     _endEditSession: function (sSectionId) {
       var oFlags = this.getView().getModel("sectionFlags");

@@ -46,7 +46,8 @@ sap.ui.define([
     ServiceSchema.itemProperties.exisId,
     ServiceSchema.itemProperties.orderIntention,
     ServiceSchema.itemProperties.fundType,
-    ServiceSchema.itemProperties.brand
+    ServiceSchema.itemProperties.brand,
+    ServiceSchema.itemProperties.vfcQty
   ];
 
   // Never JSON.stringify the message model's data in a log statement —
@@ -245,13 +246,20 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP,
             $select: "SAP__Messages"
           });
+          var _hasSymbols=function(input) {
+            const regex = /[^a-zA-Z0-9_-\s]/; // Matches any character that is not a letter, digit, or space
+            return regex.test(input);
+          }
           aScratchItemContexts.forEach(function (oItemContext) {
             var oItemData = oItemContext.getObject() || {};
             var oNewItemData = {};
-            ITEM_PROPERTIES.forEach(function (sProperty) {
+            Object.keys(oItemData).forEach(function (sProperty) {
+            // ITEM_PROPERTIES.forEach(function (sProperty) {
+             if(!_hasSymbols(sProperty)) {
               if (oItemData[sProperty] !== undefined) {
                 oNewItemData[sProperty] = oItemData[sProperty];
               }
+             } 
             });
             oStickyItemsBinding.create(oNewItemData);
           });

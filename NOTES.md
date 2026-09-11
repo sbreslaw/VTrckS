@@ -1,5 +1,36 @@
 # NOTES
 
+## Item ZZVFCQTY (Edm.Int32 quantity mirror) — 2026-09-10
+
+Client-added `onProdQtyChange` (Detail.controller.js) keeps a new custom item
+field, `ZZVFCQTY` (C_SALESORDERITEMMANAGE extension, `Edm.Int32`), mirrored to
+`RequestedQuantity` (`Edm.Decimal`) whenever the Qty input changes.
+
+- **Root cause of the live crash**: the Quantity `Input`'s `change` event
+  value is `RequestedQuantity`'s OWN type-formatted decimal string (e.g.
+  `"67.000"`, matching its Scale) - sending that verbatim for an `Edm.Int32`
+  property fails Gateway-side deserialization ("Property 'ZZVFCQTY' ... has
+  invalid value '67.000'"), and that failure is severe enough that the
+  Gateway's OWN error response comes back malformed - the client can't even
+  parse it ("Error while parsing an XML stream"), which cascades into every
+  OTHER request in the same batch failing to parse too (the sticky item
+  POST's automatic retry, the best-effort `DiscardChanges` cleanup).
+- **Fix**: `onProdQtyChange` now sends `Math.round(parseFloat(sQty))` (a
+  real JS integer, never the decimal string), falling back to `0` on `NaN`.
+  Added `ServiceSchema.itemProperties.vfcQty` (`"ZZVFCQTY"`) instead of the
+  hardcoded literal, and added it to `CreateOrderService.js`'s item
+  deep-create `ITEM_PROPERTIES` whitelist - it was missing there, which is
+  the likely explanation for the client's own separate report that a
+  manually-`parseInt`'d attempt sent a correct `67` in the JSON payload but
+  the backend still recorded `0` (a value not in that whitelist array is
+  silently dropped from the deep-create payload entirely, regardless of
+  what's staged on the create-mode scratch row). Also seeded `ZZVFCQTY: 0`
+  in `onItemsAddRow` (`Nullable="false"` per `design/so.xml`, matching how
+  `RequestedQuantity`/`RequestedQuantityUnit` are already seeded there).
+- **Not yet live-verified** - ask for a fresh redeploy + create-flow test
+  (enter a Qty, confirm `ZZVFCQTY` arrives as a plain integer in the item
+  deep-create payload and the backend records the matching value, not 0).
+
 ## Header Description/Net/Gross value + Item Brand (Industry Standard Name) — 2026-09-01
 
 Client requirement: wire up several new custom SDH (Sales Document Header)

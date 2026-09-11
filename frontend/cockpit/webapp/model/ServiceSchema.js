@@ -233,7 +233,15 @@ sap.ui.define([], function () {
       // Client requirement (2026-09-01): real field, carried over from the NDC's
       // own IndustryStandardName (productProperties above) on product selection,
       // never typed in directly - see onItemNdcValueHelpRequest.
-      brand: "ZZIndustryStandardName"
+      brand: "ZZIndustryStandardName",
+      // Client requirement (2026-09-10): C_SALESORDERITEMMANAGE extension,
+      // Edm.Int32 (design/so.xml) - RequestedQuantity is Edm.Decimal, so this
+      // must always be sent as a real rounded integer, never that property's
+      // own decimal-formatted display string (see onProdQtyChange in
+      // Detail.controller.js - a non-integer value here crashes the Gateway
+      // hard enough that even ITS error response comes back malformed).
+      vfcQty: "ZZVFCQTY",
+      stateQty: "ZZSTATEQTY"
     },
 
     customHeaderFields: [],

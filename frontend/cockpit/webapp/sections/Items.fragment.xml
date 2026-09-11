@@ -60,7 +60,7 @@
             showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
           <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
           <Input value="{RequestedQuantity}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" type="Number" textAlign="End" />
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- ServiceSchema.createPayloadUom ("EA") is only a starting default (onItemsAddRow) -
                materials not maintained for EA reject at SaveChanges (RAP_SD_SLS_COMMON/007,
                "Sales unit EA is not defined for item..."), so this must be user-correctable. -->
