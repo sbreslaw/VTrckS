@@ -1,0 +1,43 @@
+Following fields are missing from the C_SALESORDERMANAGE_SD and might have to be added to extension. 
+-	Priority 
+-	Category ZZ_BSARK_SDH (CustomerPurchaseOrderType)  - V
+-	Tax Amount (Calc from Item)
+-	Service Org Unit - Remove
+-	Service Organization - Remove
+-	Notes (TBD)
+
+Following Value Help entities are needed (if some entities already implemented please specify):
+-	Contact ZUI_Providerorder_srv -> ProviderContact
+-	Employee Responsible (TBD)
+-	Priority (DeliveryPriorityType)
+-	Category (CustomerPurchaseOrderTypeType)
+-	Status (TBD)
+-	NDC Code (Extend Product)
+	- include Base UOM
+	- We need to include all necessary attributes from MVKE for the Product Extension (at least MVGR1 - 5), MTPOS. 
+	- to enable Net Amount calculation include unit price per the unit.
+
+-	Sales Organization (SalesOrganizationType)
+-	Provider Address (TBD if needed)
+-	Shipping Conditions (ShippingConditionType)
+-	Fund Type
+	- Fund, Fund Name, zzTargetField. This way the funding dialog will only list funds available per FundType VH and map quantity values to the [target] field - item[fund.zzTargetField] = Qty
+
+Extension fields per Item
+	- Fund split enabled (Boolean flag). When enabled, the split dialog will allow splitting between funds available in FundTypeVH
+	- Base(Default) Fund type: For some items it provides drop down value help (we need the entity for VH) and for some items it’s read only, defaulted to some values and no drop down. This should probably go along with the Fund 	Split Enabled flag. If split is disabled, the Base Fund type should be set to the default fund type and will appear read only in the item table. 'Split' action will be disabled for this item
+	- Order Intention (calc)
+	- Delivery Status
+	- Net Value
+	- 
+
+
+Following clarifications on the UI rules are needed – the observations are based on CRM_UI:
+o	PO Ref. Field is read-only. Provided mapping in Excel document states: “Required for Direct Ship Vaccine with Fund Type STATE or CHIP selected”. In my test Fund type ‘STATE’ is selected however PO Reference field is read-only and not required. Exact logic is needed
+o	Calculation (Auto-population) logic is needed for UOM, Order Intention, Delivery Status, Net Value
+o	Rejection Reason: the column exist in CRM_UI and available for some items during order creation. Functionality is unclear – why do I need to select rejection reason when creating new order and selecting new item??
+o	Opt-Out Ancilliary: the logic behind this checkbox in CRM_UI is not clear. How should this be implemented in Fiori app? It’s available until I select item by NDC code, after selection the check box is not available (??). 
+-	Price Totals
+o	What entityset this section is driven by? Exact functionality is not clear. When creating new order it seems to be auto-populated, some items have ‘Delete’ button. ‘Add’ button was briefly available but after I clicked it switched to disabled. I need logic specs behind this section
+-	Validation rules
+o	It seems the CRM_UI runs validations are every user entry. CRM_UI being the WD-Abap application maintains permanent session and runs validations in PAI constantly populating the messages. Fiori applications are stateless and do not have ‘PAI’ to run after each keystroke. How should the validation logic be implemented? Run automatically on any change to any field or create a dedicated ‘Validate’ button and have users trigger validations on ‘as-needed’ basis? 
