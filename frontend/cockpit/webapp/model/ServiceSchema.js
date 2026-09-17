@@ -53,7 +53,20 @@ sap.ui.define([], function () {
       // top-level entity set (ProductType, part of this same service - see
       // so.xml) rather than the dedicated c_slsordprodbyslsorgdistrchnl F4
       // service referenced by the Product property's ValueListReferences.
-      product: "Product"
+      product: "Product",
+      // Session Prompt (Detail View Adjustments) 3.2: real top-level fixed-
+      // values VH entity set (CustomerPurchaseOrderTypeType, design/so.xml
+      // ~line 718 - CustomerPurchaseOrderType/CustomerPurchaseOrderType_Text),
+      // same shape as ShippingCondition/SalesOffice etc. below.
+      customerPurchaseOrderType: "CustomerPurchaseOrderType",
+      // 3.9: real top-level fixed-values VH entity set (PartnerFunctionType,
+      // so.xml ~line 1250 - PartnerFunction/PartnerFunction_Text/
+      // SDDocumentPartnerType).
+      partnerFunction: "PartnerFunction",
+      // 3.9: HeaderPartnerType (so.xml ~line 1065), reached in this app only
+      // via the header's _Partner navigation (never queried top-level) -
+      // listed here for completeness/grep-isolation, not used as a bind path.
+      headerPartner: "HeaderPartner"
     },
 
     navigation: {
@@ -111,8 +124,13 @@ sap.ui.define([], function () {
       billingBlockStatus: "OverallBillingBlockStatus",
       billingStatus: "OverallOrdReltdBillgStatus",
       paymentTerms: "CustomerPaymentTerms",
-      // No header-level Priority field/nav exists (see navigation comment above) —
-      // BLOCKED-BY-SERVICE at header level; only present per-item.
+      // Session Prompt (Detail View Adjustments) 3.1: still no real header-level
+      // Priority property/nav on SalesOrderManageType (confirmed again in so.xml
+      // Step-0 reread) - Priority stays a VIRTUAL header field, computed from/
+      // propagated to item DeliveryPriority (itemProperties.deliveryPriority
+      // below), never a header property to bind/PATCH/select here. Left null so
+      // any accidental future header-property reference fails loudly instead of
+      // silently binding a nonexistent path.
       priority: null,
       orderReason: "SDDocumentReason",
       // No header-level "Partner" property exists either — Ship-To-Party ID/name
@@ -123,9 +141,20 @@ sap.ui.define([], function () {
       // open for entry on Create (Details.fragment.xml) - see
       // updatableHeaderProperties below for the create-replay persistence note.
       description: "ZZ_KTEXT_SDH",
-      // No real dedicated "category" field - aliased to SalesOrderType for
-      // display only, not wired as editable (see updatableHeaderProperties note).
-      category: "SalesOrderType"
+      // Session Prompt (Detail View Adjustments) 3.2: rebound from the old
+      // SalesOrderType display-only alias to the REAL, independently writable
+      // CustomerPurchaseOrderType property (so.xml ~line 389, MaxLength 4, its
+      // own CustomerPurchaseOrderType VH entity set - entitySets.
+      // customerPurchaseOrderType above) - superseades the retired ZZ_BSARK_SDH/
+      // enum-based Category field entirely. See updatableHeaderProperties below.
+      category: "CustomerPurchaseOrderType",
+      // Session Prompt (Detail View Adjustments) 3.3: still no header-level Tax
+      // field on SalesOrderManageType (TaxAmount only exists on
+      // SalesOrderItemType, see itemProperties.taxAmount below) -
+      // BLOCKED-BY-SERVICE as a real header property; the Details fragment's
+      // Tax Amount field is a CLIENT-SIDE sum of item TaxAmount instead (never
+      // sent/read here) - see Detail.controller.js#_computeHeaderTaxAmount.
+      taxAmount: null
     },
 
     // Fields reached via the header's single-cardinality _SoldToPartyContactInfo
@@ -198,7 +227,12 @@ sap.ui.define([], function () {
       // ZI_PRODUCTSTDVH_EXT to add this field - carried over to the item's
       // own ZZIndustryStandardName (brand) on NDC selection, see
       // onItemNdcValueHelpRequest in Detail.controller.js.
-      industryStandardName: "IndustryStandardName"
+      industryStandardName: "IndustryStandardName",
+      // Session Prompt (Detail View Adjustments) 3.7: real property on
+      // ProductType (so.xml ~line 1615, MaxLength 3) - carried over to the
+      // item's RequestedQuantityUnit on NDC selection (read-only from here on),
+      // same pattern as industryStandardName/brand above.
+      baseUnit: "BaseUnit"
     },
 
     itemProperties: {
@@ -241,7 +275,27 @@ sap.ui.define([], function () {
       // Detail.controller.js - a non-integer value here crashes the Gateway
       // hard enough that even ITS error response comes back malformed).
       vfcQty: "ZZVFCQTY",
-      stateQty: "ZZSTATEQTY"
+      stateQty: "ZZSTATEQTY",
+      // Session Prompt (Detail View Adjustments) Items grid task: remaining
+      // per-fund-type quantity mirrors (MaterialGroup2-gated, one active per
+      // item - see Detail.controller.js#onFundTypeChange/onProdQtyChange).
+      // All Edm.Int32 Nullable="false" (design/so.xml), seeded to 0 on Add.
+      qty317: "ZZ317QTY",
+      chipQty: "ZZCHIPQTY",
+      panQty: "ZZPANQTY",
+      resQty: "ZZRESQTY",
+      // Session Prompt (Detail View Adjustments) 3.1: real property on
+      // SalesOrderItemType (so.xml ~line 112, MaxLength 2) - this is the ONLY
+      // place Priority actually lives; the Details section's header Priority
+      // field is a virtual read/write projection over this per-item value (see
+      // Detail.controller.js#_computeHeaderPriority/_propagatePriorityToItems).
+      // Text reached via navigation.itemToDeliveryPriority (_DeliveryPriority).
+      deliveryPriority: "DeliveryPriority",
+      // Session Prompt (Detail View Adjustments) 3.3: real property on
+      // SalesOrderItemType (so.xml ~line 131) - summed client-side into the
+      // virtual header Tax Amount field (headerProperties.taxAmount is null;
+      // this is the only real source).
+      taxAmount: "TaxAmount"
     },
 
     customHeaderFields: [],
@@ -351,6 +405,19 @@ sap.ui.define([], function () {
     enrichmentAction: null,
     iohCreateAction: null,
 
+    // Session Prompt (Detail View Adjustments) 3.9: the ONLY way to add a new
+    // HeaderPartner row - Container/HeaderPartner InsertRestrictions.
+    // Insertable is statically false (so.xml ~15249), so a plain
+    // oListBinding.create() against the _Partner navigation always 405s
+    // regardless of payload. Bound action (so.xml ~2346, EntitySetPath=
+    // "_it/_Partner", IsBound=true), bound directly to the header
+    // (SalesOrderManageType) context - takes PartnerFunction as its only
+    // parameter and returns the new HeaderPartnerType row (Customer is NOT a
+    // parameter - set via a follow-up PATCH, since UpdateRestrictions.
+    // NonUpdatableProperties only lists PartnerFunction, not Customer - so.xml
+    // same block). See Detail.controller.js#onPartiesAddConfirm.
+    createPartnerAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.CreatePartner",
+
     // Org Data fields confirmed creatable-only (writable at document creation,
     // rejected by the backend on an existing order — see updatableHeaderProperties
     // comment below/NOTES.md "CRUD Task 2 follow-up"). Still not user-editable
@@ -364,6 +431,30 @@ sap.ui.define([], function () {
     statusProperties: {
       code: "OverallSDProcessStatus",
       text: "OverallSDProcessStatus_Text"
+    },
+
+    // HeaderPartnerType (so.xml ~line 1065) - reached only via the header's
+    // _Partner navigation (navigation.headerToPartner), never queried
+    // top-level. Session Prompt (Detail View Adjustments) 3.9.
+    headerPartnerProperties: {
+      partnerFunction: "PartnerFunction",
+      // Customer is the real, settable partner-number field (set via a PATCH
+      // after CreatePartner, see createPartnerAction above); Partner
+      // (Computed, Label "Customer" in so.xml) is a generic display-only
+      // mirror used for RO rendering of already-created rows.
+      customer: "Customer",
+      partner: "Partner",
+      fullName: "FullName",
+      address: "FormattedPostalAddressDesc",
+      // Dynamic per-row capability structs (so.xml ~1065) - Delete/Update
+      // enablement for each HeaderPartner row must read these, not a static
+      // flag (Container/HeaderPartner UpdateRestrictions/DeleteRestrictions
+      // are both dynamic Path expressions, not static booleans).
+      entityControl: "__EntityControl"
+      // NOTE: no "is main partner" boolean/flag anywhere on HeaderPartnerType -
+      // confirmed absent from so.xml. The Parties Involved "Main Partner"
+      // column is therefore unbound/disabled - see PartiesInvolved.fragment.xml
+      // // TODO(main-partner) and OPEN_QUESTIONS.md.
     },
 
     // Value-help entity code/text property names for the filter ComboBoxes added
@@ -390,7 +481,47 @@ sap.ui.define([], function () {
       salesOfficeCode: "SalesOffice",
       salesOfficeText: "SalesOffice_Text",
       salesGroupCode: "SalesGroup",
-      salesGroupText: "SalesGroup_Text"
+      salesGroupText: "SalesGroup_Text",
+      // Session Prompt (Detail View Adjustments) 3.2/3.9.
+      customerPurchaseOrderTypeCode: "CustomerPurchaseOrderType",
+      customerPurchaseOrderTypeText: "CustomerPurchaseOrderType_Text",
+      partnerFunctionCode: "PartnerFunction",
+      partnerFunctionText: "PartnerFunction_Text"
+    },
+
+    // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
+    // custom service (zui_providerorder_srv, manifest.json model "po") -
+    // ProviderContact is the only entity this app reads from it this session;
+    // ZZ_IoH stays ON HOLD (do not wire - see 3.8/NOTES.md) and ProductUOM is
+    // unused/unwired (noted only, see OPEN_QUESTIONS.md).
+    providerOrderService: {
+      // TODO-VERIFY: URL follows the standard OData v4 SEGW/RAP binding-name
+      // convention (design/zui_providerorder_meta.xml service definition name
+      // "zui_providerorder_srv") mirrored from mainService's own
+      // /<binding>/srvd/sap/<definition>/0001/ shape - the actual bound service
+      // name (SICF/SEGW binding) was never independently confirmed against a
+      // live system in this session (no backend access available - see
+      // Onboarding guardrail on inventing endpoints). Verify in
+      // /IWFND/MAINT_SERVICE or the Fiori launchpad's service catalog before
+      // relying on this in a live test.
+      entitySets: {
+        providerContact: "ProviderContact"
+      },
+      // ProviderContactType (design/zui_providerorder_meta.xml) - key is
+      // BusinessPartnerCompany + BusinessPartnerPerson; BusinessPartnerCompany
+      // is assumed to correlate 1:1 with this app's SoldToParty/Provider id
+      // (both are Business Partner customer numbers) - TODO-VERIFY: the exact
+      // KUNNR-to-BusinessPartnerCompany mapping convention was never
+      // independently confirmed live (no backend access this session).
+      providerContactProperties: {
+        businessPartnerCompany: "BusinessPartnerCompany",
+        businessPartnerPerson: "BusinessPartnerPerson",
+        businessPartnerPersonText: "BusinessPartnerPerson_Text",
+        isStandardRelationship: "IsStandardRelationship",
+        relationshipCategory: "RelationshipCategory",
+        validityStartDate: "ValidityStartDate",
+        validityEndDate: "ValidityEndDate"
+      }
     },
 
     // --- CRUD Task 2 (Change Mode) — see design/Work Order 2 - CRUD Task 2 -
@@ -402,12 +533,15 @@ sap.ui.define([], function () {
     // if a draftActions block ever reappears here, delete it, it's wrong.
     //
     // Step-0 finding (deviates from the work order's assumption): Priority has
-    // NO header-level field at all (item-level only, see headerProperties.priority
-    // above) and Category has no real dedicated field (aliased to SalesOrderType
-    // for display only) — neither is wired as editable here. Wiring "Category" as
-    // editable would silently PATCH SalesOrderType on a live SD order. Only
-    // Order Reason and ExIS ID/Customer Reference are confirmed real, editable
-    // header fields (no Core.Immutable/Computed annotation in the metadata).
+    // NO header-level field at all (item-level only, see itemProperties.
+    // deliveryPriority above) - it is never PATCHed as a header property, even
+    // though it now has a real, user-facing header UI (propagated to every
+    // item instead, see Detail.controller.js#_propagatePriorityToItems). Only
+    // Order Reason, ExIS ID/Customer Reference, Shipping Condition, Payment
+    // Terms, Sales Office/Group, Description, and (Session Prompt, Detail View
+    // Adjustments 3.2) Category/CustomerPurchaseOrderType are confirmed real,
+    // editable header fields (no Core.Immutable/Computed annotation in the
+    // metadata).
     updatableHeaderProperties: {
       orderReason: "SDDocumentReason",
       exisId: "PurchaseOrderByCustomer",
@@ -424,7 +558,13 @@ sap.ui.define([], function () {
       // shows create-mode-only), so its PATCHability on an EXISTING order is
       // still unconfirmed/out of this task's scope - verify before ever
       // wiring a change-mode Input for it.
-      description: "ZZ_KTEXT_SDH"
+      description: "ZZ_KTEXT_SDH",
+      // Session Prompt (Detail View Adjustments) 3.2: real, independently
+      // writable field (headerProperties.category above) - confirmed no
+      // static Immutable/Computed annotation in so.xml, same as the other
+      // fields in this list. Retires the old ZZ_BSARK_SDH/enum-based Category
+      // concept entirely (never a real header field to begin with).
+      category: "CustomerPurchaseOrderType"
       // SalesOrganization/DistributionChannel/OrganizationDivision were tried
       // here 2026-08-21 and reverted same day: backend rejects the PATCH with
       // "Read-only fields must not be changed" on an existing order, despite

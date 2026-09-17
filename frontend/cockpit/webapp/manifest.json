@@ -14,6 +14,13 @@
                     "odataVersion": "4.0",
                     "localUri": "localService/metadata.xml"
                 }
+            },
+            "providerOrderService": {
+                "uri": "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
             }
         },
         "sourceTemplate": {
@@ -76,6 +83,14 @@
                             "submit": "API"
                         }
                     }
+                }
+            },
+            "po": {
+                "dataSource": "providerOrderService",
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "groupId": "$auto"
                 }
             },
             "view": {

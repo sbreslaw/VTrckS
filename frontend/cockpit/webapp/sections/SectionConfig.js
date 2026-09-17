@@ -34,10 +34,14 @@ sap.ui.define([], function () {
     { id: "scheduledActions", titleKey: "sectionScheduledActions", fragment: "cdc.vaccreq.sections.ScheduledActions", expanded: false, editable: false },
     { id: "status", titleKey: "sectionStatus", fragment: "cdc.vaccreq.sections.Status", expanded: false, editable: false },
     { id: "dates", titleKey: "sectionDates", fragment: "cdc.vaccreq.sections.Dates", expanded: false, editable: false },
-    // New in CRUD Task 1 v3 \u2014 both render read-only/placeholder content in
-    // every mode (no backing determination-result read or attachment entity
-    // exists in this service either); see the fragments for detail.
-    { id: "partiesInvolved", titleKey: "sectionPartiesInvolved", fragment: "cdc.vaccreq.sections.PartiesInvolved", expanded: false, editable: false, createVisible: true },
+    // New in CRUD Task 1 v3 \u2014 Attachments renders read-only/placeholder
+    // content in every mode (no backing attachment entity exists in this
+    // service). Session Prompt (Detail View Adjustments) 3.9: Parties
+    // Involved is NO LONGER createVisible \u2014 CreatePartner (the only way to
+    // add a HeaderPartner row) is bound to a real, already-persisted
+    // SalesOrderManageType context and cannot target the createMode scratch
+    // transient context, so the section is hidden until the order is saved.
+    { id: "partiesInvolved", titleKey: "sectionPartiesInvolved", fragment: "cdc.vaccreq.sections.PartiesInvolved", expanded: false, editable: false },
     { id: "attachments", titleKey: "sectionAttachments", fragment: "cdc.vaccreq.sections.Attachments", expanded: false, editable: false, createVisible: true }
   ];
 

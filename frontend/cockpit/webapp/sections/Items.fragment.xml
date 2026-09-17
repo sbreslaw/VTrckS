@@ -19,7 +19,8 @@
     <columns>
       <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
       <Column width="4rem" visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
-      <Column width="4rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
+      <!-- Item # is a client-side-only placeholder (Detail.controller.js#_computeNextItemNumber), never sent to the backend - hidden in createMode so it doesn't read as a real assigned number. -->
+      <Column width="4rem" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${sectionFlags>/createMode} }"><Text text="{i18n>colItemNumber}" /></Column>
       <Column width="5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
       <Column width="8rem" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
       <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
@@ -31,7 +32,8 @@
       <Column width="7rem" visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
       <Column width="7rem" visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
       <Column width="6rem" hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
+      <!-- Rejection Reason only ever applies to an already-existing order's items - meaningless in createMode. -->
+      <Column width="10rem" visible="{= ${itemsColumns>/rejectionReason} &amp;&amp; !${sectionFlags>/createMode} }"><Text text="{i18n>colRejectionReason}" /></Column>
     </columns>
     <items>
       <ColumnListItem>
@@ -40,14 +42,15 @@
             <menu>
               <Menu>
                 <MenuItem text="{i18n>rowActionEdit}" enabled="false" />
-                <MenuItem text="{i18n>rowActionDelete}" enabled="false" />
+                <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
+                  enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
                 <MenuItem text="{i18n>rowActionFundSplit}" enabled="false" />
               </Menu>
             </menu>
           </MenuButton>
           <CheckBox selected="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}"
             enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
-          <Text text="{SalesOrderItem}" visible="{itemsColumns>/itemNumber}" />
+          <Text text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${sectionFlags>/createMode} }" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
             enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
           <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
@@ -61,40 +64,37 @@
           <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
           <Input value="{RequestedQuantity}" visible="{itemsColumns>/qty}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" type="Number" textAlign="End" change=".onProdQtyChange"/>
-          <!-- ServiceSchema.createPayloadUom ("EA") is only a starting default (onItemsAddRow) -
-               materials not maintained for EA reject at SaveChanges (RAP_SD_SLS_COMMON/007,
-               "Sales unit EA is not defined for item..."), so this must be user-correctable. -->
-          <Input value="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
-          <!-- MVGR1 - no fixed-values VH exposed by this service; temporary hardcoded options, mapping TBD. -->
+          <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
+               read-only - the prior editable Input (worked around a "Sales
+               unit EA is not defined" SaveChanges error, see createPayloadUom
+               comment history) is no longer needed now that
+               onItemNdcValueHelpRequest auto-defaults this from the selected
+               NDC's own Product.BaseUnit (ServiceSchema.productProperties.
+               baseUnit) instead of always defaulting to the hardcoded "EA". -->
+          <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
+          <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
           <Select selectedKey="{MaterialGroup1}" visible="{itemsColumns>/orderIntention}"
-            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }">
-            <core:Item key="Adult" text="Adult" />
-            <core:Item key="Pediatric" text="Pediatric" />
-            <core:Item key="AdultPediatric" text="Adult, Pediatric" />
+            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" change=".onOrderIntentionChange">
+            <core:Item key="ADU" text="Adult" />
+            <core:Item key="PED" text="Pediatric" />
+            <core:Item key="MIX" text="Adult, Pediatric" />
           </Select>
-          <!-- MVGR2 - no fixed-values VH exposed by this service; codes confirmed by the
-               client (2026-08-31, matches MaterialGroup2's MaxLength=3). Adult vs Pediatric
-               gating (VFC/CHP) per the client's stated sets; ARR/N/A have no stated gating
-               rule so are left always-selectable, same as PAN (whose own auto-default source,
-               the NDC's Pan indicator from Material Master, is not exposed by this service yet). -->
+          <!-- MVGR2 - codes confirmed by the client (2026-08-31, matches MaterialGroup2's
+               MaxLength=3). Items bound to the "fundTypes" model (Detail.controller.js#
+               _createFundTypesModel); each entry's targetField drives the quantity mirror
+               in onFundTypeChange. Per-Item enabled combines this row's own MaterialGroup1
+               (Adult/Pediatric gating) with the model's disabled/pediatricOnly flags
+               (formatter.fundTypeItemEnabled) - SPL is disabled for now (placeholder). -->
           <Select selectedKey="{MaterialGroup2}" visible="{itemsColumns>/fundType}"
-            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }">
-            <core:Item key="VFC" text="{i18n>enumFundTypeVfc}"
-              enabled="{:= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
-            <core:Item key="317" text="{i18n>enumFundType317}" />
-            <core:Item key="S/L" text="{i18n>enumFundTypeState}" />
-            <core:Item key="CHP" text="{i18n>enumFundTypeChip}"
-              enabled="{:= ${MaterialGroup1} === 'Pediatric' || ${MaterialGroup1} === 'AdultPediatric' }" />
-            <core:Item key="SPL" text="{i18n>enumFundTypeSplit}" />
-            <core:Item key="PAN" text="{i18n>enumFundTypePan}" />
-            <core:Item key="ARR" text="{i18n>enumFundTypeArr}" />
-            <core:Item key="N/A" text="{i18n>enumFundTypeNa}" />
+            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+            items="{fundTypes>/list}" change=".onFundTypeChange">
+            <core:Item key="{fundTypes>key}" text="{fundTypes>text}"
+              enabled="{parts: [{path: 'MaterialGroup1'}, {path: 'fundTypes>pediatricOnly'}, {path: 'fundTypes>disabled'}], formatter: '.formatter.fundTypeItemEnabled'}" />
           </Select>
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
           <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" visible="{itemsColumns>/netValue}" />
-          <Text text="{_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text}" visible="{itemsColumns>/rejectionReason}" />
+          <Text text="{_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text}" visible="{= ${itemsColumns>/rejectionReason} &amp;&amp; !${sectionFlags>/createMode} }" />
         </cells>
       </ColumnListItem>
     </items>

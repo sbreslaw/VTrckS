@@ -11,8 +11,13 @@ sap.ui.define([
   "sap/m/CustomListItem",
   "sap/m/CheckBox",
   "sap/m/HBox",
+  "sap/m/VBox",
+  "sap/m/Select",
+  "sap/m/Input",
+  "sap/m/Label",
   "sap/m/SelectDialog",
   "sap/m/StandardListItem",
+  "sap/ui/core/Item",
   "sap/ui/core/Fragment",
   "sap/ui/core/Messaging",
   "sap/ui/core/EventBus",
@@ -31,7 +36,7 @@ sap.ui.define([
   "cdc/vaccreq/service/CreateOrderService"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
-  List, CustomListItem, CheckBox, HBox, SelectDialog, StandardListItem, Fragment,
+  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, Fragment,
   Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor,
   EditRequestService, CreateOrderService
 ) {
@@ -48,6 +53,25 @@ sap.ui.define([
     { id: "JDOE", name: "John Doe" },
     { id: "ASMITH", name: "Alice Smith" },
     { id: "BJONES", name: "Bob Jones" }
+  ];
+
+  // Items fundType (MaterialGroup2) Select source - was a hardcoded core:Item
+  // list in Items.fragment.xml, now a data-driven "fundTypes" model
+  // (_createFundTypesModel) so targetField (this fund type's own quantity
+  // mirror property) travels with each entry for onFundTypeChange/
+  // onProdQtyChange to look up, instead of a second hand-maintained map.
+  // S/L, ARR and N/A all share the single "leftover" ZZRESQTY mirror (no
+  // stated per-code split from the client); SPL is disabled for now
+  // (placeholder - split-funding UI not built yet).
+  var FUND_TYPES = [
+    { key: "VFC", i18nKey: "enumFundTypeVfc", targetFieldKey: "vfcQty", pediatricOnly: true },
+    { key: "317", i18nKey: "enumFundType317", targetFieldKey: "qty317" },
+    { key: "S/L", i18nKey: "enumFundTypeState", targetFieldKey: "stateQty" },
+    { key: "CHP", i18nKey: "enumFundTypeChip", targetFieldKey: "chipQty", pediatricOnly: true },
+    { key: "SPL", i18nKey: "enumFundTypeSplit", targetFieldKey: "", disabled: true },
+    { key: "PAN", i18nKey: "enumFundTypePan", targetFieldKey: "panQty" },
+    { key: "ARR", i18nKey: "enumFundTypeArr", targetFieldKey: "resQty" },
+    { key: "N/A", i18nKey: "enumFundTypeNa", targetFieldKey: "resQty" }
   ];
 
   var ITEMS_COLUMNS_KEY = "itemsColumns";
@@ -95,6 +119,7 @@ sap.ui.define([
       // payload at Save (still a no-op today, see CreateOrderService.js#enrich).
       this.getView().setModel(new JSONModel(this._createEnrichDefaults()), "createEnrich");
       this.getView().setModel(this._createEnumsModel(), "enums");
+      this.getView().setModel(this._createFundTypesModel(), "fundTypes");
       // v5 ("UX phasing + triad sourcing"): createMode opens with only the
       // Provider field enabled; every other createMode field/Add-row button
       // binds `enabled` off this flag and unlocks once a Provider is picked
@@ -102,6 +127,15 @@ sap.ui.define([
       // (re-)entered, see _setCreateMode.
       this.getView().setModel(new JSONModel({ providerChosen: false }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
+      // Session Prompt (Detail View Adjustments) 3.1: virtual header Priority -
+      // {value, valueText, mixed, dirty} computed from/propagated to item
+      // DeliveryPriority (see _computeHeaderPriority/_propagatePriorityToItems),
+      // reset on entering createMode (_setCreateMode).
+      this.getView().setModel(new JSONModel({ value: "", valueText: "", mixed: false, dirty: false }), "priorityState");
+      // 3.3: client-side-only SUM of item TaxAmount - never a real header
+      // property, see _computeHeaderTaxAmount.
+      this.getView().setModel(new JSONModel({ taxAmount: 0 }), "headerCalc");
+      this._loadDeliveryPriorityVH();
 
     },
 
@@ -359,7 +393,19 @@ sap.ui.define([
       if (!oContext) {
         return;
       }
-      EditRequestService.save(oContext).then(function () {
+      // Session Prompt (Detail View Adjustments) 3.1: the "details" section's
+      // own Save is also the only trigger for propagating a changed/mixed
+      // header Priority selection down onto every item - staged into the same
+      // "vrEdit" group EditRequestService.save is about to submitBatch, so it
+      // rides along in the very same request as the header PATCH below.
+      var oPriorityModel = this.getView().getModel("priorityState");
+      var oPropagatePromise = Promise.resolve();
+      if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
+        oPropagatePromise = this._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
+      }
+      oPropagatePromise.then(function () {
+        return EditRequestService.save(oContext);
+      }).then(function () {
         MessageToast.show(oBundle.getText("editSaveSuccess"));
         if (that._aSectionsNeedingFullReload.indexOf(sSectionId) !== -1) {
           that._reloadHeaderContext(oContext.getPath());
@@ -368,6 +414,12 @@ sap.ui.define([
         // OData V4 model/entity instance, whose cache the PATCH response
         // already updated \u2014 any bound row for this order reflects it automatically.
         that._endEditSession(sSectionId);
+        if (sSectionId === "details") {
+          that._computeHeaderPriority();
+        }
+        if (sSectionId === "items") {
+          that._computeHeaderTaxAmount();
+        }
       }, function (oError) {
         if (oError.isConflict) {
           that._showConflictDialog(oContext, sSectionId);
@@ -414,11 +466,37 @@ sap.ui.define([
         Product: "",
         RequestedQuantity: null,
         RequestedQuantityUnit: ServiceSchema.createPayloadUom,
+        // SalesOrderItem is @Core.Computed (design/so.xml) - the real number
+        // is always assigned server-side at Save; this is only a client-side
+        // placeholder (SD +10 numbering convention) so a newly-added row
+        // doesn't display blank until then.
+        SalesOrderItem: this._computeNextItemNumber(oBinding),
         // Nullable="false" (design/so.xml) - seeded here too, not just on
-        // change (onProdQtyChange), so a row never carries an unset Int32.
+        // change (onProdQtyChange/onFundTypeChange), so a row never carries
+        // an unset Int32.
         ZZVFCQTY: 0,
-        ZZSTATEQTY: 0
+        ZZ317QTY: 0,
+        ZZSTATEQTY: 0,
+        ZZCHIPQTY: 0,
+        ZZPANQTY: 0,
+        ZZRESQTY: 0
       });
+    },
+
+    // Client-side-only SD-style numbering (10, 20, 30...) for a newly-added
+    // row's display - one past the highest SalesOrderItem number currently in
+    // the table, defaulting to "000010" for the first item.
+    _computeNextItemNumber: function (oItemsBinding) {
+      var iMax = 0;
+      if (oItemsBinding && oItemsBinding.getCurrentContexts) {
+        oItemsBinding.getCurrentContexts().forEach(function (oCtx) {
+          var iNum = parseInt(oCtx.getProperty(ServiceSchema.itemProperties.itemNumber), 10);
+          if (!isNaN(iNum) && iNum > iMax) {
+            iMax = iNum;
+          }
+        });
+      }
+      return ("000000" + (iMax + 10)).slice(-6);
     },
 
     // NDC Code VH-only Input (Items.fragment.xml, valueHelpOnly="true") - the
@@ -436,23 +514,101 @@ sap.ui.define([
         // Client requirement (2026-09-01): ZI_PRODUCTSTDVH_EXT - carry the NDC's
         // IndustryStandardName over to the item's own brand field.
         oRowContext.setProperty(ServiceSchema.itemProperties.brand, oItem[oProps.industryStandardName]);
+        // Session Prompt (Detail View Adjustments) 3.7: carry the NDC's own
+        // BaseUnit over to the item's RequestedQuantityUnit - UOM is read-only
+        // again (Items.fragment.xml), always sourced from the selected
+        // Product, never typed in directly.
+        if (oItem[oProps.baseUnit]) {
+          oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
+        }
       });
+    },
+
+    // Looks up the fund type entry (FUND_TYPES/"fundTypes" model) matching
+    // the row's current MaterialGroup2 selection.
+    _getFundTypeEntry: function (sFundTypeKey) {
+      var aList = this.getView().getModel("fundTypes").getProperty("/list");
+      return aList.filter(function (oEntry) { return oEntry.key === sFundTypeKey; })[0];
     },
 
     onProdQtyChange: function( oEvent) {
       var oRowContext = oEvent.getSource().getBindingContext();
       var sQty = oEvent.getParameter('value');
-      // ZZVFCQTY is Edm.Int32 (design/so.xml) - RequestedQuantity is
-      // Edm.Decimal, so this Input's own "value" here is that type's
+      // ZZVFCQTY/ZZ317QTY/etc. are Edm.Int32 (design/so.xml) - RequestedQuantity
+      // is Edm.Decimal, so this Input's own "value" here is that type's
       // formatted decimal string (e.g. "67.000"); sending that verbatim
       // for an Int32 property fails with "invalid value", and the Gateway's
       // OWN error response for that failure comes back malformed enough
       // that the client can't even parse it ("Error while parsing an XML
       // stream") - always send a real, rounded integer instead.
       var iQty = Math.round(parseFloat(sQty));
-      oRowContext.setProperty(ServiceSchema.itemProperties.stateQty, isNaN(iQty) ? 0 : iQty);
-      
+      // A2/A4: which quantity mirror gets the value now follows the row's own
+      // fundType selection (see onFundTypeChange) instead of always ZZSTATEQTY.
+      var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
+      if (oFundType && oFundType.targetField) {
+        oRowContext.setProperty(oFundType.targetField, isNaN(iQty) ? 0 : iQty);
+      }
+
       oRowContext.setProperty('ZZ1_SKIPADDANC_SDI', true);
+    },
+
+    // Items fundType (MaterialGroup2) change - mirrors the row's current
+    // RequestedQuantity onto the newly-selected fund type's own targetField
+    // and clears every other fund type's targetField (only one is ever
+    // active per item).
+    onFundTypeChange: function (oEvent) {
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var sKey = oSelectedItem ? oSelectedItem.getKey() : oEvent.getSource().getSelectedKey();
+      var oRowContext = oEvent.getSource().getBindingContext();
+      var iQty = Math.round(parseFloat(oRowContext.getProperty(ServiceSchema.itemProperties.quantity)));
+      var iValue = isNaN(iQty) ? 0 : iQty;
+      this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
+        if (oEntry.targetField) {
+          oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0);
+        }
+      });
+    },
+
+    // Order Intention (MaterialGroup1) change - disabling a now-invalid
+    // core:Item in the fundType Select (formatter.fundTypeItemEnabled) never
+    // by itself clears an already-selected key, so the row is left showing a
+    // fund type the new Intention no longer allows; reset it here instead.
+    onOrderIntentionChange: function (oEvent) {
+      var sIntention = oEvent.getParameter("selectedItem").getKey();
+      var oRowContext = oEvent.getSource().getBindingContext();
+      var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
+      if (oFundType && !formatter.fundTypeItemEnabled(sIntention, oFundType.pediatricOnly, oFundType.disabled)) {
+        oRowContext.setProperty(ServiceSchema.itemProperties.fundType, "");
+        this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
+          if (oEntry.targetField) {
+            oRowContext.setProperty(oEntry.targetField, 0);
+          }
+        });
+      }
+    },
+
+    // Real, batched DELETE on the row's own bound-entity context - rides the
+    // same update group as the rest of the Items section's edit session
+    // (change-mode "vrEdit" or createMode "vrCreate", see _rebindItemsGroup),
+    // so it is only sent when that section's Save actually runs.
+    onItemsDeleteRow: function (oEvent) {
+      var oBundle = this.getResourceBundle();
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      MessageBox.confirm(oBundle.getText("itemsDeleteConfirm"), {
+        onClose: function (sAction) {
+          if (sAction !== MessageBox.Action.OK) {
+            return;
+          }
+          oRowContext.delete().then(function () {
+            MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
+          }, function () {
+            MessageToast.show(oBundle.getText("itemsDeleteError"));
+          });
+        }
+      });
     },
 
 
@@ -505,11 +661,14 @@ sap.ui.define([
         this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("createState").setProperty("/providerChosen", false);
+        this.getView().getModel("priorityState").setData({ value: "", valueText: "", mixed: false, dirty: false });
+        this.getView().getModel("headerCalc").setProperty("/taxAmount", 0);
       }
     },
 
     // Resolves Enums.js's {key, i18nKey} lists into {key, text} once, so the
-    // createMode Selects (Priority/Category/Status) can bind items/text
+    // createMode Selects (Status only - Priority/Category are now backed by
+    // real service value helps, see Details.fragment.xml) can bind items/text
     // directly without a runtime i18n lookup in the XML.
     _createEnumsModel: function () {
       var oBundle = this.getResourceBundle();
@@ -519,9 +678,27 @@ sap.ui.define([
         });
       }
       return new JSONModel({
-        PRIORITY: resolve(Enums.PRIORITY),
-        CATEGORY: resolve(Enums.CATEGORY),
         STATUS: resolve(Enums.STATUS)
+      });
+    },
+
+    // Resolves FUND_TYPES (module constant above) into the "fundTypes" model
+    // Items.fragment.xml's MaterialGroup2 Select binds items/change against -
+    // targetFieldKey is resolved here to the real property name
+    // (ServiceSchema.itemProperties) so onFundTypeChange/onProdQtyChange/
+    // onItemsAddRow never hand-maintain a second copy of that mapping.
+    _createFundTypesModel: function () {
+      var oBundle = this.getResourceBundle();
+      return new JSONModel({
+        list: FUND_TYPES.map(function (oEntry) {
+          return {
+            key: oEntry.key,
+            text: oBundle.getText(oEntry.i18nKey),
+            targetField: oEntry.targetFieldKey ? ServiceSchema.itemProperties[oEntry.targetFieldKey] : "",
+            pediatricOnly: !!oEntry.pediatricOnly,
+            disabled: !!oEntry.disabled
+          };
+        })
       });
     },
 
@@ -537,8 +714,6 @@ sap.ui.define([
         contactName: "",
         employeeResponsibleId: this._getCurrentUserId(),
         employeeResponsibleName: this._getCurrentUserFullName(),
-        priority: "",
-        category: "",
         status: "",
         shipToPartyId: "",
         shipToPartyName: ""
@@ -671,46 +846,76 @@ sap.ui.define([
       oDialog.open();
     },
 
-    // CRUD Task 1 v4: Contact VH backed by the real, top-level
-    // `/StandardPartnerContactInfo` (C_SlsDocStdPartnerContactInfo) entity set -
-    // one row per sales document's standard-contact snapshot, searchable by name.
-    _openContactValueHelpDialog: function (sTitle, fnApply) {
-      var oProps = ServiceSchema.contactProperties;
-      var oDialog = new SelectDialog({
-        title: sTitle,
-        growing: true,
-        items: {
-          path: "/" + ServiceSchema.entitySets.contactInfo,
-          parameters: {
-            $select: [oProps.fullName, oProps.email, oProps.phone].join(",")
+    // Session Prompt (Detail View Adjustments) 3.5: Contact VH REWIRED off the
+    // old `/StandardPartnerContactInfo` source (superseded - it 501'd on any
+    // standalone query anyway) onto the new custom service's
+    // `po>/ProviderContact` entity set (ServiceSchema.providerOrderService),
+    // filtered SERVER-SIDE to the currently-selected Provider's
+    // BusinessPartnerCompany (TODO-VERIFY: assumed to correlate 1:1 with
+    // SoldToParty - both are Business Partner customer numbers - never
+    // independently confirmed live, no backend access this session) and
+    // CLIENT-SIDE to rows currently within their ValidityStartDate/EndDate
+    // window (a missing/null end date is treated as "does not expire" -
+    // filtering that server-side as a plain "ge today" comparison would
+    // wrongly exclude those rows, so this is done locally instead, matching
+    // the Step-0 spec's own instruction to client-filter validity). Holds key
+    // BusinessPartnerPerson, displays BusinessPartnerPerson_Text.
+    _openProviderContactValueHelpDialog: function (sTitle, sProviderId, fnApply) {
+      var that = this;
+      var oProps = ServiceSchema.providerOrderService.providerContactProperties;
+      var oModel = this.getView().getModel("po");
+      var oToday = new Date();
+      var oListBinding = oModel.bindList("/" + ServiceSchema.providerOrderService.entitySets.providerContact, undefined, undefined,
+        new Filter(oProps.businessPartnerCompany, FilterOperator.EQ, sProviderId), {
+          $select: [oProps.businessPartnerPerson, oProps.businessPartnerPersonText,
+            oProps.validityStartDate, oProps.validityEndDate].join(",")
+        });
+
+      oListBinding.requestContexts(0, 500).then(function (aContexts) {
+        var aValidRows = aContexts.map(function (oCtx) { return oCtx.getObject(); }).filter(function (oRow) {
+          var oStart = oRow[oProps.validityStartDate] ? new Date(oRow[oProps.validityStartDate]) : null;
+          var oEnd = oRow[oProps.validityEndDate] ? new Date(oRow[oProps.validityEndDate]) : null;
+          return (!oStart || oStart <= oToday) && (!oEnd || oEnd >= oToday);
+        });
+        var oPickerModel = new JSONModel({ rows: aValidRows });
+        var oDialog = new SelectDialog({
+          title: sTitle,
+          growing: true,
+          items: {
+            path: "picker>/rows",
+            template: new StandardListItem({
+              title: "{picker>" + oProps.businessPartnerPersonText + "}",
+              description: "{picker>" + oProps.businessPartnerPerson + "}"
+            })
           },
-          template: new StandardListItem({
-            title: "{" + oProps.fullName + "}",
-            description: "{" + oProps.email + "}"
-          })
-        },
-        search: function (oEvent) {
-          var sValue = oEvent.getParameter("value");
-          var oBinding = oEvent.getSource().getBinding("items");
-          oBinding.filter(sValue ? new Filter(oProps.fullName, FilterOperator.Contains, sValue) : []);
-        },
-        confirm: function (oEvent) {
-          var oSelectedItem = oEvent.getParameter("selectedItem");
-          if (oSelectedItem) {
-            fnApply(oSelectedItem.getBindingContext().getObject());
+          search: function (oEvent) {
+            var sValue = oEvent.getParameter("value");
+            var oBinding = oEvent.getSource().getBinding("items");
+            oBinding.filter(sValue ? new Filter(oProps.businessPartnerPersonText, FilterOperator.Contains, sValue) : []);
+          },
+          confirm: function (oEvent) {
+            var oSelectedItem = oEvent.getParameter("selectedItem");
+            if (oSelectedItem) {
+              fnApply(oSelectedItem.getBindingContext("picker").getObject());
+            }
+            oDialog.destroy();
+          },
+          cancel: function () {
+            oDialog.destroy();
           }
-          oDialog.destroy();
-        },
-        cancel: function () {
-          oDialog.destroy();
-        }
+        });
+        oDialog.setModel(oPickerModel, "picker");
+        that.getView().addDependent(oDialog);
+        oDialog.open();
       });
-      this.getView().addDependent(oDialog);
-      oDialog.open();
     },
 
     // NDC Code VH backed by this same service's own top-level `/Product`
     // EntitySet (ProductType) - search by material description or code.
+    // Session Prompt (Detail View Adjustments) 3.7: $select now also includes
+    // BaseUnit (ServiceSchema.productProperties.baseUnit), carried over to the
+    // picked row's RequestedQuantityUnit (onItemNdcValueHelpRequest) so Items
+    // UOM can go back to being read-only.
     _openProductValueHelpDialog: function (sTitle, fnApply) {
       var oProps = ServiceSchema.productProperties;
       var oDialog = new SelectDialog({
@@ -719,7 +924,7 @@ sap.ui.define([
         items: {
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
-            $select: [oProps.id, oProps.text, oProps.industryStandardName].join(",")
+            $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
           },
           template: new StandardListItem({
             title: "{" + oProps.id + "}",
@@ -757,9 +962,15 @@ sap.ui.define([
     // a stand-in "main contact", but the backend query provider
     // (CL_SD_S4H_STD_PARTNER_CONTACT) rejects ANY standalone query on this
     // entity set with 501 Not Implemented (confirmed live, filtered or not) -
-    // so prefill is not possible; always leave blank for manual selection.
+    // Session Prompt (Detail View Adjustments) 3.5: Contact is now backed by a
+    // DIFFERENT, real, filterable entity set (po>/ProviderContact) - but no
+    // auto-prefill rule was specified (only "clear on provider change"), and a
+    // best-effort auto-pick here would be guessing at ranking criteria never
+    // given - still always left blank for manual selection via the new VH
+    // (onContactValueHelpRequest below).
     _prefillMainContact: function (sProviderId) {
       this.getView().getModel("createEnrich").setProperty("/contactName", "");
+      this.getView().getModel("createEnrich").setProperty("/contactId", "");
     },
 
     // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the Provider-first
@@ -792,16 +1003,23 @@ sap.ui.define([
       });
     },
 
-    // CRUD Task 1 v4: Contact VH backed by the real, top-level
-    // `/StandardPartnerContactInfo` (C_SlsDocStdPartnerContactInfo) entity set -
-    // no dedicated contact-person ID is exposed by this service (only
-    // name/phone/email), so createEnrich>/contactId is left unset here.
+    // Session Prompt (Detail View Adjustments) 3.5: rewired off
+    // `/StandardPartnerContactInfo` onto `po>/ProviderContact`, filtered to
+    // the currently-selected Provider (SoldToParty on this context). Requires
+    // a Provider to already be picked (the field is locked until
+    // createState>/providerChosen anyway - Details.fragment.xml).
     onContactValueHelpRequest: function () {
-      var oProps = ServiceSchema.contactProperties;
+      var oProps = ServiceSchema.providerOrderService.providerContactProperties;
       var oBundle = this.getResourceBundle();
-      this._openContactValueHelpDialog(oBundle.getText("contactPickerTitle"), function (oItem) {
+      var oContext = this.getView().getBindingContext();
+      var sProviderId = oContext && oContext.getProperty(ServiceSchema.headerProperties.providerId);
+      if (!sProviderId) {
+        return;
+      }
+      this._openProviderContactValueHelpDialog(oBundle.getText("contactPickerTitle"), sProviderId, function (oItem) {
         var oModel = this.getView().getModel("createEnrich");
-        oModel.setProperty("/contactName", oItem[oProps.fullName]);
+        oModel.setProperty("/contactId", oItem[oProps.businessPartnerPerson]);
+        oModel.setProperty("/contactName", oItem[oProps.businessPartnerPersonText]);
       }.bind(this));
     },
 
@@ -846,7 +1064,317 @@ sap.ui.define([
     _onSectionContentLoaded: function (sSectionId) {
       if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
+        // 3.3: the Items panel's own contexts are the most convenient point
+        // to (re)confirm the header Tax Amount sum once real item data is
+        // actually loaded (change mode - createMode items have no server-
+        // computed TaxAmount yet, see _computeHeaderTaxAmount doc comment).
+        this._computeHeaderTaxAmount();
       }
+    },
+
+    // --- Session Prompt (Detail View Adjustments) 3.1: virtual header
+    // Priority. DeliveryPriority only exists on SalesOrderItemType (so.xml) -
+    // there is still no header-level property/nav to bind. The header
+    // "Priority" Select (Details.fragment.xml) is backed by the local
+    // "priorityState" model instead: on load, computed from every item's
+    // DeliveryPriority (uniform -> that value, mixed -> the highest-priority
+    // value found + a "mixed" hint); user changes are only PROPAGATED to
+    // every item at Save (never live) - see _propagatePriorityToItems below,
+    // called from onCreateSavePress (createMode) / onSectionSavePress
+    // (change mode, "details" section only). ---
+
+    // One-time load of the real /DeliveryPriority VH entity set (small fixed
+    // list) - used both as the Select's own items source (Details.fragment.xml
+    // binds directly to "/DeliveryPriority") and as a text lookup cache so the
+    // read-only Text display (priorityState>/valueText) doesn't need its own
+    // per-row nav-property read.
+    _loadDeliveryPriorityVH: function () {
+      var that = this;
+      var oProps = ServiceSchema.valueHelpProperties;
+      this._mPriorityText = {};
+      // getView().getModel() can still be undefined this early (onInit runs
+      // before the view's own model propagation from the owner component
+      // completes) - the component's model is already guaranteed to exist.
+      var oModel = this.getOwnerComponent().getModel();
+      var oListBinding = oModel.bindList("/" + ServiceSchema.entitySets.deliveryPriority);
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        aContexts.forEach(function (oCtx) {
+          that._mPriorityText[oCtx.getProperty(oProps.deliveryPriorityCode)] = oCtx.getProperty(oProps.deliveryPriorityText);
+        });
+      }, function () {
+        // Non-fatal - the Select control resolves its own display text from
+        // its bound items regardless; this cache only backs the read-only
+        // Text control's display.
+      });
+    },
+
+    // Reads every item's DeliveryPriority for the current (existing) order and
+    // derives the header's display value: no items/none set -> blank; one
+    // distinct value -> that value; more than one distinct value -> "mixed",
+    // displaying the highest-priority value found.
+    // TODO-VERIFY(priority-ordering): this assumes the standard SD convention
+    // that a LOWER DeliveryPriority code is MORE urgent (e.g. "01" = highest
+    // priority) - so "highest priority" = the lowest code, ascending sort,
+    // first element. Never independently confirmed against live VH data this
+    // session (no backend access) - re-verify against the real /DeliveryPriority
+    // list (and its sort order/any ranking annotation) before relying on this
+    // in production.
+    _computeHeaderPriority: function () {
+      var that = this;
+      var oContext = this.getView().getBindingContext();
+      var oPriorityModel = this.getView().getModel("priorityState");
+      if (!oContext || (oContext.isTransient && oContext.isTransient())) {
+        return;
+      }
+      var oModel = oContext.getModel();
+      var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oContext, undefined, undefined, {
+        $select: ServiceSchema.itemProperties.deliveryPriority
+      });
+      oItemsBinding.requestContexts(0, 9999).then(function (aContexts) {
+        var aCodes = aContexts
+          .map(function (oCtx) { return oCtx.getProperty(ServiceSchema.itemProperties.deliveryPriority); })
+          .filter(function (sCode) { return !!sCode; });
+        if (!aCodes.length) {
+          oPriorityModel.setData({ value: "", valueText: "", mixed: false, dirty: false });
+          return;
+        }
+        var aUnique = aCodes.filter(function (sCode, iIndex, aAll) { return aAll.indexOf(sCode) === iIndex; });
+        aUnique.sort();
+        var sValue = aUnique[0];
+        oPriorityModel.setData({
+          value: sValue,
+          valueText: that._mPriorityText[sValue] || sValue,
+          mixed: aUnique.length > 1,
+          dirty: false
+        });
+      });
+    },
+
+    // Change handler for the header Priority Select (Details.fragment.xml) -
+    // only updates local state; the actual per-item propagation happens at
+    // Save (onCreateSavePress/onSectionSavePress), never here.
+    onPriorityChange: function (oEvent) {
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var sKey = oSelectedItem ? oSelectedItem.getKey() : oEvent.getSource().getSelectedKey();
+      var oPriorityModel = this.getView().getModel("priorityState");
+      oPriorityModel.setProperty("/value", sKey);
+      oPriorityModel.setProperty("/valueText", this._mPriorityText[sKey] || sKey);
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        oPriorityModel.setProperty("/dirty", true);
+      }
+    },
+
+    // Change-mode propagation: PATCHes DeliveryPriority onto every item of
+    // the current (existing) order, in the same "vrEdit" group as the
+    // Details section's own header PATCH - both ride the same submitBatch
+    // call in onSectionSavePress, so nothing is sent until the user actually
+    // presses Save on that section. Returns a promise (resolves once the
+    // item contexts are fetched and their property changes are staged -
+    // NOT once they're sent; sending happens via EditRequestService.save's
+    // own submitBatch).
+    _propagatePriorityToItems: function (oContext, sPriorityValue) {
+      var oModel = oContext.getModel();
+      var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oContext, undefined, undefined, {
+        $$updateGroupId: ServiceSchema.editUpdateGroup,
+        $select: ServiceSchema.itemProperties.deliveryPriority
+      });
+      return oItemsBinding.requestContexts(0, 9999).then(function (aContexts) {
+        aContexts.forEach(function (oItemContext) {
+          oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sPriorityValue);
+        });
+      });
+    },
+
+    // --- Session Prompt (Detail View Adjustments) 3.3: virtual header Tax
+    // Amount - TaxAmount only exists on SalesOrderItemType (so.xml); this is
+    // a plain client-side SUM, read-only, NEVER part of any create/edit
+    // payload (headerProperties.taxAmount stays null). CreateMode items have
+    // no server-computed TaxAmount before Save (pricing runs server-side at
+    // SaveChanges), so this intentionally only recomputes for an existing
+    // (already-saved) order - see _onObjectMatched/_onSectionContentLoaded. ---
+    _computeHeaderTaxAmount: function () {
+      var oContext = this.getView().getBindingContext();
+      var oCalcModel = this.getView().getModel("headerCalc");
+      if (!oContext || (oContext.isTransient && oContext.isTransient())) {
+        oCalcModel.setProperty("/taxAmount", 0);
+        return;
+      }
+      var oModel = oContext.getModel();
+      var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oContext, undefined, undefined, {
+        $select: ServiceSchema.itemProperties.taxAmount
+      });
+      oItemsBinding.requestContexts(0, 9999).then(function (aContexts) {
+        var fSum = aContexts.reduce(function (fTotal, oCtx) {
+          var fValue = parseFloat(oCtx.getProperty(ServiceSchema.itemProperties.taxAmount));
+          return fTotal + (isNaN(fValue) ? 0 : fValue);
+        }, 0);
+        oCalcModel.setProperty("/taxAmount", fSum);
+      });
+    },
+
+    // --- Session Prompt (Detail View Adjustments) 3.9: Parties Involved.
+    // Add is the only creation path (bound action CreatePartner,
+    // ServiceSchema.createPartnerAction) - a plain oListBinding.create()
+    // against `_Partner` always 405s (InsertRestrictions.Insertable=false,
+    // so.xml ~15249). Edit/Delete/Name-change are all per-row, immediate
+    // ($auto group) actions - see PartiesInvolved.fragment.xml. ---
+
+    // Opens a small programmatic Dialog (no separate fragment file, mirrors
+    // the pattern already used by _openPickerDialog elsewhere in this
+    // controller) with a Partner Function Select (real /PartnerFunction VH)
+    // and a Customer Input backed by the same CustomerSalesArea VH the
+    // Provider field itself uses.
+    onPartiesAddRow: function () {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext) {
+        return;
+      }
+      var oAddModel = new JSONModel({ partnerFunction: "", customerId: "", customerName: "" });
+      var oFunctionSelect = new Select({
+        selectedKey: "{addParty>/partnerFunction}",
+        items: {
+          path: "/" + ServiceSchema.entitySets.partnerFunction,
+          parameters: {
+            $select: [ServiceSchema.valueHelpProperties.partnerFunctionCode, ServiceSchema.valueHelpProperties.partnerFunctionText].join(",")
+          },
+          template: new CoreItem({
+            key: "{" + ServiceSchema.valueHelpProperties.partnerFunctionCode + "}",
+            text: "{" + ServiceSchema.valueHelpProperties.partnerFunctionText + "}"
+          })
+        }
+      });
+      var oCustomerInput = new Input({
+        value: "{addParty>/customerName}",
+        editable: false,
+        showValueHelp: true,
+        valueHelpOnly: true,
+        valueHelpRequest: function () {
+          that._openShipToPartyValueHelpDialog(oBundle.getText("partiesInvolvedChoosePartner"), function (oItem) {
+            oAddModel.setProperty("/customerId", oItem.id);
+            oAddModel.setProperty("/customerName", oItem.fullName + " (" + oItem.id + ")");
+          });
+        }
+      });
+      var oDialog = new Dialog({
+        title: oBundle.getText("partiesInvolvedAddTitle"),
+        content: [
+          new VBox({
+            class: "sapUiSmallMargin",
+            items: [
+              new Label({ text: oBundle.getText("partiesInvolvedAddFunction"), labelFor: oFunctionSelect }),
+              oFunctionSelect,
+              new Label({ text: oBundle.getText("colPartnerName"), labelFor: oCustomerInput, class: "sapUiSmallMarginTop" }),
+              oCustomerInput
+            ]
+          })
+        ],
+        beginButton: new Button({
+          text: oBundle.getText("partiesInvolvedAdd"),
+          type: "Emphasized",
+          press: function () {
+            var oData = oAddModel.getData();
+            if (!oData.partnerFunction) {
+              MessageToast.show(oBundle.getText("partiesInvolvedAddFunctionRequired"));
+              return;
+            }
+            if (!oData.customerId) {
+              MessageToast.show(oBundle.getText("partiesInvolvedAddPartnerRequired"));
+              return;
+            }
+            that._onPartiesAddConfirm(oHeaderContext, oData.partnerFunction, oData.customerId).then(function () {
+              oDialog.close();
+            });
+          }
+        }),
+        endButton: new Button({
+          text: oBundle.getText("cancel"),
+          press: function () {
+            oDialog.close();
+          }
+        }),
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      });
+      oDialog.setModel(oAddModel, "addParty");
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    // Invokes the bound CreatePartner action on the header context (the only
+    // sanctioned way to add a HeaderPartner row), then PATCHes the new row's
+    // Customer property (CreatePartner only takes PartnerFunction as a
+    // parameter - Customer is set via a follow-up PATCH, per
+    // UpdateRestrictions.NonUpdatableProperties only listing PartnerFunction,
+    // not Customer - so.xml ~2346), then refreshes the table's own items
+    // binding so the new row appears.
+    _onPartiesAddConfirm: function (oHeaderContext, sPartnerFunction, sCustomerId) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oModel = oHeaderContext.getModel();
+      var oActionBinding = oModel.bindContext(ServiceSchema.createPartnerAction + "(...)", oHeaderContext);
+      oActionBinding.setParameter("PartnerFunction", sPartnerFunction);
+      return oActionBinding.execute().then(function () {
+        var oNewPartnerContext = oActionBinding.getBoundContext();
+        return oNewPartnerContext.setProperty(ServiceSchema.headerPartnerProperties.customer, sCustomerId);
+      }).then(function () {
+        var oTable = that._byIdInSection("partiesInvolved", "partiesTable");
+        var oItemsBinding = oTable && oTable.getBinding("items");
+        if (oItemsBinding) {
+          oItemsBinding.refresh();
+        }
+        MessageToast.show(oBundle.getText("partiesInvolvedAddSuccess"));
+      }).catch(function (oError) {
+        MessageToast.show(oBundle.getText("partiesInvolvedAddError"));
+        throw oError;
+      });
+    },
+
+    // Deferred to a later phase (see i18n key text + OPEN_QUESTIONS.md) - no
+    // dedicated partner-edit dialog exists yet for the other row fields
+    // (only Name/Customer is wired, via onPartiesChangeName below).
+    onPartiesEditRow: function () {
+      MessageToast.show(this.getResourceBundle().getText("partiesInvolvedEditPlaceholder"));
+    },
+
+    // Real, immediate DELETE on the row's own bound-entity context ($auto
+    // group - not staged for any section Save button), gated in the fragment
+    // by the row's own dynamic __EntityControl/Deletable.
+    onPartiesDeleteRow: function (oEvent) {
+      var oBundle = this.getResourceBundle();
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      MessageBox.confirm(oBundle.getText("partiesInvolvedDeleteConfirm"), {
+        onClose: function (sAction) {
+          if (sAction !== MessageBox.Action.OK) {
+            return;
+          }
+          oRowContext.delete().then(function () {
+            MessageToast.show(oBundle.getText("partiesInvolvedDeleteSuccess"));
+          }, function () {
+            MessageToast.show(oBundle.getText("partiesInvolvedDeleteError"));
+          });
+        }
+      });
+    },
+
+    // Row-level Name/Customer change VH - reuses the same
+    // _openShipToPartyValueHelpDialog picker the Provider field itself uses,
+    // PATCHing this row's own Customer property directly (real, independently
+    // updatable field - see headerPartnerProperties.customer doc comment).
+    onPartiesChangeName: function (oEvent) {
+      var oBundle = this.getResourceBundle();
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      this._openShipToPartyValueHelpDialog(oBundle.getText("partiesInvolvedChoosePartner"), function (oItem) {
+        oRowContext.setProperty(ServiceSchema.headerPartnerProperties.customer, oItem.id);
+      });
     },
 
     onIohAddRow: function () {
@@ -933,6 +1461,18 @@ sap.ui.define([
       this.getView().setBusy(true);
       var sNewId;
 
+      // Session Prompt (Detail View Adjustments) 3.1: harvest the createMode
+      // Priority Select's value onto every scratch item context BEFORE the
+      // replay - CreateOrderService.js's item deep-create step copies ALL own
+      // properties of each scratch context (not a fixed whitelist), so this
+      // needs no other change there to actually replay.
+      var sCreatePriority = this.getView().getModel("priorityState").getProperty("/value");
+      if (sCreatePriority && oItemsBinding) {
+        oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
+          oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
+        });
+      }
+
       CreateOrderService.save(oContext, oItemsBinding)
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
@@ -945,8 +1485,6 @@ sap.ui.define([
           return CreateOrderService.enrich(oNewContext, {
             contactId: oEnrich.contactId,
             employeeResponsibleId: oEnrich.employeeResponsibleId,
-            priority: oEnrich.priority,
-            category: oEnrich.category,
             status: oEnrich.status,
             shipToPartyId: oEnrich.shipToPartyId
           }).catch(function (oError) {
@@ -1056,6 +1594,8 @@ sap.ui.define([
       });
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
+      this._computeHeaderPriority();
+      this._computeHeaderTaxAmount();
       this._oSectionFactory.rebind();
     },
 

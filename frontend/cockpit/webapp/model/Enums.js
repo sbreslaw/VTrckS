@@ -5,30 +5,17 @@ sap.ui.define([], function () {
   // Keys are placeholders pending backend value-help/config confirmation —
   // texts are resolved from i18n keys by the caller, never hardcoded here.
 
-  // TODO: replace with backend value help; keys pending config confirmation
-  // (CRUD Task 1 v4: revived as a createMode Select - see Details.fragment.xml)
-  var PRIORITY = [
-    { key: "LOW", i18nKey: "enumPriorityLow" },
-    { key: "MEDIUM", i18nKey: "enumPriorityMedium" },
-    { key: "HIGH", i18nKey: "enumPriorityHigh" }
-  ];
+  // Session Prompt (Detail View Adjustments) 3.1/3.2: PRIORITY and CATEGORY
+  // hardcoded enum lists DELETED - both fields are now backed by real
+  // service value helps (DeliveryPriority entity set / CustomerPurchaseOrderType
+  // entity set, see ServiceSchema.js) instead of local placeholder lists. See
+  // NOTES.md for the retirement entry.
 
   // TODO: replace with backend value help; keys pending config confirmation
   var ORDER_REASON = [
     { key: "NATURAL_DISASTER", i18nKey: "enumOrderReasonNaturalDisaster" },
     { key: "OUTBREAK_RESPONSE", i18nKey: "enumOrderReasonOutbreakResponse" },
     { key: "OTHER", i18nKey: "enumOrderReasonOther" }
-  ];
-
-  // TODO: replace with backend value help; keys pending config confirmation
-  // (CRUD Task 1 v4: revived as a createMode Select - "ExIS" added per request)
-  var CATEGORY = [
-    { key: "EXIS", i18nKey: "enumCategoryExis" },
-    { key: "INTERNET_SALES", i18nKey: "enumCategoryInternetSales" },
-    { key: "PROVIDER_EMAILED", i18nKey: "enumCategoryProviderEmailed" },
-    { key: "PROVIDER_FAXED", i18nKey: "enumCategoryProviderFaxed" },
-    { key: "PROVIDER_TELEPHONED", i18nKey: "enumCategoryProviderTelephoned" },
-    { key: "VACMAN", i18nKey: "enumCategoryVacman" }
   ];
 
   // TODO: replace with backend value help; keys pending config confirmation
@@ -70,16 +57,15 @@ sap.ui.define([], function () {
   // by intention - no business rule was given for them (PAN's own auto-default
   // source, the NDC's Pan indicator from Material Master, is not exposed by
   // this service yet).
+  // Real MVGR1 codes (2026-09-16 client confirmation): ADU/PED/MIX.
   var FUND_TYPE_BY_INTENTION = {
-    Adult: ["317", "S/L", "SPL"],
-    Pediatric: ["VFC", "317", "S/L", "CHP", "SPL"],
-    AdultPediatric: ["VFC", "317", "S/L", "CHP", "SPL"]
+    ADU: ["317", "S/L", "SPL"],
+    PED: ["VFC", "317", "S/L", "CHP", "SPL"],
+    MIX: ["VFC", "317", "S/L", "CHP", "SPL"]
   };
 
   return {
-    PRIORITY: PRIORITY,
     ORDER_REASON: ORDER_REASON,
-    CATEGORY: CATEGORY,
     INTENTION: INTENTION,
     STATUS: STATUS,
     FUND_TYPE: FUND_TYPE,

@@ -2,11 +2,15 @@
 
 ## Data/design questions for the customer or backend team
 
-1. **Description / Category (Master column + Details field)** — no free-text
-   description or category field exists on `SalesOrderManageType` in the current
-   temporary service. Is there a customer-side field (custom Z-field, long text,
-   or something on a different entity) that should back these, or should they
-   stay permanently blank/em-dash until `ZUI_VACCINEREQUEST_O4` is available?
+1. **Description / Category (Master column + Details field)** — ~~no
+   free-text description or category field exists on `SalesOrderManageType` in
+   the current temporary service.~~ **Category superseded (2026-09-11, Session
+   Prompt "Detail View Adjustments" 3.2)**: rebound to the real,
+   independently writable `CustomerPurchaseOrderType` header property — no
+   longer blocked. Description (`ZZ_KTEXT_SDH`) was separately resolved as a
+   real custom header field (see NOTES.md 2026-09-01 entry) but is still
+   create-mode-only — its PATCHability on an *existing* order remains
+   unconfirmed, see that entry before wiring a change-mode Input for it.
 2. **Employee Responsible display name** — only the personnel number
    (`_SoldToPartyContactInfo/ResponsibleEmployee`) is exposed; there is no name
    resolution (e.g. via `UserType`/`BusinessPartner`) for it in this service,
@@ -14,15 +18,18 @@
    name). Master column and Detail "Employee Responsible" title both show the
    raw number only. Should the backend expose a resolved name, or is the raw
    personnel number acceptable for this prototype?
-3. **Priority (header-level)** — `DeliveryPriority` exists only on
-   `SalesOrderItemType` in this service, not on the header. The Phase 2 design
-   calls for a header/master-list Priority filter and Detail field. Is Priority
-   meant to be an **item-level, multi-value** concept (i.e. each vaccine line
-   item can have its own priority, no single header priority), or should the
-   permanent `ZUI_VACCINEREQUEST_O4` service expose a header-level Priority
-   field? If item-level is correct by design, the master filter/Detail field
-   should probably be redesigned around "any item has priority X" semantics
-   rather than left disabled.
+3. **Priority (header-level)** — ~~`DeliveryPriority` exists only on
+   `SalesOrderItemType` in this service, not on the header.~~ **Superseded
+   (2026-09-11, Session Prompt "Detail View Adjustments" 3.1)**: re-confirmed
+   still item-level-only; the header Priority field is now a VIRTUAL
+   read/write projection over every item's `DeliveryPriority` (uniform value
+   shown directly, multiple distinct values shown as "mixed" + the
+   highest-priority one found, a user change is propagated to every item at
+   Save) — see `Detail.controller.js#_computeHeaderPriority`/
+   `_propagatePriorityToItems`. Still no header-level Priority *property* to
+   PATCH — this is a client-side aggregation, not a new backend field. The
+   "most urgent = lowest code" ordering convention remains an unconfirmed
+   assumption (see item 17).
 4. **Header Tax/Gross amount** — only `TotalNetAmount` exists at header level;
    Tax/Gross amounts exist only per item (`TaxAmount` on `SalesOrderItemType`,
    no header rollup for either). Should the Details "Value" group show a
@@ -100,9 +107,12 @@
        disabled Input with an "available with the E008 service" tooltip).
     3. `ZI_VR_NDCVH` — value help for the NDC field (currently a plain,
        enabled Input with the same pending tooltip).
-    4. Confirmation of the Priority/Order Reason/Category/Intention enum
+    4. ~~Confirmation of the Priority/Order Reason/Category/Intention enum
        codes used in `webapp/model/Enums.js` (Intention likely maps to
-       MVGR1).
+       MVGR1).~~ **Intention/MVGR1 superseded (2026-09-16)**: real domain
+       confirmed by the client — `ADU`/`PED`/`MIX` (see item 18 below). Fund
+       Type/MVGR2 codes were already client-confirmed in a prior session.
+       Priority/Order Reason/Category codes remain unconfirmed.
 12. **CRUD Task 2 (Change Mode) backend dependencies** — added 2026-08-19,
     see `NOTES.md` "CRUD Task 2 v2" entry for full detail:
     1. **UpdateDescription/OrderUpdate micro-action** — no Description/KTEXT
@@ -121,12 +131,12 @@
        editable here; if a header-level Priority is planned for
        `ZUI_VACCINEREQUEST_O4`, note it as a new updatable-map entry when that
        service lands.
-    5. **Item "Intention"** — confirmed no backing field anywhere in the
-       bound `$metadata` (same BLOCKED-BY-SERVICE status as Fund Type/PO
-       Reference/Brand); Add Item cannot set it. Confirm whether
-       `ZUI_VACCINEREQUEST_O4` will expose an item-level Intention field, and
-       whether `TS_B2-2_NDCVH.docx`'s NDC-default logic should drive its
-       initial value once it does.
+    5. ~~**Item "Intention"** — confirmed no backing field anywhere in the
+       bound `$metadata`~~ **Superseded (predates this note; re-confirmed
+       2026-09-16)**: `MaterialGroup1` IS a real, independently writable item
+       field (`Edm.String MaxLength=3`) and is already live-wired (Items grid
+       Select, real MVGR1 codes `ADU`/`PED`/`MIX` — see item 18). No NDC-default
+       prefill logic exists for it yet, only manual selection.
 13. **CRUD Task 2 follow-up (Shipping/Org Data/Billing) — Sales Area fields —
     RESOLVED (read-only) 2026-08-21.** `SalesOrganization`, `DistributionChannel`,
     and `OrganizationDivision` were briefly wired editable per explicit user
@@ -171,12 +181,73 @@
     - Neither gap blocks the standard-CRUD spine itself (header + items create
       atomically today); both degrade to "field/section stays read-only or
       inert", not a broken Save.
-16. **Parties Involved / Attachments (new sections, CRUD Task 1 v3)** — both
-    are read-only placeholders in every mode. Parties Involved has no
-    per-partner write entity wired (see item 14 above — same `_Partner`
-    gap); Attachments has no backing entity in this service or any confirmed
-    companion service at all. Both are out of scope for this pass; flagged
-    here in case a future task wants to scope either as real functionality.
+16. **Parties Involved / Attachments (new sections, CRUD Task 1 v3)** — ~~both
+    are read-only placeholders in every mode.~~ **Parties Involved superseded
+    (2026-09-11, Session Prompt "Detail View Adjustments" 3.9)**: rewritten as
+    a real table over `_Partner`, with a working Add (`CreatePartner` bound
+    action) and Delete (real DELETE) — see item 17 below for the gaps this
+    left open. Attachments is unchanged — still has no backing entity in this
+    service or any confirmed companion service at all; still out of scope.
+
+17. **Session Prompt "Detail View Adjustments" (2026-09-11) — gaps left open
+    by this pass, tracked here so they aren't lost:**
+    - **Contact persistence** — the new `po>/ProviderContact` Value Help
+      (item 3.5) lets the user pick a contact and shows it in the createMode
+      Contact field, but there is still no confirmed write-back path for
+      persisting that selection onto the order itself (no header/item
+      property for it was identified in so.xml this session) — the picked
+      value only lives in the local `createEnrich` model today.
+    - **`zui_providerorder_srv` service binding name** — `manifest.json`'s new
+      `po` model URL follows the standard OData v4 SEGW/RAP binding-name
+      convention mirrored from `mainService`'s own shape, but was never
+      independently confirmed against a live system (no backend access this
+      session) — verify in `/IWFND/MAINT_SERVICE` before relying on it live.
+      Same caveat for `BusinessPartnerCompany` being assumed 1:1 with this
+      app's `SoldToParty`/Provider id.
+    - **Priority ordering convention** — "lowest `DeliveryPriority` code =
+      most urgent" is the standard SD assumption used by
+      `_computeHeaderPriority`'s "mixed" resolution, never independently
+      confirmed against the live `/DeliveryPriority` VH data/any ranking
+      annotation.
+    - **Partner edit dialog** — `onPartiesEditRow` is an explicit placeholder
+      toast (`partiesInvolvedEditPlaceholder`); no dialog for editing a
+      `HeaderPartner` row's other fields exists yet, only the Name/Customer
+      change (reusing the Provider picker) and Delete are real.
+    - **"Main Partner" flag** — the Parties Involved table's Main Partner
+      column is unbound/disabled; no such flag exists anywhere on
+      `HeaderPartnerType` in so.xml. If the client needs this, it likely
+      requires a new backend field/determination, not a client-side fix.
+    - **`ProductUOM`/`c_productunitsofmeasurevh`** — confirmed still
+      unused/unwired this session (UOM auto-default now comes from the NDC's
+      own `BaseUnit` property instead, item 3.7) — noted here only for future
+      reference, no action needed unless `BaseUnit` turns out to be wrong for
+      some materials.
+
+18. **Items grid fund-type rework / Delete row / Itm# calc (2026-09-16/17) —
+    gaps left open by this pass:**
+    - **`SalesOrderItem` client-side placeholder numbering is unverified
+      against a real deep-create POST.** `onItemsAddRow` now sets a
+      client-computed "next +10" value on new rows, relying on the property's
+      `@Core.Computed` annotation (so.xml) to mean the backend silently
+      ignores/overwrites it rather than rejecting the request outright. Never
+      confirmed live this session — if a create-mode Save ever starts failing
+      specifically on item creation after this change, this is the first
+      thing to re-check (strip `SalesOrderItem` from the `create()` payload if
+      so).
+    - **Two live-test bugs found and fixed same session**: (1) MVGR1 core:Item
+      keys were placeholder full words, not the real 3-char domain — fixed to
+      `ADU`/`PED`/`MIX` (client-confirmed); (2) changing Order Intention did
+      not clear an already-selected, now-invalid Fund Type (a disabled
+      `core:Item` doesn't auto-deselect itself) — fixed via new
+      `onOrderIntentionChange` handler. See NOTES.md 2026-09-16/17 entry for
+      full detail on both.
+    - **`ARR`/`N/A`/`S/L` all share one `ZZRESQTY` mirror** — no per-code split
+      was specified by the client for these three; if a future requirement
+      needs them tracked separately, `ZZRESQTY` would need to be split into
+      three real backend fields first (none exist today).
+    - **SPL ("Split") stays permanently disabled** — split-funding UI/logic
+      was explicitly out of scope for this pass, not just deferred pending
+      data.
 
 ## Swap-back readiness statement (target: `ZUI_VACCINEREQUEST_O4`)
 

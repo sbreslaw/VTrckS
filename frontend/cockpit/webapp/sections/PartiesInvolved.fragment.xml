@@ -1,22 +1,72 @@
-<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
-  <!-- CRUD Task 1 v3 (In-Place Create, design/prompts/CRUD Task 1 Prompt v3.md):
-       new section, always read-only. Partners are determined by the backend
-       from the Provider (SoldToParty) - there is no per-partner write entity
-       exposed by this service, so editing individual partners stays a
-       separate, not-yet-scoped feature (see OPEN_QUESTIONS.md). Renders the
-       same partner fields already confirmed safe to read on the Detail page
-       (ServiceSchema.js contactProperties/shipToPartyProperties). -->
-  <f:SimpleForm layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
-    <f:content>
-      <Label text="{i18n>shipTo}" />
-      <Text text="{_ShipToParty/FullName}" />
-      <Label text="{i18n>colEmployeeResponsible}" />
-      <Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" />
-      <Label text="{i18n>partiesInvolvedPayer}" />
-      <Text text="{_SoldToPartyContactInfo/PayerParty}" />
-      <Label text="{i18n>partiesInvolvedBillTo}" />
-      <Text text="{_SoldToPartyContactInfo/BillToParty}" />
-    </f:content>
-  </f:SimpleForm>
-  <MessageStrip text="{i18n>partiesInvolvedNote}" type="Information" showIcon="true" visible="{sectionFlags>/createMode}" class="sapUiTinyMarginTop" />
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Session Prompt (Detail View Adjustments) 3.9: full rewrite off the old
+       read-only SimpleForm placeholder onto a real, per-row table over the
+       header's own `_Partner` navigation (HeaderPartnerType, so.xml ~1065).
+       No $$updateGroupId is declared on the items binding - row PATCHes
+       (Name/Address change, below) and the CreatePartner bound-action call
+       (onPartiesAddConfirm) both ride the default "$auto" group, i.e. they
+       submit immediately, not staged for a section Save button - there is no
+       "editing" state for this section (SectionConfig.js: editable: false),
+       matching the per-row-immediate-action pattern the Delete button here
+       also uses. Section is hidden entirely in createMode (SectionConfig.js:
+       no createVisible) since CreatePartner requires an already-persisted
+       header context - the scratch transient context from createMode can
+       never be a valid target for it. -->
+  <Table id="partiesTable" items="{_Partner}" growing="true" growingThreshold="20">
+    <headerToolbar>
+      <OverflowToolbar>
+        <Title text="{i18n>sectionPartiesInvolved}" level="H3" />
+        <ToolbarSpacer />
+        <Button text="{i18n>partiesInvolvedAdd}" icon="sap-icon://add" press=".onPartiesAddRow" />
+      </OverflowToolbar>
+    </headerToolbar>
+    <columns>
+      <Column width="5rem"><Text text="{i18n>colRowAction}" /></Column>
+      <Column><Text text="{i18n>colPartnerFunction}" /></Column>
+      <Column><Text text="{i18n>colPartnerId}" /></Column>
+      <Column><Text text="{i18n>colPartnerName}" /></Column>
+      <Column><Text text="{i18n>colPartnerAddress}" /></Column>
+      <Column hAlign="Center"><Text text="{i18n>colMainPartner}" /></Column>
+    </columns>
+    <items>
+      <ColumnListItem>
+        <cells>
+          <HBox>
+            <!-- CRUD Task 2-style row actions, matching Items.fragment.xml's
+                 own per-row pattern - Edit is a placeholder pending a
+                 dedicated partner-edit dialog (not scoped this session, see
+                 OPEN_QUESTIONS.md), Delete is real (bound-entity DELETE,
+                 gated by the row's own dynamic __EntityControl/Deletable). -->
+            <Button icon="sap-icon://edit" type="Transparent" tooltip="{i18n>rowActionEdit}" press=".onPartiesEditRow" />
+            <!-- TODO-VERIFY(sold-to-partner-function): "AG" is assumed to be
+                 the sold-to-party SDDocumentPartnerType/PartnerFunction code
+                 (standard SD convention) - never independently confirmed
+                 live this session (no backend access) - guards against
+                 deleting the order's own mandatory Sold-To row. -->
+            <Button icon="sap-icon://delete" type="Transparent" tooltip="{i18n>rowActionDelete}" press=".onPartiesDeleteRow"
+              enabled="{__EntityControl/Deletable}" visible="{:= ${PartnerFunction} !== 'AG' }" />
+          </HBox>
+          <Text text="{_PartnerFunction/PartnerFunction_Text}" />
+          <Text text="{Partner}" />
+          <HBox>
+            <Text text="{FullName}" />
+            <!-- Name change VH: reuses _openShipToPartyValueHelpDialog (same
+                 CustomerSalesArea-backed picker the Provider field already
+                 uses) to PATCH this row's own Customer property - gated by
+                 the row's own dynamic __EntityControl/Updatable and never
+                 shown for the mandatory Sold-To row (see TODO-VERIFY above). -->
+            <Button icon="sap-icon://value-help" type="Transparent" press=".onPartiesChangeName"
+              enabled="{__EntityControl/Updatable}" visible="{:= ${PartnerFunction} !== 'AG' }" />
+          </HBox>
+          <Text text="{FormattedPostalAddressDesc}" />
+          <!-- TODO(main-partner): no "is main partner" flag exists anywhere
+               on HeaderPartnerType (confirmed absent from so.xml) - always
+               disabled/unselected, see OPEN_QUESTIONS.md. -->
+          <CheckBox enabled="false" selected="false" />
+        </cells>
+      </ColumnListItem>
+    </items>
+  </Table>
+  <MessageStrip text="{i18n>partiesInvolvedCreateModeNote}" type="Information" showIcon="true" visible="{sectionFlags>/createMode}" class="sapUiTinyMarginTop" />
 </core:FragmentDefinition>
+

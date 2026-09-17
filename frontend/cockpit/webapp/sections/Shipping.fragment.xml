@@ -1,37 +1,131 @@
-<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
-  <!-- v5 Required Fix 4: adding a new editable createMode field here requires
-       adding it to ServiceSchema.updatableHeaderProperties -
-       createReplayHeaderProperties is auto-derived from that list, see
-       ServiceSchema.js. -->
-  <f:SimpleForm editable="{sectionFlags>/shipping/editing}" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
-    <f:content>
-      <Label text="{i18n>shippingProvider}" />
-      <Text text="{_ShipToParty/FullName}" visible="{= !${sectionFlags>/createMode} }" />
-      <!-- CRUD Task 1 v5: no plain header property to PATCH/POST for _ShipToParty
-           (see NOTES.md), so this defaults to and stays in sync with the selected
-           Provider (createEnrich>/providerName) - same VH/handler as the General
-           Data Provider field (Detail.controller.js#onProviderValueHelpRequest). -->
-      <Input
-        value="{createEnrich>/providerName}"
-        showValueHelp="true"
-        valueHelpOnly="true"
-        editable="{:= !${createEnrich>/providerName} }"
-        visible="{sectionFlags>/createMode}"
-        valueHelpRequest=".onProviderValueHelpRequest"
-        tooltip="{i18n>providerLockedTooltip}" />
-      <Label text="{i18n>shippingCondition}" />
-      <Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/shipping/editing} }" />
-      <ComboBox
-        selectedKey="{ShippingCondition}"
-        visible="{sectionFlags>/shipping/editing}"
-        enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-        items="{path: '/ShippingCondition'}">
-        <core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
-      </ComboBox>
-      <Label text="{i18n>deliveryStatus}" />
-      <Text text="{OverallDeliveryStatus}" />
-      <Label text="{i18n>deliveryBlockStatus}" />
-      <Text text="{OverallDeliveryBlockStatus}" />
-    </f:content>
-  </f:SimpleForm>
+<core:FragmentDefinition 
+  xmlns="sap.m" 
+  xmlns:core="sap.ui.core" 
+  xmlns:f="sap.ui.layout.form" 
+  xmlns:l="sap.ui.layout">
+	<!-- v5 Required Fix 4: adding a new editable createMode field here requires
+			adding it to ServiceSchema.updatableHeaderProperties -
+			createReplayHeaderProperties is auto-derived from that list, see
+			ServiceSchema.js. -->
+	<f:Form width="auto" editable="{sectionFlags>/shipping/editing}">
+		<f:layout>
+			<f:ResponsiveGridLayout 
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2" 
+				columnsL="2" 
+				columnsM="1" 
+				singleContainerFullSize="false"
+			/>
+		</f:layout>
+
+		<f:formContainers>
+			<f:FormContainer>
+				<f:formElements>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>shippingProvider}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_ShipToParty/FullName}" visible="{= !${sectionFlags>/createMode} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<!-- CRUD Task 1 v5: no plain header property to PATCH/POST for _ShipToParty
+								(see NOTES.md), so this defaults to and stays in sync with the selected
+								Provider (createEnrich>/providerName) - same VH/handler as the General
+								Data Provider field (Detail.controller.js#onProviderValueHelpRequest). -->
+							<Input
+								value="{createEnrich>/providerName}"
+								showValueHelp="true"
+								valueHelpOnly="true"
+								editable="{:= !${createEnrich>/providerName} }"
+								visible="{sectionFlags>/createMode}"
+								valueHelpRequest=".onProviderValueHelpRequest"
+								tooltip="{i18n>providerLockedTooltip}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>shippingCondition}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/shipping/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<ComboBox
+								selectedKey="{ShippingCondition}"
+								visible="{sectionFlags>/shipping/editing}"
+								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+								items="{path: '/ShippingCondition'}">
+								<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>deliveryStatus}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{OverallDeliveryStatus}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>deliveryBlockStatus}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{OverallDeliveryBlockStatus}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer>
+		</f:formContainers>
+	</f:Form>
 </core:FragmentDefinition>

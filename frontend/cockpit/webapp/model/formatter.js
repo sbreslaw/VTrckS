@@ -104,6 +104,20 @@ sap.ui.define([
       return mStatusState[_code] || "None";
   }
 
+  // Items fundType (MaterialGroup2) Select core:Item enablement - SPL is
+  // always disabled (placeholder); VFC/CHP require Adult+Pediatric/Pediatric
+  // order intention (client-stated gating, see fundTypes model).
+  function fnFundTypeItemEnabled(sMaterialGroup1, bPediatricOnly, bDisabled) {
+    if (bDisabled) {
+      return false;
+    }
+    if (bPediatricOnly) {
+      // Real MVGR1 codes (2026-09-16 client confirmation) - PED=Pediatric, MIX=Pediatric and Adult.
+      return sMaterialGroup1 === "PED" || sMaterialGroup1 === "MIX";
+    }
+    return true;
+  }
+
   return {
     masterRequestId: function (sOrderId) {
       return sOrderId || "";
@@ -129,6 +143,10 @@ sap.ui.define([
 
     masterStatusState: function (sCode) {
       return fnStatusState(sCode);
+    },
+
+    fundTypeItemEnabled: function (sMaterialGroup1, bPediatricOnly, bDisabled) {
+      return fnFundTypeItemEnabled(sMaterialGroup1, bPediatricOnly, bDisabled);
     },
 
     masterCreatedOn: function (sValue) {

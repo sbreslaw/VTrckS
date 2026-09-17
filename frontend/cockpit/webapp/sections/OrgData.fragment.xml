@@ -1,52 +1,175 @@
-<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
-  <!-- v5 Required Fix 4: adding a new editable createMode field here requires
-       adding it to ServiceSchema.updatableHeaderProperties -
-       createReplayHeaderProperties is auto-derived from that list, see
-       ServiceSchema.js. -->
-  <f:SimpleForm editable="{sectionFlags>/orgData/editing}" layout="ResponsiveGridLayout" labelSpanL="4" labelSpanM="4" columnsL="2" columnsM="2">
-    <f:content>
-      <Label text="{i18n>salesOrg}" />
-      <!-- read-only outside createMode: backend rejects PATCH with "Read-only
-           fields must not be changed" on an existing order (confirmed
-           2026-08-21) - these three are creatable-only, so the ComboBox below
-           checks /createMode directly, not /orgData/editing (unlike
-           SalesOffice/SalesGroup, which stay editable in normal edit sessions
-           too). Entity sets + Text properties confirmed in design/so.xml
-           (SalesOrganizationType/DistributionChannelType/OrganizationDivisionType). -->
-      <Text text="{_SalesOrganization/SalesOrganization_Text}" visible="{= !${sectionFlags>/createMode} }" />
-      <!-- Fix 1 (Corrective Work Order): no longer user input in createMode -
-           this is one of the sales-area constants CreateWithSalesOrderType
-           sends (ServiceSchema.salesArea, TODO-VERIFY(B4)); fixed by the
-           action, read-only here. -->
-      <Text text="{SalesOrganization}" visible="{sectionFlags>/createMode}" />
-      <Label text="{i18n>distributionChannel}" />
-      <Text text="{_DistributionChannel/DistributionChannel_Text}" visible="{= !${sectionFlags>/createMode} }" />
-      <Text text="{DistributionChannel}" visible="{sectionFlags>/createMode}" />
-      <Label text="{i18n>division}" />
-      <Text text="{_OrganizationDivision/Division_Text}" visible="{= !${sectionFlags>/createMode} }" />
-      <Text text="{OrganizationDivision}" visible="{sectionFlags>/createMode}" />
-      <Label text="{i18n>salesOffice}" />
-      <Text text="{_SalesOffice/SalesOffice_Text}" visible="{= !${sectionFlags>/orgData/editing} }" />
-      <ComboBox
-        selectedKey="{SalesOffice}"
-        visible="{sectionFlags>/orgData/editing}"
-        enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-        items="{path: '/SalesOffice'}">
-        <core:Item key="{SalesOffice}" text="{SalesOffice_Text}" />
-      </ComboBox>
-      <Label text="{i18n>salesGroup}" />
-      <Text text="{_SalesGroup/SalesGroup_Text}" visible="{= !${sectionFlags>/orgData/editing} }" />
-      <ComboBox
-        selectedKey="{SalesGroup}"
-        visible="{sectionFlags>/orgData/editing}"
-        enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-        items="{path: '/SalesGroup'}">
-        <core:Item key="{SalesGroup}" text="{SalesGroup_Text}" />
-      </ComboBox>
-      <Label text="{i18n>serviceOrgUnit}" />
-      <Text text="{= '\u2014'}" />
-      <Label text="{i18n>serviceOrganization}" />
-      <Text text="{= '\u2014'}" />
-    </f:content>
-  </f:SimpleForm>
+<core:FragmentDefinition 
+  xmlns="sap.m" 
+  xmlns:core="sap.ui.core" 
+  xmlns:f="sap.ui.layout.form" 
+  xmlns:l="sap.ui.layout">
+	<!-- v5 Required Fix 4: adding a new editable createMode field here requires
+			adding it to ServiceSchema.updatableHeaderProperties -
+			createReplayHeaderProperties is auto-derived from that list, see
+			ServiceSchema.js. -->
+	<f:Form width="auto" editable="{sectionFlags>/orgData/editing}">
+		<f:layout>
+			<f:ResponsiveGridLayout 
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2" 
+				columnsL="2" 
+				columnsM="1" 
+				singleContainerFullSize="false"
+			/>
+		</f:layout>
+
+		<f:formContainers>
+			<f:FormContainer>
+				<f:formElements>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>salesOrg}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<!-- read-only outside createMode: backend rejects PATCH with "Read-only
+								fields must not be changed" on an existing order (confirmed
+								2026-08-21) - these three are creatable-only, so the ComboBox below
+								checks /createMode directly, not /orgData/editing (unlike
+								SalesOffice/SalesGroup, which stay editable in normal edit sessions
+								too). Entity sets + Text properties confirmed in design/so.xml
+								(SalesOrganizationType/DistributionChannelType/OrganizationDivisionType). -->
+							<Text text="{_SalesOrganization/SalesOrganization_Text}" visible="{= !${sectionFlags>/createMode} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<!-- Fix 1 (Corrective Work Order): no longer user input in createMode -
+								this is one of the sales-area constants CreateWithSalesOrderType
+								sends (ServiceSchema.salesArea, TODO-VERIFY(B4)); fixed by the
+								action, read-only here. -->
+							<Text text="{SalesOrganization}" visible="{sectionFlags>/createMode}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>distributionChannel}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_DistributionChannel/DistributionChannel_Text}" visible="{= !${sectionFlags>/createMode} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<Text text="{DistributionChannel}" visible="{sectionFlags>/createMode}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>division}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_OrganizationDivision/Division_Text}" visible="{= !${sectionFlags>/createMode} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<Text text="{OrganizationDivision}" visible="{sectionFlags>/createMode}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>salesOffice}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_SalesOffice/SalesOffice_Text}" visible="{= !${sectionFlags>/orgData/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<ComboBox
+								selectedKey="{SalesOffice}"
+								visible="{sectionFlags>/orgData/editing}"
+								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+								items="{path: '/SalesOffice'}">
+								<core:Item key="{SalesOffice}" text="{SalesOffice_Text}" />
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>salesGroup}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_SalesGroup/SalesGroup_Text}" visible="{= !${sectionFlags>/orgData/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<ComboBox
+								selectedKey="{SalesGroup}"
+								visible="{sectionFlags>/orgData/editing}"
+								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+								items="{path: '/SalesGroup'}">
+								<core:Item key="{SalesGroup}" text="{SalesGroup_Text}" />
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
+						</f:fields>
+					</f:FormElement>
+
+					<!-- Session Prompt (Detail View Adjustments) 3.4: "Service Org Unit" and
+						"Service Organization" placeholder fields REMOVED - both only ever
+						rendered a static em-dash (no backing entity/property existed for
+						either), and the client's requirements doc (design/prompts/dev-911)
+						lists them as fields to remove, not fields to build out. See
+						NOTES.md. -->
+
+				</f:formElements>
+			</f:FormContainer>
+		</f:formContainers>
+	</f:Form>
 </core:FragmentDefinition>

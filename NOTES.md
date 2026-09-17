@@ -1,5 +1,159 @@
 # NOTES
 
+## Session Prompt — Layout cleanup, Items fund-type rework, Delete row, Itm# calc — 2026-09-16/17
+
+Static-editing session (no live backend access until the final live test
+reported at the end of this entry). Two unrelated batches of work:
+
+- **Layout/form cleanup** (Details/OrgData/Shipping fragments): normalized
+  `sap.ui.layout.GridData` on every label/field (`XL4 L4 M4 S12`
+  `linebreak="true"` label / `XL8 L8 M8 S12` field), converted `f:SimpleForm`
+  to `f:Form`/`f:ResponsiveGridLayout`/`f:FormContainer`/`f:FormElement` in
+  `OrgData.fragment.xml`/`Shipping.fragment.xml` to match `Details.fragment.xml`'s
+  existing pattern, and swapped the Details Category field from `ComboBox` to
+  `Select` (binding unchanged, tag only).
+- **Items grid — fund type (MaterialGroup2) rework, Delete row, Itm# calc**
+  (three-part client request):
+  - Fund Type `Select` is now data-driven off a new `"fundTypes"` JSONModel
+    (`Detail.controller.js#_createFundTypesModel`, built from a new
+    `FUND_TYPES` module constant) instead of 8 hardcoded `core:Item`s — each
+    entry carries its own `targetField` (resolved via
+    `ServiceSchema.itemProperties`), `pediatricOnly`, and `disabled` flags.
+    Added `qty317`/`chipQty`/`panQty`/`resQty` to
+    `ServiceSchema.itemProperties` (`ZZ317QTY`/`ZZCHIPQTY`/`ZZPANQTY`/`ZZRESQTY`,
+    all `Edm.Int32 Nullable="false"`, seeded to 0 on Add same as the existing
+    `ZZVFCQTY`/`ZZSTATEQTY`). `SPL` stays disabled (split-funding UI not built).
+  - `onFundTypeChange` (new): mirrors the row's current Quantity onto the
+    newly-picked fund type's own `targetField`, clears every other fund type's
+    `targetField` to 0 (only one active per item). `onProdQtyChange` rewritten
+    to resolve the row's *current* fund type's `targetField` dynamically
+    (`_getFundTypeEntry`) instead of always writing `ZZSTATEQTY`.
+  - `onOrderIntentionChange` (new, added 2026-09-17 after live-test bug #2
+    below): disabling a now-invalid `core:Item` in the Fund Type `Select`
+    (`formatter.fundTypeItemEnabled`) does NOT itself clear an already-selected
+    key — changing Order Intention (MaterialGroup1) left a stale, now-invalid
+    Fund Type selected with no visible reaction. Fix: on Intention change,
+    re-validate the row's current Fund Type against the new Intention and
+    clear it (+ its `targetField`) if no longer valid.
+  - **Delete row**: `Items.fragment.xml`'s Delete `MenuItem` rewired from a
+    disabled placeholder to `press=".onItemsDeleteRow"` (`MessageBox.confirm`
+    + real `oRowContext.delete()`, same pattern as `onPartiesDeleteRow` —
+    rides whatever update group the Items section is already bound to,
+    `vrEdit` or `vrCreate`, no new group needed).
+  - **Itm# (SalesOrderItem) on Add**: new `_computeNextItemNumber` helper
+    scans `oBinding.getCurrentContexts()` for the max existing item number,
+    adds 10, zero-pads to 6 digits (SD +10 convention; `SalesOrderItem` is
+    `Edm.String MaxLength=6`) — set directly in `onItemsAddRow`'s `create()`
+    payload. `SalesOrderItem` is annotated `@Core.Computed` in so.xml, so per
+    OData V4 semantics the backend should ignore this client value and assign
+    the real one at Save — **this client-side placeholder is never actually
+    transmitted meaningfully, see the live-test bug below.**
+  - `CreateOrderService.js` needed NO change for any of the above — its item
+    replay step already copies ALL of a scratch item context's own properties
+    generically (the `ITEM_PROPERTIES` filtered constant near the top of that
+    file is dead code, confirmed unused).
+- **Live-test bug #1, confirmed (2026-09-16): MVGR1 (Order Intention) codes
+  were wrong placeholders, not the real domain.** `Items.fragment.xml`'s
+  Intention `Select` used `"Adult"`/`"Pediatric"`/`"AdultPediatric"` as
+  `core:Item` keys — `MaterialGroup1` is `Edm.String MaxLength="3"`, so those
+  values physically cannot be what's stored server-side. Symptom: create an
+  item as Pediatric + a pediatric-only Fund Type (e.g. STATE), Save succeeds,
+  but on reload Intention silently reverts to "Adult" (`sap.m.Select` falls
+  back to its first item when the bound value matches none of its
+  `core:Item` keys) and Fund Type reverts to VFC (the gating formatter
+  re-evaluates against the now-wrong Intention). Real codes confirmed by the
+  client: **MVGR1** `ADU`=Adult, `PED`=Pediatric, `MIX`=Pediatric and Adult;
+  **MVGR2** (Fund Type) codes were already correct (`VFC`/`317`/`S/L`/`CHP`/
+  `SPL`/`PAN`/`ARR`/`N/A`) — no change needed there. Fixed:
+  `Items.fragment.xml` `core:Item` keys, `formatter.js#fnFundTypeItemEnabled`'s
+  string comparisons, and the (dead-code, currently unused)
+  `Enums.js#FUND_TYPE_BY_INTENTION` map, all updated to `ADU`/`PED`/`MIX`.
+- **Live-test bug #2**: see `onOrderIntentionChange` above (Fund Type not
+  clearing when Intention changes) — same live-test session, found and fixed
+  right after bug #1.
+- **Item # / Rejection Reason columns hidden in createMode**: per client
+  request, since `SalesOrderItem` is never really transmitted (Computed) in
+  createMode and Rejection Reason only ever applies to an existing order's
+  items — both column headers and cells now combine their existing
+  `itemsColumns>` personalization-visibility binding with
+  `!${sectionFlags>/createMode}` via `{= ... }` expressions (escaped as
+  `&amp;&amp;` in the XML attribute, not raw `&&`, per prior `so.xml`-adjacent
+  lesson about unescaped ampersands in attribute values).
+
+
+Static-editing session (no live backend access, consistent with every prior
+entry in this file) implementing the Session Prompt spec's items 3.1-3.9. All
+of 3.1-3.7 and 3.9 are implemented; 3.8 (IoH live binding) is confirmed still
+ON HOLD per the spec's own instruction — no IoH-related code was touched.
+
+- **manifest.json**: new `"po"` OData V4 model wired to a new
+  `providerOrderService` dataSource (`zui_providerorder_srv`,
+  `operationMode: "Server"`, `autoExpandSelect: true`, `groupId: "$auto"`).
+  URL is `TODO-VERIFY` — the exact SICF/RAP binding name was never confirmed
+  against a live system this session; verify in `/IWFND/MAINT_SERVICE` before
+  relying on it.
+- **3.1 Priority**: confirmed (again) no header-level DeliveryPriority
+  property/navigation exists on `SalesOrderManageType` — stays a VIRTUAL
+  header field. `Detail.controller.js` now computes a header display value
+  from every item's real `DeliveryPriority` (`_computeHeaderPriority`,
+  uniform/mixed detection) and propagates a user-changed value back onto
+  every item at Save time only (`_propagatePriorityToItems`, called from
+  `onSectionSavePress` for the "details" section and from `onCreateSavePress`
+  for createMode). **TODO-VERIFY(priority-ordering)**: "most urgent = lowest
+  DeliveryPriority code" is assumed (standard SD convention), never
+  independently confirmed against the live `/DeliveryPriority` VH data.
+- **3.2 Category**: rebound from the old `SalesOrderType`-alias/hardcoded-enum
+  concept onto the real, independently writable `CustomerPurchaseOrderType`
+  header property (confirmed in so.xml, own `CustomerPurchaseOrderType` fixed
+  VH entity set, `_CustomerPurchaseOrderType` navigation for display text).
+  Added to `updatableHeaderProperties` (auto-flows into the create-replay
+  header PATCH). The old `ZZ_BSARK_SDH`/enum-based Category concept is fully
+  retired — it was never a real header field.
+- **3.3 Tax Amount**: confirmed (again) no header-level Tax field exists —
+  `headerProperties.taxAmount` stays `null`. The Details section's Tax Amount
+  is now a plain CLIENT-SIDE SUM of item `TaxAmount` (`_computeHeaderTaxAmount`,
+  called on order load and after an Items section save) — never part of any
+  create/edit payload.
+- **3.4 Org Data Service fields**: removed (per spec — not backend-supported,
+  see `OrgData.fragment.xml`).
+- **3.5 Contact VH**: rewired off the old `/StandardPartnerContactInfo` source
+  (which 501'd on any standalone query anyway) onto the new custom service's
+  `po>/ProviderContact` entity set, filtered to the selected Provider's
+  `BusinessPartnerCompany` (**TODO-VERIFY**: assumed 1:1 with SoldToParty,
+  never confirmed live) and client-side to each row's own Validity window.
+  Provider change already cleared Contact (`_prefillMainContact`) from a
+  prior session — reused, extended to also clear `contactId`.
+- **3.6 Shipping Condition**: reconfirmed already correctly wired to the real
+  `/ShippingCondition` entity set in a prior session — no changes needed.
+- **3.7 UOM**: reverted to read-only, now auto-defaulted from the selected
+  NDC's own `Product.BaseUnit` (real property, so.xml) via
+  `onItemNdcValueHelpRequest` — no more manual per-row typing.
+- **3.8 IoH**: confirmed untouched/ON HOLD, no code changes.
+- **3.9 Parties Involved**: full rewrite off the old read-only SimpleForm
+  placeholder onto a real table over the header's `_Partner` navigation.
+  `SectionConfig.js`'s `partiesInvolved` entry no longer has
+  `createVisible: true` — the only way to add a row, the bound `CreatePartner`
+  action, requires an already-persisted header context and cannot target the
+  createMode scratch transient context. Add uses `CreatePartner` (the only
+  sanctioned insert path, `InsertRestrictions.Insertable=false` on the
+  `_Partner` nav itself) followed by a `Customer` PATCH (the only settable
+  field `CreatePartner` doesn't itself take as a parameter); Delete is a real,
+  immediate per-row DELETE gated by the row's own dynamic
+  `__EntityControl/Deletable`; Name/Customer change reuses the existing
+  Provider-picker dialog (`_openShipToPartyValueHelpDialog`). Edit (other
+  fields) is an explicit placeholder, deferred to a later phase (see
+  OPEN_QUESTIONS.md). "Main Partner" checkbox is unbound/disabled — no such
+  flag exists anywhere on `HeaderPartnerType` in so.xml.
+- Caught and fixed one self-introduced bug before it shipped: two `visible=`
+  expression bindings in the new `PartiesInvolved.fragment.xml` compared a
+  raw string property (`PartnerFunction`) with `!==` inside a `{= ... }`
+  expression — same class of `FormatException` documented in
+  `/memories/repo/vtrcks-create-order-sticky-session.md` ("Fourth follow-up",
+  bug #3): expression bindings auto-convert every embedded `${...}` to the
+  target property's type (Boolean, for `visible`) before the JS expression
+  ever runs. Fixed by switching both to the no-auto-conversion `{:= ... }`
+  form.
+
 ## Item ZZVFCQTY (Edm.Int32 quantity mirror) — 2026-09-10
 
 Client-added `onProdQtyChange` (Detail.controller.js) keeps a new custom item
