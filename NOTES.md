@@ -1,5 +1,110 @@
 # NOTES
 
+## Bugfix — Select forceSelection race on OData V4 two-way `selectedKey` — 2026-09-18
+
+Live-tested and confirmed fixed. Two related bugs, same root cause:
+
+- **Header**: reading an existing order (master list -> detail) threw
+  `Error: Must not change a property before it has been read` while
+  updating `CustomerPurchaseOrderType`. Cause: `sap.m.Select` defaults
+  `forceSelection=true` — its `items` list (a real async backend VH read,
+  `/CustomerPurchaseOrderType`) could resolve before the header entity's own
+  property read completed, so the Select fell back to selecting/writing the
+  first VH item before the real value had ever been fetched, tripping V4's
+  guard against writing an unread property.
+- **Items**: the fundType (`MaterialGroup2`) column silently showed the
+  wrong value on row read (e.g. "VFC" displayed for a row whose real
+  `MaterialGroup2` was "PAN", confirmed via the raw OData GET response) — no
+  thrown error this time since the item list (`fundTypes>/list`) is a
+  synchronous local JSON model, but the same forceSelection fallback still
+  fired per-row before that row's own property had been read.
+- **Fix**: added `forceSelection="false"` to all three Selects in the
+  cockpit app whose `selectedKey` is two-way bound directly to a real OData
+  V4 property — `CustomerPurchaseOrderType` (Details.fragment.xml),
+  `MaterialGroup1`/`MaterialGroup2` (Items.fragment.xml). Selects bound to a
+  local JSON model instead (`priorityState>/value`, `createEnrich>/status`)
+  aren't exposed to this race and were left unchanged. Matches the
+  `forceSelection="false"` convention already used consistently throughout
+  the sibling `lp2preq` project — the pattern to follow for any new Select
+  bound straight to a real entity property in this codebase.
+- Full technical writeup in repo memory
+  (`vtrcks-create-order-sticky-session.md`, "Select forceSelection race..."
+  section) for any agent picking up a similar symptom later.
+
+## Session Prompt — Fund Split Dialog (Display/Edit Allocation per Item) — 2026-09-18
+
+Static-editing session (no live backend access this session). Scope: one
+dialog fragment + controller, its open triggers, and the minimal fund-layer
+modules it depends on — no save choreography/sticky/IoH/Parties changes.
+
+- **AUTHORITY CONFLICT LOGGED**: the session prompt's §1 references
+  `design/E008_FundSplit_Session_Prompt.md` as design authority for the fund
+  mapping/logic layer "if present" — it does NOT exist anywhere in `design/`
+  (confirmed via file search). Proceeded on the session prompt's own §2
+  Step-0 instructions alone, which are self-contained (they specify the
+  exact interim `FundMapProvider.js` table and `FundLogicService.js` API to
+  build when no such files exist). Similarly, §5 says NOTES/OPEN_QUESTIONS
+  should update "the Default Split backend logic" open question — no such
+  entry exists in `OPEN_QUESTIONS.md` either (grepped, not found); logged
+  here instead of editing a nonexistent entry, see OPEN_QUESTIONS.md's new
+  Fund Split section for the resolution written up fresh.
+- **Step-0 verdicts**: `model/FundMapProvider.js` and `service/FundLogicService.js`
+  did NOT exist — both created fresh, exactly as specified (interim table,
+  today's 8 codes, `IsAllocatable=false` for SPL/N/A, pediatric-only
+  eligibility gate for VFC/CHP via MaterialGroup1 PED/MIX). The Fund Type
+  Select (Items.fragment.xml) was confirmed HARDCODED (a `FUND_TYPES` module
+  constant in `Detail.controller.js`, unrelated to the new provider) — per
+  the prompt's explicit instruction, this was NOT reworked to read from
+  `FundMapProvider`; the two data sources are intentionally allowed to
+  diverge structurally as long as both correctly reflect the same known fund
+  codes/eligibility rules (they do — this was cross-checked by hand, not by
+  a shared runtime call). One necessary, in-scope touch to that existing
+  Select: `SPL`'s hardcoded `disabled: true` flag was removed (it must be
+  selectable for Trigger 1 to ever fire) — nothing else about that Select's
+  architecture changed.
+- **Eligible-rows-only deviation from legacy CRM_UI (record for UAT/training)**:
+  the new dialog's allocation table shows ONLY fund types where
+  `IsAllocatable && IsEligible` for the invoking row's Material/Intent (today:
+  gated purely on MaterialGroup1 pediatric-containment for VFC/CHP, since no
+  per-Material rule source exists yet) — e.g. an Adult-intent item shows 317/
+  S/L/PAN/ARR but never VFC/CHP rows at all. Legacy CRM_UI rendered every
+  fund type and merely disabled the inapplicable ones. This is confirmed
+  correct-by-design (session prompt §1), not a bug — flag to UAT/training so
+  testers don't report "missing rows" against the legacy screenshots.
+- **Default Split — resolved, client-side zero-all**: `Default Split` (in
+  edit mode only) sets every working-copy Quantity to 0 in the dialog's local
+  JSONModel; nothing is sent to the backend until the user then presses
+  `Done`. No backend logic of any kind is involved — purely a client-side
+  reset, matching legacy behavior.
+- **Commit semantics**: `Done` (edit mode) calls `FundLogicService.commitSplit`,
+  which writes EVERY eligible option's `TargetFieldName` back onto the row
+  context — including zeros, since the six `ZZ..QTY` fields are all
+  `Edm.Int32 Nullable="false"` (design/so.xml) and must never be left unset.
+  This rides whatever update group the Items section is already bound to
+  (`vrEdit`/`vrCreate`) — no new group, no early submit.
+- **Both triggers wired, no fallback-to-one**: (1) the Fund Type Select's
+  existing `onFundTypeChange` handler (Detail.controller.js) now also opens
+  the dialog in edit mode whenever the newly-picked key is SPL
+  (`FundLogicService.isSplitFund`); (2) the Items row Action menu's
+  "Fund Split" `MenuItem` (previously a permanently-disabled placeholder,
+  Items.fragment.xml) is now wired to a new `onItemsFundSplitPress` handler,
+  enabled whenever the row has any fund selected (same createMode-phasing
+  gate the Fund Type Select itself already uses), mode decided the same way.
+  Both call through a single lazily-created, reused `FundSplitDialog`
+  instance (`_getFundSplitDialog`) — its `open()` fully rebuilds the working-
+  copy JSONModel every call, so there is no state bleed between rows.
+- New files: `model/FundMapProvider.js`, `service/FundLogicService.js`,
+  `controller/FundSplitDialog.js` (fragment controller, not a
+  `sap.ui.core.mvc.Controller` — a plain constructor passed as `Fragment.load`'s
+  `controller` option, same idea as this codebase's existing per-purpose
+  helper modules like `SectionFactory.js`), `view/fragments/FundSplitDialog.fragment.xml`.
+  New i18n keys added under `i18n.properties` (`fundSplit*`,
+  `rowActionFundSplitTooltip`) — none hardcoded in XML/JS.
+- Not live-tested (no backend access this session, consistent with every
+  other entry in this file) — next agent with system access should run the
+  Definition of Done checklist from the session prompt end to end.
+
+
 ## Session Prompt — Layout cleanup, Items fund-type rework, Delete row, Itm# calc — 2026-09-16/17
 
 Static-editing session (no live backend access until the final live test

@@ -33,12 +33,14 @@ sap.ui.define([
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor",
   "cdc/vaccreq/service/EditRequestService",
-  "cdc/vaccreq/service/CreateOrderService"
+  "cdc/vaccreq/service/CreateOrderService",
+  "cdc/vaccreq/service/FundLogicService",
+  "cdc/vaccreq/controller/FundSplitDialog"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, Fragment,
   Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor,
-  EditRequestService, CreateOrderService
+  EditRequestService, CreateOrderService, FundLogicService, FundSplitDialog
 ) {
   "use strict";
 
@@ -60,15 +62,18 @@ sap.ui.define([
   // (_createFundTypesModel) so targetField (this fund type's own quantity
   // mirror property) travels with each entry for onFundTypeChange/
   // onProdQtyChange to look up, instead of a second hand-maintained map.
-  // S/L, ARR and N/A all share the single "leftover" ZZRESQTY mirror (no
-  // stated per-code split from the client); SPL is disabled for now
-  // (placeholder - split-funding UI not built yet).
+  // ARR and N/A share the single "leftover" ZZRESQTY mirror (no stated
+  // per-code split from the client). SPL has no quantity mirror of its own -
+  // selecting it opens the Fund Split dialog (FundSplitDialog.js) instead,
+  // which allocates across the OTHER eligible funds' own mirrors.
   var FUND_TYPES = [
     { key: "VFC", i18nKey: "enumFundTypeVfc", targetFieldKey: "vfcQty", pediatricOnly: true },
     { key: "317", i18nKey: "enumFundType317", targetFieldKey: "qty317" },
     { key: "S/L", i18nKey: "enumFundTypeState", targetFieldKey: "stateQty" },
     { key: "CHP", i18nKey: "enumFundTypeChip", targetFieldKey: "chipQty", pediatricOnly: true },
-    { key: "SPL", i18nKey: "enumFundTypeSplit", targetFieldKey: "", disabled: true },
+    // Fund Split dialog session prompt: SPL is now selectable (Trigger 1) -
+    // it has no own quantity mirror, the individual funds it splits across do.
+    { key: "SPL", i18nKey: "enumFundTypeSplit", targetFieldKey: "" },
     { key: "PAN", i18nKey: "enumFundTypePan", targetFieldKey: "panQty" },
     { key: "ARR", i18nKey: "enumFundTypeArr", targetFieldKey: "resQty" },
     { key: "N/A", i18nKey: "enumFundTypeNa", targetFieldKey: "resQty" }
@@ -567,6 +572,34 @@ sap.ui.define([
           oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0);
         }
       });
+      // Fund Split dialog session prompt, Trigger 1: selecting SPLIT opens the
+      // allocation dialog in edit mode immediately - no
+      // FundLogicService.applyFundSelection hook exists yet, wired directly here.
+      if (FundLogicService.isSplitFund(sKey)) {
+        this._getFundSplitDialog().open(oRowContext, "edit");
+      }
+    },
+
+    // Fund Split dialog session prompt, Trigger 2 (item Action menu): mode is
+    // decided by the invoking row's current fund via FundLogicService.isSplitFund
+    // - no fund literal here. The MenuItem is disabled (Items.fragment.xml) when
+    // no fund is selected yet, so oRowContext always has a real fund by the time
+    // this fires.
+    onItemsFundSplitPress: function (oEvent) {
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var sMode = FundLogicService.isSplitFund(oRowContext) ? "edit" : "view";
+      this._getFundSplitDialog().open(oRowContext, sMode);
+    },
+
+    // Single lazy-loaded FundSplitDialog instance, reused across rows/opens.
+    _getFundSplitDialog: function () {
+      if (!this._oFundSplitDialog) {
+        this._oFundSplitDialog = new FundSplitDialog(this.getView());
+      }
+      return this._oFundSplitDialog;
     },
 
     // Order Intention (MaterialGroup1) change - disabling a now-invalid

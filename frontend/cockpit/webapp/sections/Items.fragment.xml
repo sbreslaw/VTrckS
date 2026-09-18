@@ -44,7 +44,13 @@
                 <MenuItem text="{i18n>rowActionEdit}" enabled="false" />
                 <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
                   enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
-                <MenuItem text="{i18n>rowActionFundSplit}" enabled="false" />
+                <!-- Fund Split (Trigger 2, design session prompt §3.3): enabled
+                     whenever the row has ANY fund selected, same gate as the
+                     Fund Type Select itself (createMode phasing) - SPL opens
+                     edit mode, any other fund opens view mode (onItemsFundSplitPress). -->
+                <MenuItem text="{i18n>rowActionFundSplit}" press=".onItemsFundSplitPress"
+                  enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!${MaterialGroup2} }"
+                  tooltip="{i18n>rowActionFundSplitTooltip}" />
               </Menu>
             </menu>
           </MenuButton>
@@ -73,7 +79,7 @@
                baseUnit) instead of always defaulting to the hardcoded "EA". -->
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
-          <Select selectedKey="{MaterialGroup1}" visible="{itemsColumns>/orderIntention}"
+          <Select selectedKey="{MaterialGroup1}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
             enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
@@ -83,9 +89,10 @@
                MaxLength=3). Items bound to the "fundTypes" model (Detail.controller.js#
                _createFundTypesModel); each entry's targetField drives the quantity mirror
                in onFundTypeChange. Per-Item enabled combines this row's own MaterialGroup1
-               (Adult/Pediatric gating) with the model's disabled/pediatricOnly flags
-               (formatter.fundTypeItemEnabled) - SPL is disabled for now (placeholder). -->
-          <Select selectedKey="{MaterialGroup2}" visible="{itemsColumns>/fundType}"
+               (Adult/Pediatric gating) with the model's pediatricOnly flag
+               (formatter.fundTypeItemEnabled). Selecting SPL auto-opens the Fund Split
+               dialog in edit mode (onFundTypeChange, Fund Split dialog session prompt). -->
+          <Select selectedKey="{MaterialGroup2}" forceSelection="false" visible="{itemsColumns>/fundType}"
             enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
             items="{fundTypes>/list}" change=".onFundTypeChange">
             <core:Item key="{fundTypes>key}" text="{fundTypes>text}"

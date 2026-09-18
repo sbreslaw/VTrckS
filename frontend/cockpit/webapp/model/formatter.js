@@ -104,9 +104,11 @@ sap.ui.define([
       return mStatusState[_code] || "None";
   }
 
-  // Items fundType (MaterialGroup2) Select core:Item enablement - SPL is
-  // always disabled (placeholder); VFC/CHP require Adult+Pediatric/Pediatric
-  // order intention (client-stated gating, see fundTypes model).
+  // Items fundType (MaterialGroup2) Select core:Item enablement - VFC/CHP
+  // require Adult+Pediatric/Pediatric order intention (client-stated gating,
+  // see fundTypes model); bDisabled is kept for any future permanently-
+  // disabled entry (none currently - SPL is selectable, see Detail.controller.js
+  // FUND_TYPES / the Fund Split dialog session prompt).
   function fnFundTypeItemEnabled(sMaterialGroup1, bPediatricOnly, bDisabled) {
     if (bDisabled) {
       return false;

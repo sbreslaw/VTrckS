@@ -1,0 +1,51 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:f="sap.ui.layout.form">
+  <!-- Fund Split dialog (design session prompt): one lazy-loaded instance
+       reused across rows (FundSplitDialog.js#open rebuilds the "split"
+       JSONModel fully on every open - no state bleed between rows). Edit
+       mode (row's fund = SPL): Quantity inputs editable, Done/Default Split
+       enabled. View mode (any single-fund row): everything read-only,
+       Done/Default Split disabled (both gated by split>/editable). -->
+  <Dialog id="fundSplitDialog" title="{i18n>fundSplitDialogTitle}" contentWidth="34rem">
+    <content>
+      <f:SimpleForm layout="ResponsiveGridLayout" editable="false"
+        labelSpanL="4" labelSpanM="4" labelSpanS="12" columnsL="2" columnsM="2">
+        <Label text="{i18n>fundSplitProvider}" />
+        <Text text="{parts: [{path: 'split>/header/providerId'}, {path: 'split>/header/providerName'}], formatter: '.formatIdText'}" />
+        <Label text="{i18n>fundSplitMaterial}" />
+        <Text text="{parts: [{path: 'split>/header/material'}, {path: 'split>/header/materialText'}], formatter: '.formatIdText'}" />
+        <Label text="{i18n>fundSplitItemNumber}" />
+        <Text text="{split>/header/itemNumber}" />
+        <Label text="{i18n>fundSplitOrderQuantity}" />
+        <Text text="{split>/header/orderQuantity}" />
+        <Label text="{i18n>fundSplitBrand}" />
+        <Text text="{split>/header/brand}" />
+        <Label text="{i18n>fundSplitIntent}" />
+        <Text text="{split>/header/intention}" />
+      </f:SimpleForm>
+      <Table id="fundSplitTable" items="{split>/rows}" noDataText="{i18n>fundSplitNoRows}">
+        <columns>
+          <Column><Text text="{i18n>fundSplitColFundCode}" /></Column>
+          <Column><Text text="{i18n>fundSplitColFundText}" /></Column>
+          <Column hAlign="End"><Text text="{i18n>fundSplitColQuantity}" /></Column>
+        </columns>
+        <items>
+          <ColumnListItem>
+            <cells>
+              <Text text="{split>FundCode}" />
+              <Text text="{split>FundText}" />
+              <Input value="{path: 'split>Quantity', type: 'sap.ui.model.type.Integer', constraints: {minimum: 0}}"
+                type="Number" textAlign="End" editable="{split>/editable}" change=".onQuantityChange" />
+            </cells>
+          </ColumnListItem>
+        </items>
+      </Table>
+      <Text id="fundSplitTotalText" text="{parts: [{path: 'split>/total'}, {path: 'split>/header/orderQuantity'}], formatter: '.formatAllocatedTotal'}"
+        class="sapUiSmallMarginTop sapUiSmallMarginBegin" />
+    </content>
+    <buttons>
+      <Button text="{i18n>fundSplitDone}" type="Emphasized" enabled="{split>/editable}" press=".onDonePress" />
+      <Button text="{i18n>fundSplitDefaultSplit}" enabled="{split>/editable}" press=".onDefaultSplitPress" />
+      <Button text="{i18n>fundSplitCancel}" press=".onCancelPress" />
+    </buttons>
+  </Dialog>
+</core:FragmentDefinition>

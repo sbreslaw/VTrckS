@@ -287,3 +287,32 @@ Files that must change when swapping the temporary
 currently returns hits **only** in `ServiceSchema.js` — see `PHASE2_AUDIT.md`
 Section H. This confirms the swap-back surface is limited to `ServiceSchema.js`
 + the fragments + the two draft touchpoints, nothing else.
+
+19. **Fund Split Dialog (2026-09-18) — resolved item + gaps left open:**
+    - ~~**Default Split backend logic**~~ — the session prompt that
+      introduced this dialog referred to this as a pre-existing open
+      question to be marked resolved, but no such entry existed in this file
+      before now (see NOTES.md's authority-conflict note for that session).
+      Recording the resolution here for the first time: **Default Split is a
+      pure client-side reset** (every working-copy Quantity set to 0 in the
+      dialog only) — nothing is sent to the backend until the user
+      separately presses Done. No backend logic is or was involved.
+    - **`FundMapProvider.js` is a temporary, hand-maintained table**, same
+      status as the Fund Type Select's own hardcoded `FUND_TYPES` constant in
+      `Detail.controller.js` — there is still no real VH/provider service for
+      fund-type/eligibility data. The two lists were cross-checked by hand to
+      agree on today's 8 codes; they are not runtime-linked to each other by
+      design (session prompt explicitly said not to rework the Select this
+      session). If a real backend fund-mapping service ever ships, both
+      should be re-pointed at it together.
+    - **Per-Material eligibility rule is unimplemented** — `FundMapProvider`'s
+      `getFundMap`/`getAllocatableEligible` accept a `sMaterial` parameter for
+      this, but today's eligibility gate is intention-only (MaterialGroup1
+      PED/MIX for VFC/CHP); no per-NDC/Material rule source has ever been
+      identified in this service. Revisit if/when one is.
+    - **Not live-tested** — built and wired in a static-editing session, no
+      backend access. The Definition of Done checklist (see the session
+      prompt) still needs a live pass: split-sum save behavior, SE16
+      persisted-value confirmation, and the row-switch/keyboard-operability
+      checks.
+

@@ -328,6 +328,7 @@
 							</Text>
 							<Select
 								selectedKey="{CustomerPurchaseOrderType}"
+								forceSelection="false"
 								visible="{sectionFlags>/details/editing}"
 								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
 								items="{path: '/CustomerPurchaseOrderType'}">
