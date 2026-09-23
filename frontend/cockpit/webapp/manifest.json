@@ -146,6 +146,16 @@
                         "master",
                         "detail"
                     ]
+                },
+                {
+                    "name": "itemDetail",
+                    "pattern": "order/{orderId}/item/{itemPath}",
+                    "layout": "EndColumnFullScreen",
+                    "target": [
+                        "master",
+                        "detail",
+                        "itemDetail"
+                    ]
                 }
             ],
             "targets": {
@@ -160,6 +170,18 @@
                     "name": "Detail",
                     "level": 1,
                     "controlAggregation": "midColumnPages"
+                },
+                "itemDetail": {
+                    "id": "itemDetail",
+                    "name": "ItemDetail",
+                    "level": 2,
+                    "controlAggregation": "endColumnPages"
+                },
+                "itemNotFound": {
+                    "id": "itemNotFound",
+                    "name": "ItemNotFound",
+                    "level": 2,
+                    "controlAggregation": "endColumnPages"
                 }
             }
         }

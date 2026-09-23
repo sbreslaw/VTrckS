@@ -41,7 +41,9 @@
           <MenuButton text="" icon="sap-icon://menu2" type="Transparent" visible="{itemsColumns>/rowAction}">
             <menu>
               <Menu>
-                <MenuItem text="{i18n>rowActionEdit}" enabled="false" />
+                <!-- Disabled until saved: unsaved rows have no backend item to show. -->
+                <MenuItem text="{i18n>rowActionEdit}" press=".onItemsEditPress"
+                  enabled="{= !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} }" />
                 <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
                   enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
                 <!-- Fund Split (Trigger 2, design session prompt §3.3): enabled

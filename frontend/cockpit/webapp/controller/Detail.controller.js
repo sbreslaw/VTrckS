@@ -620,6 +620,25 @@ sap.ui.define([
       }
     },
 
+    // Item Details view session prompt, 3.4: Items row Action menu "Edit" ->
+    // FCL end column, always full screen (session prompt 3.1). Row context
+    // supplies the SalesOrder/SalesOrderItem keys for the new route.
+    onItemsEditPress: function (oEvent) {
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var sOrderId = oRowContext.getProperty(ServiceSchema.keys.orderId);
+      var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
+      if (!sOrderId || !sItemNumber) {
+        return;
+      }
+      this._oRouter.navTo("itemDetail", {
+        orderId: encodeURIComponent(sOrderId),
+        itemPath: encodeURIComponent(sItemNumber)
+      });
+    },
+
     // Real, batched DELETE on the row's own bound-entity context - rides the
     // same update group as the rest of the Items section's edit session
     // (change-mode "vrEdit" or createMode "vrCreate", see _rebindItemsGroup),

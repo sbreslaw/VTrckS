@@ -9,7 +9,18 @@ sap.ui.define([
 ], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast) {
   "use strict";
 
-  function SectionFactory(oView, aMeta, fnOnContentLoaded) {
+  // Item Details view session prompt, Step-0: "prefer parameterizing the
+  // existing factory" over a mirror copy. Two additive, backward-compatible
+  // parameters were added: `sFlagsModel` (4th ctor arg, defaults to
+  // "sectionFlags" so every existing SectionConfig.js/Detail.view.xml caller
+  // is unaffected) lets a second panel stack (ItemDetail.view.xml) drive its
+  // own edit-button visibility off its own "itemSectionFlags" model instead of
+  // colliding with the order Detail view's; `oMeta.extraHeaderButtons` (an
+  // optional array on a SectionConfig-style entry) renders additional
+  // disabled, tooltip-only buttons in a section's header toolbar (e.g.
+  // Shipping's "Alternative Shipping Address" parity button) without a new
+  // per-button code path.
+  function SectionFactory(oView, aMeta, fnOnContentLoaded, sFlagsModel) {
     this._oView = oView;
     this._aMeta = aMeta || [];
     this._mLoaded = {};
@@ -19,6 +30,7 @@ sap.ui.define([
     // right update group) regardless of whether it loaded via user expand or a
     // forced createMode expand.
     this._fnOnContentLoaded = fnOnContentLoaded;
+    this._sFlagsModel = sFlagsModel || "sectionFlags";
   }
 
   SectionFactory.prototype.ensurePanels = function () {
@@ -29,6 +41,7 @@ sap.ui.define([
 
     var oBundle = this._oView.getModel("i18n").getResourceBundle();
     var oController = this._oView.getController();
+    var sFlags = this._sFlagsModel;
     this._aMeta.forEach(function (oMeta, iIndex) {
       var aToolbarContent = [
         new Title(this._oView.createId(oMeta.id + "-title"), { text: oBundle.getText(oMeta.titleKey), level: "H4" }),
@@ -46,17 +59,17 @@ sap.ui.define([
           aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
             text: oBundle.getText("sectionEdit"),
             visible: {
-              parts: ["sectionFlags>/" + oMeta.id + "/editVisible", "sectionFlags>/" + oMeta.id + "/editing", "sectionFlags>/createMode"],
+              parts: [sFlags + ">/" + oMeta.id + "/editVisible", sFlags + ">/" + oMeta.id + "/editing", sFlags + ">/createMode"],
               formatter: function (bVisible, bEditing, bCreateMode) { return !!bVisible && !bEditing && !bCreateMode; }
             },
-            enabled: "{sectionFlags>/" + oMeta.id + "/editEnabled}",
+            enabled: "{" + sFlags + ">/" + oMeta.id + "/editEnabled}",
             press: function () { oController.onSectionEditPress(oMeta.id); }
           }));
           aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-saveBtn"), {
             text: oBundle.getText("actionSave"),
             type: "Emphasized",
             visible: {
-              parts: ["sectionFlags>/" + oMeta.id + "/editing", "sectionFlags>/createMode"],
+              parts: [sFlags + ">/" + oMeta.id + "/editing", sFlags + ">/createMode"],
               formatter: function (bEditing, bCreateMode) { return !!bEditing && !bCreateMode; }
             },
             press: function () { oController.onSectionSavePress(oMeta.id); }
@@ -64,7 +77,7 @@ sap.ui.define([
           aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-cancelBtn"), {
             text: oBundle.getText("actionCancel"),
             visible: {
-              parts: ["sectionFlags>/" + oMeta.id + "/editing", "sectionFlags>/createMode"],
+              parts: [sFlags + ">/" + oMeta.id + "/editing", sFlags + ">/createMode"],
               formatter: function (bEditing, bCreateMode) { return !!bEditing && !bCreateMode; }
             },
             press: function () { oController.onSectionCancelPress(oMeta.id); }
@@ -72,8 +85,8 @@ sap.ui.define([
         } else {
           aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
             text: oBundle.getText("sectionEdit"),
-            visible: "{sectionFlags>/" + oMeta.id + "/editVisible}",
-            enabled: "{sectionFlags>/" + oMeta.id + "/editEnabled}",
+            visible: "{" + sFlags + ">/" + oMeta.id + "/editVisible}",
+            enabled: "{" + sFlags + ">/" + oMeta.id + "/editEnabled}",
             tooltip: oBundle.getText("editAvailableLaterPhase"),
             press: function () {
               MessageToast.show(oBundle.getText("editAvailableLaterPhase"));
@@ -81,6 +94,18 @@ sap.ui.define([
           }));
         }
       }
+
+      // Item Details view session prompt: optional extra disabled, tooltip-only
+      // header buttons beyond the standard Edit/Save/Cancel triad (e.g.
+      // Shipping's "Alternative Shipping Address" parity button) - additive,
+      // no existing SectionConfig.js entry sets this so nothing else changes.
+      (oMeta.extraHeaderButtons || []).forEach(function (oBtnMeta) {
+        aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-" + oBtnMeta.id + "-btn"), {
+          text: oBundle.getText(oBtnMeta.titleKey),
+          enabled: false,
+          tooltip: oBundle.getText(oBtnMeta.tooltipKey || "editAvailableLaterPhase")
+        }));
+      }, this);
 
       var oToolbar = new OverflowToolbar({ content: aToolbarContent });
 
@@ -92,7 +117,7 @@ sap.ui.define([
         // are hidden entirely while createMode is on (design/prompts/CRUD Task 1
         // Prompt v3.md "All other sections: hidden ... per SectionConfig flag").
         visible: {
-          path: "sectionFlags>/createMode",
+          path: sFlags + ">/createMode",
           formatter: function (bCreateMode) { return !bCreateMode || !!oMeta.createVisible; }
         },
         expand: this._oView.getController().onExpandPanel.bind(this._oView.getController())

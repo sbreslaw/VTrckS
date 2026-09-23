@@ -1,0 +1,38 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Item Details view session prompt, 3.3.4 (prices.png). Real table shell,
+       exact column set from the screenshot - but genuinely unbound
+       (ServiceSchema.itemPricingEntitySet is null, no `items` aggregation
+       binding at all) per the session prompt's explicit instruction, even
+       though this app's TEMPORARY standard service already has a real,
+       matching `ItemPricingElement` entity set (see ServiceSchema.js comment
+       + OPEN_QUESTIONS.md for the proposed column<->property mapping given to
+       the backend team for the eventual permanent service). When backend
+       delivers: set ServiceSchema.itemPricingEntitySet, bind this Table's
+       `items` to "{_ItemPricingElement}", and remove the `noData` empty
+       state below - that one constant + binding activation is the only
+       wiring change needed. -->
+  <Table id="itemPricesTable" noDataText="{i18n>itemDetailPricesEmpty}">
+    <headerToolbar>
+      <OverflowToolbar>
+        <ToolbarSpacer />
+        <Button text="{i18n>itemDetailPricesInsert}" enabled="false" tooltip="{i18n>itemDetailPendingFieldTooltip}" />
+        <Button text="{i18n>itemDetailPricesReprice}" enabled="false" tooltip="{i18n>itemDetailPendingFieldTooltip}" />
+        <Button text="{i18n>itemDetailPricesCompleteReprice}" enabled="false" tooltip="{i18n>itemDetailPendingFieldTooltip}" />
+        <Button text="{i18n>itemDetailPricesAdd}" enabled="false" tooltip="{i18n>itemDetailPendingFieldTooltip}" />
+        <Button text="{i18n>itemDetailPricesEditList}" enabled="false" tooltip="{i18n>itemDetailPendingFieldTooltip}" />
+        <Button text="{i18n>itemDetailPricesFilter}" icon="sap-icon://filter" enabled="false" tooltip="{i18n>itemDetailPendingFieldTooltip}" />
+      </OverflowToolbar>
+    </headerToolbar>
+    <columns>
+      <Column width="3rem"><Text text="{i18n>itemDetailPricesColActions}" /></Column>
+      <Column><Text text="{i18n>colStatus}" /></Column>
+      <Column><Text text="{i18n>itemDetailPricesColElement}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>itemDetailPricesColPrice}" /></Column>
+      <Column><Text text="{i18n>itemUom}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>itemDetailPricesColPriceUnit}" /></Column>
+      <Column><Text text="{i18n>itemDetailPricesColUom}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>itemDetailPricesColEndValue}" /></Column>
+      <Column><Text text="{i18n>itemDetailPricesColCurrency}" /></Column>
+    </columns>
+  </Table>
+</core:FragmentDefinition>

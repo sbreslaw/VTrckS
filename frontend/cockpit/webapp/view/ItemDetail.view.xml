@@ -1,0 +1,66 @@
+<mvc:View
+  controllerName="cdc.vaccreq.controller.ItemDetail"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:f="sap.f"
+  xmlns:core="sap.ui.core">
+  <f:DynamicPage id="itemDetailPage" fitContent="true">
+    <f:title>
+      <f:DynamicPageTitle>
+        <f:heading>
+          <Title id="itemDetailTitle" />
+        </f:heading>
+        <f:snappedContent>
+          <Text id="itemDetailSubtitle" />
+        </f:snappedContent>
+        <f:expandedContent>
+          <Text id="itemDetailSubtitleExpanded" />
+        </f:expandedContent>
+
+        <f:content>
+          <OverflowToolbar>
+            <GenericTag id="itemDetailStatus" design="StatusIconHidden" />
+          </OverflowToolbar>
+        </f:content>
+
+        <f:navigationActions>
+          <!-- "Back (view header back button): navigate to the order route
+               with layout MidColumnFullScreen ... regardless of the layout it
+               had before the drill-down" (session prompt 3.1) - the "detail"
+               route already always sets layout MidColumnFullScreen on match
+               (manifest.json), so a plain re-navTo is enough. -->
+          <Button
+            id="itemDetailBackBtn"
+            icon="sap-icon://nav-back"
+            type="Transparent"
+            tooltip="{i18n>actionBack}"
+            press=".onBackPress" />
+          <Button
+            id="itemMessagePopoverBtn"
+            icon="sap-icon://message-popup"
+            text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
+            type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
+            press=".onMessagePopoverPress" />
+        </f:navigationActions>
+      </f:DynamicPageTitle>
+    </f:title>
+
+    <f:header>
+      <f:DynamicPageHeader>
+        <HBox wrap="Wrap" renderType="Bare" justifyContent="Start" items="{itemSectionsNav>/list}">
+          <items>
+            <Link text="{itemSectionsNav>title}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+              <customData>
+                <core:CustomData key="panelId" value="{itemSectionsNav>id}" writeToDom="false" />
+              </customData>
+            </Link>
+          </items>
+        </HBox>
+      </f:DynamicPageHeader>
+    </f:header>
+
+    <f:content>
+      <VBox id="sectionsContainer" class="sapUiResponsiveContentPadding" />
+    </f:content>
+  </f:DynamicPage>
+</mvc:View>

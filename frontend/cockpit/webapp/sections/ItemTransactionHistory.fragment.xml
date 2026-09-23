@@ -1,0 +1,6 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Item Details view session prompt, 3.3.5: designed empty state ("TBD"),
+       no table machinery, same idiom as the order-level
+       TransactionHistory.fragment.xml placeholder. -->
+  <MessageStrip text="{i18n>itemDetailTransactionHistoryEmpty}" type="Information" showIcon="true" />
+</core:FragmentDefinition>

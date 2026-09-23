@@ -298,6 +298,90 @@ sap.ui.define([], function () {
       taxAmount: "TaxAmount"
     },
 
+    // Item Detail view (FCL end column) — Session Prompt "Item Details View".
+    // Step-0 field mapping against design/so.xml SalesOrderItemType (+ its
+    // navigations, verified via grep, none guessed per Onboarding rule 7).
+    // Fields also present in `itemProperties` above (used by the Items grid)
+    // are intentionally duplicated here under their Item-Detail-screen name
+    // rather than cross-referenced, matching this file's existing convention
+    // of one flat literal per block.
+    itemDetailProperties: {
+      product: "Product",
+      productText: "_Product/Product_Text",
+      quantity: "RequestedQuantity",
+      quantityUnit: "RequestedQuantityUnit",
+      quantityUnitText: "_RequestedQuantityUnit/UnitOfMeasure_Text",
+      // "VH-shaped control rendered disabled" (session prompt 3.3) - real
+      // top-level fixed-values EntitySet confirmed (so.xml line 2538).
+      rejectionReason: "SalesDocumentRjcnReason",
+      rejectionReasonText: "_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text",
+      // Item-level overall process status (SDProcessStatus, so.xml line 144) -
+      // a DIFFERENT code set from the header's OverallSDProcessStatus/
+      // UserStatusDerived (headerProperties.status/userStatus) - do not reuse
+      // formatter.statusText/statusState (header 1A/1B/... map) for this; its
+      // own _SDProcessStatus/SDProcessStatus_Text nav gives the real label
+      // directly from the backend, no client-side code map needed or safe to
+      // invent.
+      status: "SDProcessStatus",
+      statusText: "_SDProcessStatus/SDProcessStatus_Text",
+      orderIntention: "MaterialGroup1",
+      fundType: "MaterialGroup2",
+      // Same underlying field as itemProperties.exisId ("ExIS Item Number" in
+      // the Items grid) - SalesOrderItemType has no separate PO-reference
+      // property (Step-0, so.xml confirmed) - this IS the PO Reference.
+      poReference: "PurchaseOrderByCustomer",
+      deliveryStatus: "DeliveryStatus",
+      deliveryStatusText: "_DeliveryStatus/DeliveryStatus_Text",
+      totalQtyDelivered: "ConfdDelivQtyInOrderQtyUnit",
+      orderQuantityUnit: "OrderQuantityUnit",
+      netAmount: "NetAmount",
+      taxAmount: "TaxAmount",
+      currency: "TransactionCurrency",
+      // Net Value per Unit / pricing unit - TODO-VERIFY(net-price-per-unit):
+      // NetPriceAmount/NetPriceQuantity/PriceQuantityUnit do NOT exist on
+      // SalesOrderItemType (Step-0, so.xml confirmed) - there is no per-unit
+      // price field at all, only the line NetAmount. Left null so a future
+      // accidental binding fails loudly instead of silently reading a
+      // nonexistent path; ItemDetails.fragment.xml renders the em-dash
+      // pending pattern for this field.
+      netPricePerUnit: null,
+      pricingUnit: null,
+      // Gross Value - TODO-VERIFY(item-gross-value): no item-level Gross
+      // field exists either (ZZ_GROSS_VALUE_SDH is HEADER-only, so.xml line
+      // 498 confirmed within SalesOrderManageType) - computed client-side as
+      // netAmount + taxAmount (formatter.itemDetailGrossValue), same pattern
+      // already used for the header's virtual Tax Amount
+      // (_computeHeaderTaxAmount in Detail.controller.js).
+      grossValue: null,
+      // Shipping section. TODO-VERIFY(item-delivery-block-reason): so.xml has
+      // DeliveryBlockStatus (a status CODE) at item level but no distinct
+      // block-REASON property/navigation - ItemBillingBlockReason is a
+      // different (billing, not delivery) block reason. Left null rather than
+      // guessing a VBAP-era name into this V4 service; DeliveryBlockStatus
+      // (verified) is shown instead.
+      deliveryBlockReason: null,
+      deliveryBlockStatus: "DeliveryBlockStatus",
+      partialDeliveryIsAllowed: "PartialDeliveryIsAllowed",
+      partialDeliveryIsAllowedText: "_PartialDeliveryItem/PartialDeliveryIsAllowed_Text",
+      maxPartialDeliveries: "MaxNmbrOfPartialDelivery",
+      deliveryGroup: "DeliveryGroup",
+      orderCombinationIsAllowed: "OrderCombinationIsAllowed"
+    },
+
+    // Prices section (session prompt 3.3 item 4) - TODO-VERIFY(prices-entity):
+    // treated as a placeholder per the session prompt's explicit instruction
+    // ("the entity set is in development"), even though Step-0 found that
+    // THIS temporary standard service already exposes a real, fully-fielded
+    // `ItemPricingElement` top-level EntitySet (so.xml line 2473, via the
+    // item's own `_ItemPricingElement` navigation) with a column set that
+    // maps closely to the prices.png screenshot - see OPEN_QUESTIONS.md for
+    // the proposed column<->property mapping given to the backend team. Left
+    // null/not wired here on purpose: the CANONICAL target service for this
+    // app (ZUI_VACCINEREQUEST_O4, per AGENT_ONBOARDING.md) does not have
+    // pricing yet, and the DoD calls for the real UI shell + designed empty
+    // state, not activating the temporary service's own pricing data.
+    itemPricingEntitySet: null,
+
     customHeaderFields: [],
 
     customItemFields: [
@@ -587,6 +671,13 @@ sap.ui.define([], function () {
 
     buildHeaderPath: function (sOrderId) {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";
+    },
+
+    // Item Detail view (FCL end column) - canonical path for the top-level
+    // SalesOrderItem EntitySet (so.xml line 2542), keyed by SalesOrder +
+    // SalesOrderItem (both Edm.String, so.xml lines 75-76).
+    buildItemPath: function (sOrderId, sItemNumber) {
+      return "/" + this.entitySets.item + "(SalesOrder='" + sOrderId + "',SalesOrderItem='" + sItemNumber + "')";
     }
   };
 

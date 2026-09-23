@@ -1,5 +1,82 @@
 # NOTES
 
+## Session Prompt — Item Details View (FCL Third Column, Section-Panel Cockpit) — 2026-09-18
+
+Static-editing session (no live backend access this session), display-first
+deliverable: no PATCH/edit machinery introduced for the new item-detail
+view (all 5 sections read-only this phase; Edit buttons render disabled via
+the existing "later phase" convention, zero new code needed for that part).
+
+- **Missing design screenshots**: the session prompt references
+  `design/details.png`, `design/shipping.png`, `design/prices.png` as design
+  authority — none exist in the workspace (confirmed via file search).
+  Implemented from the prompt's own detailed textual field descriptions only.
+- **`ItemPricingElement` actually exists**: Step-0 found that the temporary
+  bridge service (`C_SALESORDERMANAGE_SD`, sanctioned interim per
+  `AGENT_ONBOARDING.md` guardrail 6) already exposes a real, fully-fielded
+  `ItemPricingElement` top-level EntitySet (via the item's own
+  `_ItemPricingElement` navigation) whose columns closely match the Prices
+  screenshot's described columns. Deliberately NOT wired anyway — the
+  session prompt explicitly calls this section "in development", and the
+  canonical target service (`ZUI_VACCINEREQUEST_O4`) does not have pricing
+  yet. `ServiceSchema.itemPricingEntitySet` is `null`; `ItemPrices.fragment.xml`
+  is a real, unbound table shell (exact column set, all-disabled toolbar,
+  designed empty state) — see OPEN_QUESTIONS.md for the proposed
+  column<->property mapping handed to the backend team as a starting point
+  for the eventual permanent service.
+- **Fields confirmed absent (left `null` + `TODO-VERIFY` in `ServiceSchema.js`
+  rather than guessed, per the hard "never invent SAP artifact names"
+  guardrail)**: item Net Price per Unit / Pricing Unit (no such property on
+  `SalesOrderItemType` at all — only the line `NetAmount` exists); item Gross
+  Value (no item-level equivalent of `ZZ_GROSS_VALUE_SDH`, which is
+  header-only — computed client-side as Net + Tax instead, same pattern as
+  the header's existing virtual Tax Amount); item Delivery Block *Reason*
+  (only `DeliveryBlockStatus`, a status code, exists — `ItemBillingBlockReason`
+  is a different, billing-specific field and was not substituted in).
+- **`SectionFactory.js` parameterized, not duplicated**: added a 4th,
+  optional constructor arg `sFlagsModel` (defaults to `"sectionFlags"`, so
+  every existing caller/view is unaffected) so the new `ItemDetail.view.xml`
+  panel stack can drive its own edit-button visibility off its own
+  `"itemSectionFlags"` model. Also added an additive, opt-in
+  `oMeta.extraHeaderButtons` array on a `SectionConfig`-style entry, used by
+  the new `ItemShipping.fragment.xml`'s disabled "Alternative Shipping
+  Address" header button (Shipping section, screenshot parity) without a new
+  per-button code path.
+- **Full-screen-both-ways navigation contract**: implemented purely via
+  routing config, no extra layout-state code. New route `itemDetail`
+  (`order/{orderId}/item/{itemPath}`) sets `"layout": "EndColumnFullScreen"`
+  on match; `ItemDetail.controller.js#onBackPress` simply re-navigates to the
+  existing `"detail"` route, which already always sets
+  `"layout": "MidColumnFullScreen"` on match regardless of what layout was
+  active before the drill-down — no "previous layout" restore logic needed
+  or written.
+- **New files**: `view/ItemDetail.view.xml`, `controller/ItemDetail.controller.js`,
+  `view/ItemNotFound.view.xml` (+ controller, for a stale/invalid item link),
+  `sections/ItemSectionConfig.js`, `sections/ItemDetails.fragment.xml`,
+  `sections/ItemShipping.fragment.xml`, `sections/ItemShippingTransactions.fragment.xml`
+  (placeholder), `sections/ItemPrices.fragment.xml` (real table shell,
+  disabled toolbar), `sections/ItemTransactionHistory.fragment.xml`
+  (placeholder).
+- **Modified files**: `model/ServiceSchema.js` (`itemDetailProperties` block,
+  `itemPricingEntitySet: null`, `buildItemPath()`), `model/formatter.js`
+  (`itemDetailTitle`, `itemDetailSubtitle`, `itemDetailGrossValue`),
+  `manifest.json` (`itemDetail` route/target, `itemNotFound` target),
+  `sections/SectionFactory.js` (parameterization, see above),
+  `sections/Items.fragment.xml` + `controller/Detail.controller.js`
+  (row Action-menu "Edit" now navigates to `itemDetail` via
+  `onItemsEditPress`, using the row's `SalesOrder`/`SalesOrderItem` keys),
+  `i18n/i18n.properties` (new keys for the item-detail screen).
+- **Validation**: zero `SimpleForm` usage in any new fragment (mandatory
+  `sap.ui.layout.form.Form` idiom used throughout, matching
+  `Details.fragment.xml`/`Shipping.fragment.xml`); `get_errors` clean across
+  all new/modified files.
+- **2026-09-23 recovery note**: before commit, 17 tracked files in the local
+  working copy were found reverted to older, already-superseded content (and
+  this session's edits to them were missing). Cause not confirmed — a bulk
+  rewrite at 17:12:26 coincided with accepting chat edits ("Keep"); OneDrive
+  sync is the other suspect. Git history was never affected. Files were
+  restored from `HEAD` and every edit re-applied before committing.
+
 ## Bugfix — Select forceSelection race on OData V4 two-way `selectedKey` — 2026-09-18
 
 Live-tested and confirmed fixed. Two related bugs, same root cause:

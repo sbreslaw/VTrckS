@@ -1,0 +1,6 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Item Details view session prompt, 3.3.3: designed empty state, no table
+       machinery (deferred to a later release, same idiom as the order-level
+       ShippingTransactions.fragment.xml placeholder). -->
+  <MessageStrip text="{i18n>itemDetailShippingTransactionsEmpty}" type="Information" showIcon="true" />
+</core:FragmentDefinition>

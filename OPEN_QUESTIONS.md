@@ -316,3 +316,28 @@ Section H. This confirms the swap-back surface is limited to `ServiceSchema.js`
       persisted-value confirmation, and the row-switch/keyboard-operability
       checks.
 
+20. **Item Details View (2026-09-18) — resolved items + gaps left open:**
+    - **Prices entity contract proposal (for the backend team)** — the
+      Prices section is deliberately an unbound, disabled table shell this
+      phase (`ServiceSchema.itemPricingEntitySet: null`), per the session
+      prompt's "in development" instruction. The TEMPORARY bridge service
+      already has a real `ItemPricingElementType` EntitySet (via the item's
+      `_ItemPricingElement` navigation) — a concrete starting point. Real
+      properties on it (so.xml): `ConditionType` + `ConditionTypeName`
+      (Price Element), `ConditionRateAmount`/`ConditionRateRatio` (Price —
+      disambiguated by `ConditionRateValueIsAmount`/`IsRatio`),
+      `ConditionQuantityUnit` (Unit), `ConditionBaseQuantity` (candidate for
+      Price Unit — unconfirmed), `ConditionAmount` (End Value),
+      `ConditionCurrency`/`TransactionCurrency` (Currency — needs a ruling on
+      which is authoritative). No confirmed mapping for a "UoM" column
+      distinct from `ConditionQuantityUnit`, nor for Status/Actions — needs
+      backend/design sign-off before wiring.
+    - ~~**Rejection Reason value-help availability**~~ — resolved:
+      `SalesDocumentRjcnReason` is a real top-level fixed-values EntitySet,
+      rendered as a disabled VH-shaped `ComboBox` in
+      `ItemDetails.fragment.xml`. Only a later edit phase needs more.
+    - **Item Notes (text) read + write path** — still open. so.xml has a real
+      `_ItemText`/`ItemTextType` collection on `SalesOrderItemType`, but
+      Notes is a disabled, unbound `TextArea` placeholder this phase — which
+      text ID/language row to use needs a backend-confirmed convention first.
+

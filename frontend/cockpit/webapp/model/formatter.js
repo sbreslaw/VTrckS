@@ -290,6 +290,34 @@ sap.ui.define([
 
     statusState: function (sCode) {
       return fnStatusState(sCode);
+    },
+
+    // Item Details view (FCL end column) - Title = "<Product> <Product_Text>".
+    itemDetailTitle: function (sProduct, sProductText) {
+      if (!sProduct) {
+        return "";
+      }
+      return sProductText ? (sProduct + " " + sProductText) : sProduct;
+    },
+
+    // Subtitle = "<orderPrefix>: <orderId> / <itemPrefix>: <itemNumber>",
+    // i18n-composed (sOrderPrefix/sItemPrefix come from i18n bundle text via
+    // the caller's binding parts, not hardcoded here).
+    itemDetailSubtitle: function (sOrderId, sItemNumber, sOrderPrefix, sItemPrefix) {
+      if (!sOrderId) {
+        return "";
+      }
+      return sOrderPrefix + ": " + sOrderId + " / " + sItemPrefix + ": " + (sItemNumber || "");
+    },
+
+    // No item-level Gross Value field exists (ZZ_GROSS_VALUE_SDH is
+    // header-only, so.xml confirmed) - computed client-side as Net + Tax,
+    // same pattern as the header's virtual Tax Amount
+    // (Detail.controller.js#_computeHeaderTaxAmount).
+    itemDetailGrossValue: function (sNetAmount, sTaxAmount) {
+      var fNet = parseFloat(sNetAmount) || 0;
+      var fTax = parseFloat(sTaxAmount) || 0;
+      return String(fNet + fTax);
     }
   };
 });
