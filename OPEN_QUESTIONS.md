@@ -341,3 +341,34 @@ Section H. This confirms the swap-back surface is limited to `ServiceSchema.js`
       Notes is a disabled, unbound `TextArea` placeholder this phase — which
       text ID/language row to use needs a backend-confirmed convention first.
 
+21. **Ancillary Items & Opt-Out (2026-09-19) — gaps left open (no live
+    backend access this session):**
+    - **`IsMandatoryAncillary` indicator** — both captured traces show every
+      item's `__EntityControl/Deletable` as `true` regardless of whether it
+      turned out to actually be deletable in practice — mandatory-vs-optional
+      ancillary is NOT client-visible via this flag. If a mandatory ancillary
+      needs its own distinct UI treatment (vs. relying purely on the
+      backend's own rejection message via `onItemsDeleteRow`'s existing
+      MessagePopover path), a real indicator field is needed from the
+      backend.
+    - **V1/028-style discontinued ancillary materials** — functional
+      question for the client/backend team: what should the UI show if the
+      server-side ancillary determination selects a NDC that's since been
+      discontinued? No evidence either way in the two captured traces.
+    - **Change-mode opt-out behavior** — this session's implementation only
+      covers the checkbox while a row is bound under the interactive
+      session's own `$auto` group (createMode, post-session-open). Whether
+      the same PATCH+full-refresh pattern is safe/correct against an
+      EXISTING order (`vrEdit` group, `PrepareForEdit`/`SaveChanges`
+      bracket) is unverified — deferred, needs its own live-test pass before
+      extending `onItemOptOutChange` to change mode.
+    - **LIVE CAPTURE gaps — RESOLVED (2026-09-24 live-test pass):** (a) YES,
+      the backend DOES re-determine/recalculate ancillary quantities on a
+      qty PATCH to an already-posted item (e.g. 100→140, then 200→280) - the
+      client just wasn't refreshing to pick it up, now fixed (see NOTES.md
+      2026-09-24 entry); (b) the happy-path flow (open session on first
+      complete row → switch table binding → toggle opt-out → qty change
+      propagation) has now been live-tested end-to-end and passes. Still
+      NOT covered by this pass: manually deleting a child row, and the final
+      Save/replay of the whole order.
+

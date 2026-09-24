@@ -52,7 +52,7 @@
 								value="{createEnrich>/providerName}"
 								showValueHelp="true"
 								valueHelpOnly="true"
-								editable="{:= !${createEnrich>/providerName} }"
+								editable="{= !%{createEnrich>/providerName} }"
 								visible="{sectionFlags>/createMode}"
 								valueHelpRequest=".onProviderValueHelpRequest"
 								tooltip="{i18n>providerLockedTooltip}">

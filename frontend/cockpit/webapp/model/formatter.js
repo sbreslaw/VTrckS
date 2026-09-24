@@ -120,6 +120,27 @@ sap.ui.define([
     return true;
   }
 
+  // Ancillary Items & Opt-Out session prompt §3.3: the Opt-Out checkbox is
+  // only ever meaningful/enabled on a PARENT row (never itself a child,
+  // sHigherLevelItem unset) that actually HAS ancillary children right now
+  // (oChildParents, keyed by SalesOrderItem - Detail.controller.js#
+  // _computeAncillaryParents), on top of the usual createMode phasing gate.
+  function fnItemOptOutEnabled(sItemNumber, sHigherLevelItem, oChildParents, bCreateMode, bProviderChosen) {
+    if (sHigherLevelItem) {
+      return false;
+    }
+    if (bCreateMode && !bProviderChosen) {
+      return false;
+    }
+    return !!(oChildParents && sItemNumber && oChildParents[sItemNumber]);
+  }
+
+  // The checkbox itself never renders on an ancillary child row (HigherLevelItem
+  // set) - a child never gets an opt-out control at all, not just a disabled one.
+  function fnItemOptOutVisible(bColumnVisible, sHigherLevelItem) {
+    return !!bColumnVisible && !sHigherLevelItem;
+  }
+
   return {
     masterRequestId: function (sOrderId) {
       return sOrderId || "";
@@ -149,6 +170,14 @@ sap.ui.define([
 
     fundTypeItemEnabled: function (sMaterialGroup1, bPediatricOnly, bDisabled) {
       return fnFundTypeItemEnabled(sMaterialGroup1, bPediatricOnly, bDisabled);
+    },
+
+    itemOptOutEnabled: function (sItemNumber, sHigherLevelItem, oChildParents, bCreateMode, bProviderChosen) {
+      return fnItemOptOutEnabled(sItemNumber, sHigherLevelItem, oChildParents, bCreateMode, bProviderChosen);
+    },
+
+    itemOptOutVisible: function (bColumnVisible, sHigherLevelItem) {
+      return fnItemOptOutVisible(bColumnVisible, sHigherLevelItem);
     },
 
     masterCreatedOn: function (sValue) {

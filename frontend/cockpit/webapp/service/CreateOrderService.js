@@ -33,6 +33,11 @@ sap.ui.define([
   // cleanup (v5 Required Fix 2) before the original error is re-thrown.
   var CREATE_GROUP = ServiceSchema.createUpdateGroup;
   var CREATE_REPLAY_GROUP = ServiceSchema.createReplayGroup;
+  // Ancillary Items & Opt-Out session prompt: the group every in-session
+  // item POST/PATCH/refresh rides once the sticky session is opened EARLY
+  // (on first complete item row), never the deferred CREATE_REPLAY_GROUP —
+  // see ServiceSchema.js itemInteractiveGroup doc comment.
+  var ITEM_GROUP = ServiceSchema.itemInteractiveGroup;
   // v5 Required Fix 4 (replay-list drift guard): this list is DERIVED from
   // updatableHeaderProperties in ServiceSchema.js, not hand-maintained here —
   // see the comment there.
@@ -82,6 +87,39 @@ sap.ui.define([
     });
   }
 
+  // Shared by _ensureSession (early open, on first complete item row) and
+  // save()'s own fallback path (session never opened) - same params either
+  // way, see "UX phasing + triad sourcing" (v5 amendment) for why these come
+  // off the scratch header data rather than the fixed salesArea constant.
+  function buildCreateActionParams(oScratchData) {
+    return {
+      SalesOrderType: ServiceSchema.fixedOrderTypes[0],
+      SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || ServiceSchema.salesArea.salesOrganization,
+      DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || ServiceSchema.salesArea.distributionChannel,
+      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || ServiceSchema.salesArea.organizationDivision,
+      SoldToPartyForCreate: oScratchData[ServiceSchema.headerProperties.providerId] || ""
+    };
+  }
+
+  // Strips OData control/instance-annotation keys (@odata.*, @$ui5.*, etc.)
+  // off a scratch row's own plain object before replaying/posting it -
+  // shared by the bulk replay loop (save()'s fallback path) and the new
+  // interactive single-item post (postItem below).
+  function hasSymbols(sPropertyName) {
+    var regex = /[^a-zA-Z0-9_-\s]/; // not a letter, digit, underscore, dash or space
+    return regex.test(sPropertyName);
+  }
+
+  function cleanItemPayload(oItemData) {
+    var oClean = {};
+    Object.keys(oItemData || {}).forEach(function (sProperty) {
+      if (!hasSymbols(sProperty) && oItemData[sProperty] !== undefined) {
+        oClean[sProperty] = oItemData[sProperty];
+      }
+    });
+    return oClean;
+  }
+
   var CreateOrderService = {
     UPDATE_GROUP: CREATE_GROUP,
 
@@ -111,19 +149,110 @@ sap.ui.define([
       // which rejects created()'s promise - swallow it here since nothing
       // else awaits it; otherwise it surfaces as an uncaught rejection.
       oContext.created().catch(function () {});
-      return { listBinding: oListBinding, context: oContext };
+      // Ancillary Items & Opt-Out session prompt: mutable state for the
+      // early-opened sticky session (opened on the FIRST complete item row,
+      // not at Save - see _ensureSession/postItem below). `opened`/
+      // `plainContext` start empty; `pending` guards concurrent callers
+      // (e.g. two rows completing back-to-back) from opening it twice.
+      var oSession = { opened: false, plainContext: null, pending: null };
+      return { listBinding: oListBinding, context: oContext, session: oSession };
     },
 
-    // Cancel pre-Save = delete the transient scratch context. Nothing was
-    // ever sent to the backend (its group is never submitted), so there is
-    // nothing to clean up server-side — no sticky session was ever opened.
-    cancel: function (oContext) {
-      return oContext.delete();
+    // Cancel pre-Save. Nothing was ever sent to the backend for the HEADER
+    // scratch (its group is never submitted) - a plain local delete is
+    // enough for that. But if items were already posted interactively (a
+    // real sticky session is open, oSession.opened), that session genuinely
+    // holds server-side data now - v5 Required Fix 2 (session hygiene)
+    // applies here too, same as a mid-Save failure: DiscardChanges it before
+    // abandoning create mode, don't just leave it to expire on its own.
+    cancel: function (oContext, oSession) {
+      var pDiscard = (oSession && oSession.opened && oSession.plainContext)
+        ? discardSession(oContext.getModel(), "user cancelled create with items already posted in-session")
+        : Promise.resolve();
+      return pDiscard.then(function () {
+        return oContext.delete();
+      });
     },
 
     isDirty: function (oContext) {
       var oModel = oContext && oContext.getModel();
       return !!oModel && oModel.hasPendingChanges(CREATE_GROUP);
+    },
+
+    // v5 amendment §3.1 (items go interactive-in-session): opens the sticky
+    // session EARLY - the instant the first scratch item row becomes
+    // complete - instead of waiting for the final Save button (the prior
+    // behavior, still used by save()'s own fallback path below if this was
+    // never called, e.g. a header-only retry). Idempotent/re-entrant: a
+    // session already opened (or currently opening) is reused, never opened
+    // twice. Resolves with the plain sticky context every in-session item
+    // POST/PATCH/refresh binds against (ServiceSchema.buildHeaderPath("")),
+    // same canonical-path pattern save() already uses, just under
+    // ITEM_GROUP ($auto) instead of CREATE_REPLAY_GROUP.
+    _ensureSession: function (oSession, oScratchContext) {
+      if (oSession.opened && oSession.plainContext) {
+        return Promise.resolve(oSession.plainContext);
+      }
+      if (oSession.pending) {
+        return oSession.pending;
+      }
+      var oModel = oScratchContext.getModel();
+      var oScratchData = oScratchContext.getObject() || {};
+      var oHeaderListBinding = oModel.bindList("/" + ServiceSchema.entitySets.header);
+      var oAction = oModel.bindContext(ServiceSchema.createAction + "(...)", oHeaderListBinding.getHeaderContext(), {
+        $select: "SAP__Messages"
+      });
+      var oActionParams = buildCreateActionParams(oScratchData);
+      Object.keys(oActionParams).forEach(function (sKey) {
+        oAction.setParameter(sKey, oActionParams[sKey]);
+      });
+      var pExecute = oAction.execute(ITEM_GROUP);
+      oSession.pending = pExecute
+        .catch(function (oError) {
+          console.error("CreateOrderService._ensureSession: CreateWithSalesOrderType (early open) failed",
+            "\nparameters sent:", oActionParams, "\nerror:", oError && oError.message, oError, "\nmessages:", logMessages());
+          throw oError;
+        })
+        .then(function () {
+          var oPlainContext = oModel.bindContext(ServiceSchema.buildHeaderPath(""), undefined, {
+            $$updateGroupId: ITEM_GROUP
+          }).getBoundContext();
+          oSession.opened = true;
+          oSession.plainContext = oPlainContext;
+          return oPlainContext;
+        })
+        .then(function (oPlainContext) {
+          oSession.pending = null;
+          return oPlainContext;
+        }, function (oError) {
+          oSession.pending = null;
+          throw oError;
+        });
+      return oSession.pending;
+    },
+
+    // v5 amendment §3.1: POST one completed scratch row straight to the
+    // sticky session's own `_Item` navigation ($auto, immediate - matches
+    // the observed opt-out traces' group). Opens the session first if this
+    // is the very first item (_ensureSession). Resolves once the server
+    // response for THIS item lands (created() promise) - the row now carries
+    // server truth (adjusted quantity, real SalesOrderItem number); the
+    // caller (Detail.controller.js) still owns rebinding the Items table to
+    // this session and refreshing the list to pick up any auto-inserted
+    // ancillary sibling rows (a single-entity POST response cannot include
+    // them).
+    postItem: function (oSession, oScratchContext, oItemData) {
+      var oModel = oScratchContext.getModel();
+      return CreateOrderService._ensureSession(oSession, oScratchContext).then(function (oStickyContext) {
+        var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyContext, undefined, undefined, {
+          $$updateGroupId: ITEM_GROUP,
+          $select: "SAP__Messages"
+        });
+        var oNewItemContext = oItemsBinding.create(cleanItemPayload(oItemData));
+        return oNewItemContext.created().then(function () {
+          return oNewItemContext;
+        });
+      });
     },
 
     // Client-side MIN_ITEMS rule enforced at Save (design/prompts/CRUD Task 1
@@ -151,7 +280,7 @@ sap.ui.define([
     // uses MessageExtractor.js to parse it) if any step fails; a best-effort
     // DiscardChanges runs first for any failure from step ① onward (v5
     // Required Fix 2).
-    save: function (oScratchContext, oItemsBinding) {
+    save: function (oScratchContext, oItemsBinding, oSession) {
       // Message Accuracy & Hygiene task, Gap 1 - pre-attempt clearing: a
       // stale extractor/technical message from a PRIOR failed save attempt
       // must never carry over and look like part of THIS ①–④ attempt.
@@ -159,6 +288,23 @@ sap.ui.define([
       var oModel = oScratchContext.getModel();
       var oScratchData = oScratchContext.getObject() || {};
 
+      // v5 amendment §3.1 (items go interactive-in-session): if a sticky
+      // session was already opened earlier - the first complete scratch item
+      // row triggered postItem()/_ensureSession() well before this Save
+      // button press - it already holds every item the table shows. Step ②
+      // (bulk item deep-create) DISAPPEARS for that case entirely; jump
+      // straight to steps ③④ (SaveChanges commits what the session already
+      // has, then the header-extras PATCH) via the shared tail below. Steps
+      // ①③④ themselves are otherwise UNCHANGED from the original v5 shape -
+      // only WHEN ① ran (here vs. earlier) differs.
+      if (oSession && oSession.opened && oSession.plainContext) {
+        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData);
+      }
+
+      // Fallback - session never opened interactively (e.g. Save reached
+      // with zero items ever completed through the new row-complete seam;
+      // should be rare, hasMinItems already blocks a zero-item Save): the
+      // original, full ①②③④ replay, unchanged.
       var oHeaderListBinding = oModel.bindList("/" + ServiceSchema.entitySets.header);
       // Message Accuracy & Hygiene task, Gap 0: SAP__Messages is opt-in via
       // $select (RAP's bound-message channel, not returned by default) -
@@ -176,13 +322,7 @@ sap.ui.define([
       // combination) onto this same scratch context, alongside SoldToParty -
       // ServiceSchema.salesArea is only a fallback if a picked row somehow
       // lacked area columns (should never happen in practice, TODO-VERIFY(B4)).
-      var oActionParams = {
-        SalesOrderType: ServiceSchema.fixedOrderTypes[0],
-        SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || ServiceSchema.salesArea.salesOrganization,
-        DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || ServiceSchema.salesArea.distributionChannel,
-        OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || ServiceSchema.salesArea.organizationDivision,
-        SoldToPartyForCreate: oScratchData[ServiceSchema.headerProperties.providerId] || ""
-      };
+      var oActionParams = buildCreateActionParams(oScratchData);
       Object.keys(oActionParams).forEach(function (sKey) {
         oAction.setParameter(sKey, oActionParams[sKey]);
       });
@@ -216,24 +356,6 @@ sap.ui.define([
           // navigation is a plain POST the metamodel CAN resolve. They must
           // be attached here, before SaveChanges — SaveChanges is the actual
           // SD commit and is expected to reject a header-only order.
-          var oStickyContext = oAction.getBoundContext();
-          // v5 gotcha (live test, 2026-08-28): SaveChanges cannot be bound
-          // directly onto oStickyContext - it is itself the bound context of
-          // ANOTHER still-tracked deferred operation (CreateWithSalesOrderType),
-          // and the model/backend rejects binding one deferred operation onto
-          // another's own result context ("Nested deferred operation bindings
-          // not supported"). A rebind via oStickyContext.getPath() does NOT
-          // fix this either - that path is the literal, unresolved
-          // "...CreateWithSalesOrderType(...)" binding-template string (the
-          // "(...)" is UI5's own deferred-parameters placeholder, never meant
-          // to reach the wire), so reusing it as a request path 400s with
-          // /IWCOR/CX_OD_URI_SYNTAX_ERROR instead. Use a proper canonical
-          // path (buildHeaderPath, same helper the post-Save header PATCH
-          // below already uses) with an empty key instead - sticky-session
-          // correlation happens via the SAP-ContextId header the model
-          // manages automatically, not via this path's key value, so the
-          // still-empty key is fine. Used for both the item deep-create list
-          // binding and the SaveChanges action binding below, for consistency.
           var oStickyPlainContext = oModel.bindContext(ServiceSchema.buildHeaderPath(""), undefined, {
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
@@ -246,22 +368,8 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP,
             $select: "SAP__Messages"
           });
-          var _hasSymbols=function(input) {
-            const regex = /[^a-zA-Z0-9_-\s]/; // Matches any character that is not a letter, digit, or space
-            return regex.test(input);
-          }
           aScratchItemContexts.forEach(function (oItemContext) {
-            var oItemData = oItemContext.getObject() || {};
-            var oNewItemData = {};
-            Object.keys(oItemData).forEach(function (sProperty) {
-            // ITEM_PROPERTIES.forEach(function (sProperty) {
-             if(!_hasSymbols(sProperty)) {
-              if (oItemData[sProperty] !== undefined) {
-                oNewItemData[sProperty] = oItemData[sProperty];
-              }
-             } 
-            });
-            oStickyItemsBinding.create(oNewItemData);
+            oStickyItemsBinding.create(cleanItemPayload(oItemContext.getObject() || {}));
           });
           var oItemsPromise = oModel.submitBatch(CREATE_REPLAY_GROUP);
 
@@ -275,96 +383,95 @@ sap.ui.define([
               });
             })
             .then(function () {
-              // SaveChanges is what actually commits the document and
-              // assigns the real key - call it (still bound to the same
-              // sticky session/context) now that items exist. Bound onto
-              // oStickyPlainContext, NOT oStickyContext - see the comment
-              // above where oStickyPlainContext is derived.
-              // v5 gotcha, round 6 (live test, 2026-08-28): without an
-              // explicit $$updateGroupId here (unlike its sibling contexts
-              // above), this operation binding fell back to "$auto" instead
-              // of CREATE_REPLAY_GROUP - confirmed live via Network tab, the
-              // execute(CREATE_REPLAY_GROUP, ...) argument alone did NOT
-              // force it. Sent standalone/immediately outside our explicit
-              // changeset, which is the likely cause of the backend's SAVE
-              // handler seeing a disconnected/blank buffer.
-              // Gap 0 (Message Accuracy & Hygiene task): same $select opt-in as
-              // the create action above - SaveChanges is the real SD commit and
-              // the most likely place VI-028/FI-759-style business messages
-              // actually arrive on this channel.
-              var oSaveAction = oModel.bindContext(ServiceSchema.saveAction + "(...)", oStickyPlainContext, {
-                $$updateGroupId: CREATE_REPLAY_GROUP,
-                $select: "SAP__Messages"
-              });
-              // oStickyPlainContext was never read via GET, so the model has
-              // no ETag cached for it - SaveChanges then 428s ("required to
-              // be conditional... If-Match"). bIgnoreETag sends If-Match:*
-              // instead; safe here since nothing else could have touched
-              // this sticky session between opening it and this call.
-              var oSavePromise = oSaveAction.execute(CREATE_REPLAY_GROUP, true);
-              oModel.submitBatch(CREATE_REPLAY_GROUP);
-
-              return oSavePromise
-                .catch(function (oError) {
-                  console.error("CreateOrderService.save: SaveChanges request failed",
-                    "\nerror:", oError && oError.message, oError,
-                    "\nmessages:", logMessages());
-                  return discardSession(oModel, "SaveChanges failed").then(function () {
-                    throw oError;
-                  });
-                })
-                .then(function () {
-                  var oSaveResultContext = oSaveAction.getBoundContext();
-                  var sNewId = oSaveResultContext.getProperty(ServiceSchema.keys.orderId);
-                  if (!sNewId) {
-                    // Fail fast: an empty key here means the order still
-                    // wasn't actually persisted - proceeding would silently
-                    // PATCH against a bogus "SalesOrder=''" path instead of
-                    // surfacing the real failure.
-                    console.error("CreateOrderService.save: SaveChanges returned no " + ServiceSchema.keys.orderId,
-                      "\nraw value:", JSON.stringify(sNewId),
-                      "\nfull action result entity:", oSaveResultContext.getObject(),
-                      "\nmessages:", logMessages());
-                    return discardSession(oModel, "SaveChanges returned no key").then(function () {
-                      throw new Error("SaveChanges returned no " + ServiceSchema.keys.orderId + " - order was not created");
-                    });
-                  }
-                  // Now a normal, fully-numbered order - PATCH its remaining
-                  // header fields against the canonical path exactly like an
-                  // existing order (EditRequestService.js). Items are already
-                  // attached above, before Save - do not create them again here.
-                  //
-                  // v5 Required Fix 3 (unverified, live-test task): does this
-                  // sessionless PATCH (no PrepareForEdit/SaveChanges bracket
-                  // around it) actually persist? Verify with: set an
-                  // updatableHeaderProperties field (e.g. Order Reason) during
-                  // create, hard-refresh, VA03-check. If it does NOT persist,
-                  // wrap this call in PrepareForEdit/SaveChanges instead
-                  // (EditRequestService.js's edit-session pattern).
-                  var oNewContext = oModel.bindContext(ServiceSchema.buildHeaderPath(sNewId), undefined, {
-                    $$updateGroupId: CREATE_REPLAY_GROUP
-                  }).getBoundContext();
-                  return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData).then(function () {
-                    // Both SaveChanges above and this PATCH just succeeded,
-                    // each re-running the same backend validation - collapse
-                    // the resulting exact-duplicate messages (see
-                    // MessageExtractor.dedupeMessages doc comment).
-                    MessageExtractor.dedupeMessages();
-                    // oScratchContext is a still-pending, never-submitted
-                    // transient create (deferred "vrCreate" group, nothing
-                    // was ever POSTed for it) - deleting it locally always
-                    // rejects with "Request canceled", which is expected/
-                    // benign here and must never surface as an uncaught error.
-                    oScratchContext.delete().catch(function () {});
-                    // oNewContext was only ever bound to a path, never GET'd -
-                    // getProperty() on it is a synchronous cache read that
-                    // fails ("invalid segment") since nothing populated the
-                    // cache yet. Return the already-known sNewId alongside it
-                    // instead of making callers call getProperty() on it.
-                    return { context: oNewContext, orderId: sNewId };
-                  });
-                });
+              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData);
             });
+        });
+    },
+
+    // Internal — steps ③④ shared by BOTH save() paths above: SaveChanges
+    // (commits + assigns the real key) and the header-extras PATCH. Bound
+    // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
+    // bound context - see the (still-applicable) v5 gotcha comment history
+    // above for why a plain canonical-path context is required here instead.
+    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData) {
+      // v5 gotcha, round 6 (live test, 2026-08-28): without an explicit
+      // $$updateGroupId here (unlike its sibling contexts elsewhere in this
+      // flow), this operation binding fell back to "$auto" instead of
+      // CREATE_REPLAY_GROUP - confirmed live via Network tab, the
+      // execute(CREATE_REPLAY_GROUP, ...) argument alone did NOT force it.
+      // Gap 0 (Message Accuracy & Hygiene task): same $select opt-in as the
+      // create action - SaveChanges is the real SD commit and the most
+      // likely place VI-028/FI-759-style business messages actually arrive.
+      var oSaveAction = oModel.bindContext(ServiceSchema.saveAction + "(...)", oStickyPlainContext, {
+        $$updateGroupId: CREATE_REPLAY_GROUP,
+        $select: "SAP__Messages"
+      });
+      // bIgnoreETag=true sends If-Match:* - safe regardless of whether the
+      // model already cached a real ETag for this context from earlier
+      // in-session activity (a wildcard match always succeeds).
+      var oSavePromise = oSaveAction.execute(CREATE_REPLAY_GROUP, true);
+      oModel.submitBatch(CREATE_REPLAY_GROUP);
+
+      return oSavePromise
+        .catch(function (oError) {
+          console.error("CreateOrderService.save: SaveChanges request failed",
+            "\nerror:", oError && oError.message, oError,
+            "\nmessages:", logMessages());
+          return discardSession(oModel, "SaveChanges failed").then(function () {
+            throw oError;
+          });
+        })
+        .then(function () {
+          var oSaveResultContext = oSaveAction.getBoundContext();
+          var sNewId = oSaveResultContext.getProperty(ServiceSchema.keys.orderId);
+          if (!sNewId) {
+            // Fail fast: an empty key here means the order still
+            // wasn't actually persisted - proceeding would silently
+            // PATCH against a bogus "SalesOrder=''" path instead of
+            // surfacing the real failure.
+            console.error("CreateOrderService.save: SaveChanges returned no " + ServiceSchema.keys.orderId,
+              "\nraw value:", JSON.stringify(sNewId),
+              "\nfull action result entity:", oSaveResultContext.getObject(),
+              "\nmessages:", logMessages());
+            return discardSession(oModel, "SaveChanges returned no key").then(function () {
+              throw new Error("SaveChanges returned no " + ServiceSchema.keys.orderId + " - order was not created");
+            });
+          }
+          // Now a normal, fully-numbered order - PATCH its remaining
+          // header fields against the canonical path exactly like an
+          // existing order (EditRequestService.js). Items are already
+          // attached (either interactively, or by the fallback's own bulk
+          // deep-create above) - do not create them again here.
+          //
+          // v5 Required Fix 3 (unverified, live-test task): does this
+          // sessionless PATCH (no PrepareForEdit/SaveChanges bracket
+          // around it) actually persist? Verify with: set an
+          // updatableHeaderProperties field (e.g. Order Reason) during
+          // create, hard-refresh, VA03-check. If it does NOT persist,
+          // wrap this call in PrepareForEdit/SaveChanges instead
+          // (EditRequestService.js's edit-session pattern).
+          var oNewContext = oModel.bindContext(ServiceSchema.buildHeaderPath(sNewId), undefined, {
+            $$updateGroupId: CREATE_REPLAY_GROUP
+          }).getBoundContext();
+          return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData).then(function () {
+            // Both SaveChanges above and this PATCH just succeeded,
+            // each re-running the same backend validation - collapse
+            // the resulting exact-duplicate messages (see
+            // MessageExtractor.dedupeMessages doc comment).
+            MessageExtractor.dedupeMessages();
+            // oScratchContext is a still-pending, never-submitted
+            // transient create (deferred "vrCreate" group, nothing
+            // was ever POSTed for it) - deleting it locally always
+            // rejects with "Request canceled", which is expected/
+            // benign here and must never surface as an uncaught error.
+            oScratchContext.delete().catch(function () {});
+            // oNewContext was only ever bound to a path, never GET'd -
+            // getProperty() on it is a synchronous cache read that
+            // fails ("invalid segment") since nothing populated the
+            // cache yet. Return the already-known sNewId alongside it
+            // instead of making callers call getProperty() on it.
+            return { context: oNewContext, orderId: sNewId };
+          });
         });
     },
 

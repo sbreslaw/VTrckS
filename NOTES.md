@@ -1,5 +1,101 @@
 # NOTES
 
+## Session Prompt — Ancillary Items & Opt-Out, Live-Test Bug Bash — 2026-09-24
+
+Live-backend test pass of the 2026-09-19 static-editing session below (real
+SAP system, iterative deploy → live-test → fix cycle, ~8 rounds). All fixes
+confirmed live against the real backend by end of session.
+
+- **Expression-binding FormatExceptions** (checkbox visibility/editability,
+  MenuItem/Input/Select `enabled`/`editable` across Items/Details/Shipping
+  fragments): root cause was embedding a raw non-boolean OData string
+  (`${HigherLevelItem}`, `${SalesOrderItem}`, `${Product}`, etc.) inside a
+  Boolean-typed expression binding - `${...}` always coerces to the TARGET
+  property's type. Fix: `%{...}` (raw, no coercion) for every such embedded
+  reference; composite `parts:`/`formatter:` bindings need `useRawValues:
+  true` instead (same root symptom, different mechanism). `{:= }` (one-time
+  binding) does NOT fix this and was a dead-end detour before the real root
+  cause was found - see `/memories/repo/vtrcks-create-order-sticky-session.md`
+  for the full blow-by-blow.
+- **`sap.m.CheckBox` fires `select`, not `change`** - the opt-out checkbox's
+  handler never fired at all until the XML event name was corrected.
+- **NDC/Product Input read-only on Add Item**: was gated on
+  `!SalesOrderItem` being empty, but a scratch row's client-side placeholder
+  item number (`_computeNextItemNumber`) made that check always false -
+  replaced with `${@$ui5.context.isTransient}`.
+- **Opt-out checkbox refresh chain**: needed three fixes layered together -
+  (1) `$$ownRequest: true` on the Items table's list binding (a relative
+  binding can't `refresh()` without its own cache); (2) chain the refresh
+  off the PATCH's own `setProperty()` promise, not fire-and-forget (avoids
+  "Cannot refresh due to pending change" - the `$auto` group submits
+  asynchronously).
+- **Primary item qty change didn't propagate to already-inserted ancillary
+  child rows' quantities**: the Qty Input's `value` binding was switched to
+  `mode: 'OneWay'` and `onProdQtyChange` now does its own explicit
+  `setProperty()` + refresh (same pattern as the opt-out checkbox) once the
+  row is real (non-transient) - LIVE CAPTURE gap from the 09-19 session
+  (OPEN_QUESTIONS.md #21) is now answered: yes, the backend DOES
+  re-determine/recalculate on a qty PATCH, the client just wasn't picking
+  it up. Regression care: `RequestedQuantity` is `Edm.Decimal` (needs the
+  raw string) vs. the Int32 fund-mirror fields (need a rounded raw number) -
+  mixing the two up (sending a rounded integer for the Decimal field)
+  reproduces the identical malformed-Gateway-response symptom the code
+  already knew about for the opposite mistake.
+
+## Session Prompt — Ancillary Items & Opt-Out (Interactive Items in the Sticky Session) — 2026-09-19
+
+Static-editing session (no live backend access this session; all wiring is
+per the two prior raw batch-trace captures already in `design/prompts/`).
+
+- **Field trio clarified**: `ZZ1_SKIPADDANC_SDI` is the REAL opt-out flag
+  (round-trips 1:1 with the checkbox both directions per both trace files).
+  `ZZ1_OptOutAncillary_SDI` (the old binding) is confirmed UNUSED on the
+  wire — kept in `ServiceSchema.js` for back-compat only, no longer bound
+  anywhere. `ZZ1_SKIPANC` is a sticky "determination ran" marker that moves
+  independently of the checkbox — explicitly NOT used for has-children
+  logic; that's derived from the item list's own `HigherLevelItem` values
+  instead (`Detail.controller.js#_computeAncillaryParents`).
+- **Removed a stray bug**: `onProdQtyChange` was unconditionally setting
+  `ZZ1_SKIPADDANC_SDI` to `true` on every quantity keystroke — leftover/
+  incorrect prior work, removed; the flag now only ever changes via the
+  explicit opt-out checkbox (`onItemOptOutChange`).
+- **Sticky session now opens EARLY** (first complete create-mode item row —
+  Product + MaterialGroup1 + MaterialGroup2 + qty>0), not just at Save.
+  `CreateOrderService.js` gained `_ensureSession`/`postItem` (idempotent,
+  re-entrant-safe) riding a NEW `$auto`-based group
+  (`ServiceSchema.itemInteractiveGroup`) — matches the observed traces where
+  every in-session item PATCH/POST auto-batches with dependent GETs, no
+  explicit `submitBatch` anywhere. `save()`'s existing ①-④ replay shape is
+  UNCHANGED code-wise — it's just entered from either the already-open
+  session (skips ①②) or the original cold-start fallback (rare/defensive
+  path), via a shared new `_commitStickySession` (steps ③④, extracted
+  verbatim from the old inline tail).
+- **Items table binding switches once**, from the local scratch list to the
+  real sticky session's own `_Item` list, the first time a row successfully
+  posts (`Detail.controller.js#_bindItemsTableToSession`) — after that,
+  ordinary field edits on a row are just live PATCHes (the table's own
+  `$$updateGroupId` is now `$auto`), and `onItemsAddRow` creates real rows
+  directly. Any OTHER scratch rows that were also complete at that exact
+  moment get posted too; still-incomplete ones are dropped (best-effort,
+  see `_migrateRemainingScratchRows` doc comment — TODO-VERIFY if this is a
+  common enough case to need better handling).
+- **Child rows** (`HigherLevelItem` set): NDC/Qty/ExisId Inputs and both
+  classification Selects are now `!${HigherLevelItem}`-gated read-only; Edit
+  and Fund Split menu items likewise disabled for them. Delete is
+  deliberately left untouched — ancillary children stay manually deletable
+  (generic `onItemsDeleteRow`, existing i18n keys reused as-is) per spec.
+  Priority propagation needed NO change — it already iterates every item
+  generically.
+- **Opt-out checkbox**: rebound to `ZZ1_SKIPADDANC_SDI`, enabled only on a
+  parent row that currently has children (`formatter.itemOptOutEnabled`),
+  never optimistic — toggling PATCHes the flag then always triggers one full
+  items-list refresh before re-deriving `itemsMeta>/childParents`.
+- **NOT done this session (no live backend access)**: the Step-0 LIVE
+  CAPTURE ask ("does the exit re-fire on qty PATCH 100→200?") and a live
+  end-to-end pass of the whole new flow (open session → post → switch →
+  opt-out → delete child → Save) — flagged in OPEN_QUESTIONS.md, needs a
+  live-test pass before considering this feature verified.
+
 ## Session Prompt — Item Details View (FCL Third Column, Section-Panel Cockpit) — 2026-09-18
 
 Static-editing session (no live backend access this session), display-first

@@ -41,9 +41,14 @@
           <MenuButton text="" icon="sap-icon://menu2" type="Transparent" visible="{itemsColumns>/rowAction}">
             <menu>
               <Menu>
-                <!-- Disabled until saved: unsaved rows have no backend item to show. -->
+                <!-- Ancillary Items & Opt-Out session prompt §3.2: an
+                     auto-inserted ancillary child row (HigherLevelItem set)
+                     is fully read-only - no Edit navigation, no Fund Split
+                     (it has no fund of its own to split). Delete is
+                     deliberately left untouched below - children stay
+                     manually deletable per §3.4. -->
                 <MenuItem text="{i18n>rowActionEdit}" press=".onItemsEditPress"
-                  enabled="{= !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} }" />
+                  enabled="{= !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} }" />
                 <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
                   enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
                 <!-- Fund Split (Trigger 2, design session prompt §3.3): enabled
@@ -51,27 +56,50 @@
                      Fund Type Select itself (createMode phasing) - SPL opens
                      edit mode, any other fund opens view mode (onItemsFundSplitPress). -->
                 <MenuItem text="{i18n>rowActionFundSplit}" press=".onItemsFundSplitPress"
-                  enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!${MaterialGroup2} }"
+                  enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{MaterialGroup2} &amp;&amp; !%{HigherLevelItem} }"
                   tooltip="{i18n>rowActionFundSplitTooltip}" />
               </Menu>
             </menu>
           </MenuButton>
-          <CheckBox selected="{ZZ1_OptOutAncillary_SDI}" visible="{itemsColumns>/optOut}"
-            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
+          <!-- §3.3: the real opt-out flag (ZZ1_SKIPADDANC_SDI, NOT the
+               unused ZZ1_OptOutAncillary_SDI - see ServiceSchema.js). Only
+               enabled on a PARENT row that actually has ancillary children
+               (itemsMeta>/childParents, keyed by SalesOrderItem - recomputed
+               after every real-list load/refresh, see
+               Detail.controller.js#_computeAncillaryParents); a child row
+               itself never gets an opt-out control. -->
+          <CheckBox selected="{ZZ1_SKIPADDANC_SDI}" select=".onItemOptOutChange"
+            visible="{parts: [{path: 'itemsColumns>/optOut'}, {path: 'HigherLevelItem'}], formatter: '.formatter.itemOptOutVisible', useRawValues: true}"
+            enabled="{parts: [
+                {path: 'SalesOrderItem'},
+                {path: 'HigherLevelItem'},
+                {path: 'itemsMeta>/childParents'},
+                {path: 'sectionFlags>/createMode'},
+                {path: 'createState>/providerChosen'}
+              ], formatter: '.formatter.itemOptOutEnabled', useRawValues: true}" />
           <Text text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${sectionFlags>/createMode} }" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
-            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" />
+            enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
           <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
                carried over from the NDC's own IndustryStandardName on product
-               selection (onItemNdcValueHelpRequest) - never typed in directly. -->
-          <Text text="{ZZIndustryStandardName}" visible="{itemsColumns>/brand}" />
-          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. -->
+               selection (onItemNdcValueHelpRequest) - never typed in directly.
+               §3.2: indented for an ancillary child row (HigherLevelItem set). -->
+          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
+          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. §3.2: an ancillary child row is always fully read-only.
+               Uses @$ui5.context.isTransient, NOT !SalesOrderItem - a scratch
+               row's placeholder client-side item number (10, 20, 30...,
+               _computeNextItemNumber) makes SalesOrderItem non-empty well
+               before the row is ever actually posted/numbered server-side. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{:= ${sectionFlags>/items/editing} &amp;&amp; !${SalesOrderItem} &amp;&amp; !${Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; ${@$ui5.context.isTransient} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
             showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
-          <Text text="{SalesOrderItemText}" visible="{itemsColumns>/ndcDescription}" />
-          <Input value="{RequestedQuantity}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" type="Number" textAlign="End" change=".onProdQtyChange"/>
+          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
+          <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
+               gets a promise to await before refreshing the list for recalculated
+               ancillary quantities); a two-way binding's own internal PATCH here would
+               race that refresh exactly like the opt-out checkbox's did. -->
+          <Input value="{path: 'RequestedQuantity', mode: 'OneWay'}" visible="{itemsColumns>/qty}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
                unit EA is not defined" SaveChanges error, see createPayloadUom
@@ -82,7 +110,7 @@
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
           <Select selectedKey="{MaterialGroup1}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
-            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" change=".onOrderIntentionChange">
+            enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
             <core:Item key="MIX" text="Adult, Pediatric" />
@@ -95,10 +123,10 @@
                (formatter.fundTypeItemEnabled). Selecting SPL auto-opens the Fund Split
                dialog in edit mode (onFundTypeChange, Fund Split dialog session prompt). -->
           <Select selectedKey="{MaterialGroup2}" forceSelection="false" visible="{itemsColumns>/fundType}"
-            enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+            enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
             items="{fundTypes>/list}" change=".onFundTypeChange">
             <core:Item key="{fundTypes>key}" text="{fundTypes>text}"
-              enabled="{parts: [{path: 'MaterialGroup1'}, {path: 'fundTypes>pediatricOnly'}, {path: 'fundTypes>disabled'}], formatter: '.formatter.fundTypeItemEnabled'}" />
+              enabled="{parts: [{path: 'MaterialGroup1'}, {path: 'fundTypes>pediatricOnly'}, {path: 'fundTypes>disabled'}], formatter: '.formatter.fundTypeItemEnabled', useRawValues: true}" />
           </Select>
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />

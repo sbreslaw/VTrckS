@@ -140,6 +140,14 @@ sap.ui.define([
       // 3.3: client-side-only SUM of item TaxAmount - never a real header
       // property, see _computeHeaderTaxAmount.
       this.getView().setModel(new JSONModel({ taxAmount: 0 }), "headerCalc");
+      // Ancillary Items & Opt-Out session prompt: /childParents is a
+      // {"<parentItemNumber>": true} map recomputed off the Items table's
+      // OWN current contexts (HigherLevelItem) after every real-list
+      // load/refresh - drives the opt-out checkbox's enabled state and the
+      // child-row read-only/indent treatment (Items.fragment.xml). Empty
+      // until the sticky session opens (createMode) or an existing order's
+      // items load (change mode) - see _computeAncillaryParents.
+      this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
 
     },
@@ -467,15 +475,10 @@ sap.ui.define([
       if (!oBinding) {
         return;
       }
-      oBinding.create({
+      var oNewRowData = {
         Product: "",
         RequestedQuantity: null,
         RequestedQuantityUnit: ServiceSchema.createPayloadUom,
-        // SalesOrderItem is @Core.Computed (design/so.xml) - the real number
-        // is always assigned server-side at Save; this is only a client-side
-        // placeholder (SD +10 numbering convention) so a newly-added row
-        // doesn't display blank until then.
-        SalesOrderItem: this._computeNextItemNumber(oBinding),
         // Nullable="false" (design/so.xml) - seeded here too, not just on
         // change (onProdQtyChange/onFundTypeChange), so a row never carries
         // an unset Int32.
@@ -485,7 +488,23 @@ sap.ui.define([
         ZZCHIPQTY: 0,
         ZZPANQTY: 0,
         ZZRESQTY: 0
-      });
+      };
+      // Ancillary Items & Opt-Out session prompt §3.1: once the Items table
+      // has already switched to the real sticky session's own `_Item` list
+      // (this._bItemsSessionBound, see _bindItemsTableToSession), a newly
+      // added row IS that real list - RequestedQuantity must be a real
+      // number (0), not null, and there's no more need for a client-side
+      // placeholder SalesOrderItem (the model resolves the server-assigned
+      // one once this row's own create() settles under $auto).
+      if (this._bItemsSessionBound) {
+        oNewRowData.RequestedQuantity = 0;
+      } else {
+        // Pre-session (still the local, deferred, never-submitted scratch
+        // list): keep the existing client-only SD-style placeholder number
+        // (10, 20, 30...) so the row doesn't display blank until Save.
+        oNewRowData.SalesOrderItem = this._computeNextItemNumber(oBinding);
+      }
+      oBinding.create(oNewRowData);
     },
 
     // Client-side-only SD-style numbering (10, 20, 30...) for a newly-added
@@ -526,7 +545,8 @@ sap.ui.define([
         if (oItem[oProps.baseUnit]) {
           oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
         }
-      });
+        this._checkItemRowComplete(oRowContext);
+      }.bind(this));
     },
 
     // Looks up the fund type entry (FUND_TYPES/"fundTypes" model) matching
@@ -537,6 +557,7 @@ sap.ui.define([
     },
 
     onProdQtyChange: function( oEvent) {
+      var that = this;
       var oRowContext = oEvent.getSource().getBindingContext();
       var sQty = oEvent.getParameter('value');
       // ZZVFCQTY/ZZ317QTY/etc. are Edm.Int32 (design/so.xml) - RequestedQuantity
@@ -547,14 +568,31 @@ sap.ui.define([
       // that the client can't even parse it ("Error while parsing an XML
       // stream") - always send a real, rounded integer instead.
       var iQty = Math.round(parseFloat(sQty));
+      var iValue = isNaN(iQty) ? 0 : iQty;
+      // value is OneWay (Items.fragment.xml) - this is the only PATCH for
+      // RequestedQuantity itself, so its promise is always the one to await.
+      // RequestedQuantity is Edm.Decimal (unlike the Int32 mirrors below) -
+      // must send the raw decimal STRING (sQty), never the rounded iValue
+      // integer, or the deep-create POST fails the same malformed-XML way
+      // the Int32 comment above warns about.
+      var aPending = [oRowContext.setProperty(ServiceSchema.itemProperties.quantity, sQty)];
       // A2/A4: which quantity mirror gets the value now follows the row's own
       // fundType selection (see onFundTypeChange) instead of always ZZSTATEQTY.
       var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
       if (oFundType && oFundType.targetField) {
-        oRowContext.setProperty(oFundType.targetField, isNaN(iQty) ? 0 : iQty);
+        aPending.push(oRowContext.setProperty(oFundType.targetField, iValue));
       }
 
-      oRowContext.setProperty('ZZ1_SKIPADDANC_SDI', true);
+      this._checkItemRowComplete(oRowContext);
+      // Backend recalculates BOTH this row's own quantity (e.g. 100 -> 140)
+      // and any already-inserted ancillary child rows' quantities as a side
+      // effect of this PATCH - only a real, already-posted row (not still a
+      // local scratch row) can have such children yet.
+      if (oRowContext.isTransient && !oRowContext.isTransient()) {
+        Promise.all(aPending).then(function () {
+          return that._refreshItemsBinding();
+        });
+      }
     },
 
     // Items fundType (MaterialGroup2) change - mirrors the row's current
@@ -578,6 +616,7 @@ sap.ui.define([
       if (FundLogicService.isSplitFund(sKey)) {
         this._getFundSplitDialog().open(oRowContext, "edit");
       }
+      this._checkItemRowComplete(oRowContext);
     },
 
     // Fund Split dialog session prompt, Trigger 2 (item Action menu): mode is
@@ -618,6 +657,206 @@ sap.ui.define([
           }
         });
       }
+      this._checkItemRowComplete(oRowContext);
+    },
+
+    // Ancillary Items & Opt-Out session prompt §3.1: a row is "complete" once
+    // it has a product, both classification Selects, and a positive quantity.
+    _isScratchRowComplete: function (oRowContext) {
+      var oProps = ServiceSchema.itemProperties;
+      var fQty = parseFloat(oRowContext.getProperty(oProps.quantity));
+      return !!oRowContext.getProperty(oProps.material)
+        && !!oRowContext.getProperty(oProps.orderIntention)
+        && !!oRowContext.getProperty(oProps.fundType)
+        && !isNaN(fQty) && fQty > 0;
+    },
+
+    // Entry point called from every field-change handler above. Only ever
+    // acts on a still-transient (local scratch, never-submitted "vrCreate")
+    // row - a real row (already posted, isTransient() false) is already live
+    // against the backend, so an ordinary setProperty() above already PATCHed
+    // it under the session's own $auto group; nothing extra to do here.
+    _checkItemRowComplete: function (oRowContext) {
+      if (!oRowContext || !oRowContext.isTransient || !oRowContext.isTransient()) {
+        return;
+      }
+      if (!this._isScratchRowComplete(oRowContext)) {
+        return;
+      }
+      this._postFirstItemRow(oRowContext);
+    },
+
+    // Opens the sticky session (if not already open) and posts this ONE
+    // completed scratch row straight into it (CreateOrderService.postItem),
+    // then performs the one-time switch of the Items table's own binding
+    // source from the local scratch list to the real session's `_Item` list
+    // (_bindItemsTableToSession) - re-entrant-safe via _bPostingFirstItem
+    // (a second row completing while the first is still in flight waits;
+    // _bItemsSessionBound already true short-circuits entirely).
+    _postFirstItemRow: function (oRowContext) {
+      if (this._bItemsSessionBound || this._bPostingFirstItem) {
+        return;
+      }
+      this._bPostingFirstItem = true;
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oOldItemsBinding = oTable && oTable.getBinding("items");
+      var oHeaderContext = this.getView().getBindingContext();
+      if (oTable) {
+        oTable.setBusy(true);
+      }
+      CreateOrderService.postItem(this._oCreateSession, oHeaderContext, oRowContext.getObject())
+        .then(function () {
+          oRowContext.delete().catch(function () {});
+          return that._migrateRemainingScratchRows(oOldItemsBinding, oRowContext);
+        })
+        .then(function () {
+          that._bindItemsTableToSession();
+        }, function (oError) {
+          var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
+        })
+        .then(function () {
+          that._bPostingFirstItem = false;
+          if (oTable) {
+            oTable.setBusy(false);
+          }
+        });
+    },
+
+    // Best-effort: any OTHER scratch rows that were also already complete at
+    // the moment the first one posted get posted too (sequentially, so
+    // _ensureSession's own re-entrancy guard never races); any that were
+    // still incomplete have no valid server-postable data and are simply
+    // dropped (TODO-VERIFY - live-test whether users commonly have more than
+    // one half-filled row open at once; if so this may need a friendlier
+    // "finish or lose this row" prompt instead of a silent delete).
+    _migrateRemainingScratchRows: function (oOldItemsBinding, oAlreadyPostedContext) {
+      var that = this;
+      var oHeaderContext = this.getView().getBindingContext();
+      var aContexts = (oOldItemsBinding && oOldItemsBinding.getCurrentContexts) ? oOldItemsBinding.getCurrentContexts() : [];
+      var aOthers = aContexts.filter(function (oCtx) {
+        return oCtx !== oAlreadyPostedContext && oCtx.isTransient && oCtx.isTransient();
+      });
+      return aOthers.reduce(function (pChain, oCtx) {
+        return pChain.then(function () {
+          if (that._isScratchRowComplete(oCtx)) {
+            return CreateOrderService.postItem(that._oCreateSession, oHeaderContext, oCtx.getObject()).then(function () {
+              oCtx.delete().catch(function () {});
+            });
+          }
+          return oCtx.delete().catch(function () {});
+        });
+      }, Promise.resolve());
+    },
+
+    // The one-time switch (§3.1): the Items table's own `items="{_Item}"`
+    // aggregation now resolves against the real sticky session's plain
+    // context instead of the local scratch header context, under the
+    // session's own interactive group (ServiceSchema.itemInteractiveGroup) -
+    // every already-posted row, any server-auto-inserted ancillary children
+    // (HigherLevelItem), and any further edit all now show/PATCH as real,
+    // immediate server truth (matches the observed opt-out traces).
+    _bindItemsTableToSession: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable || !this._oCreateSession || !this._oCreateSession.plainContext) {
+        return;
+      }
+      oTable.setBindingContext(this._oCreateSession.plainContext);
+      this._sItemsUpdateGroup = ServiceSchema.itemInteractiveGroup;
+      this._rebindItemsGroup(this._sItemsUpdateGroup);
+      this._bItemsSessionBound = true;
+      // The rebind's own GET is still async here - computing childParents
+      // synchronously would run off the OLD (scratch/empty) contexts and
+      // never get another chance to recompute; wait for the real fetch.
+      var oBinding = oTable.getBinding("items");
+      if (oBinding) {
+        oBinding.attachEventOnce("dataReceived", this._computeAncillaryParents.bind(this));
+      }
+    },
+
+    // Re-derives the {"<parentItemNumber>": true} childParents map (itemsMeta
+    // model) off the Items table's CURRENT contexts - called after every real-
+    // list (re)bind/refresh, never cached/guessed from the SKIPANC marker (see
+    // ServiceSchema.js#skipAncMarker doc comment on why that field is unsafe
+    // to use for this).
+    _computeAncillaryParents: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      var aContexts = (oBinding && oBinding.getCurrentContexts) ? oBinding.getCurrentContexts() : [];
+      var oParents = {};
+      aContexts.forEach(function (oCtx) {
+        var sParent = oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem);
+        if (sParent) {
+          oParents[sParent] = true;
+        }
+      });
+      this.getView().getModel("itemsMeta").setProperty("/childParents", oParents);
+    },
+
+    // A full items-list refresh (server-truth only, NEVER optimistic) after
+    // an opt-out toggle - re-derives childParents once the refresh settles,
+    // since check/uncheck is exactly what adds/removes ancillary child rows.
+    _refreshItemsBinding: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (!oBinding) {
+        return Promise.resolve();
+      }
+      var that = this;
+      return new Promise(function (resolve) {
+        oBinding.attachEventOnce("dataReceived", function () {
+          that._computeAncillaryParents();
+          resolve();
+        });
+        oBinding.refresh();
+      });
+    },
+
+    // §3.3: the Opt-Out checkbox (Items.fragment.xml) - PATCHes the REAL flag
+    // (ZZ1_SKIPADDANC_SDI, NOT the unused ZZ1_OptOutAncillary_SDI, see
+    // ServiceSchema.js) on the parent row, then triggers ONE full items-list
+    // refresh to pick up whatever the server-side ancillary determination
+    // actually did (add/remove a child row with a brand-new item number) -
+    // never optimistic, the checkbox itself always reflects post-refresh
+    // server state.
+    onItemOptOutChange: function (oEvent) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var bChecked = oEvent.getParameter("selected");
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (oTable) {
+        oTable.setBusy(true);
+      }
+      // setProperty() on the "$auto" itemInteractiveGroup fires its PATCH
+      // asynchronously - must await ITS OWN promise (resolves once the PATCH
+      // round-trips) before refreshing, or the refresh races the still-
+      // in-flight PATCH and the model rejects with "Cannot refresh due to
+      // pending change".
+      oRowContext.setProperty(ServiceSchema.itemProperties.skipAddAncillary, bChecked)
+        .then(function () {
+          return that._refreshItemsBinding();
+        })
+        .catch(function (oError) {
+          var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), oBundle);
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
+        })
+        .then(function () {
+          if (oTable) {
+            oTable.setBusy(false);
+          }
+        });
     },
 
     // Item Details view session prompt, 3.4: Items row Action menu "Edit" ->
@@ -1106,7 +1345,11 @@ sap.ui.define([
       // Gap 0 correction: same item-level SAP__Messages opt-in as the create
       // replay's deep-create binding (CreateOrderService.js), for change-mode
       // item edits/adds through this same _Item navigation.
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $select: "SAP__Messages" });
+      // $$ownRequest: true - a relative list binding shares its parent's
+      // cache by default and refuses direct refresh() ("Refresh on this
+      // binding is not supported!"); this gives it its own request/cache so
+      // _refreshItemsBinding (opt-out toggle) can refresh it directly.
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $select: "SAP__Messages" });
       oTable.bindItems(oBindingInfo);
     },
 
@@ -1459,7 +1702,7 @@ sap.ui.define([
         that._oRouter.navTo("master", {}, true);
       }
 
-      if (oContext && CreateOrderService.isDirty(oContext)) {
+      if ((oContext && CreateOrderService.isDirty(oContext)) || (this._oCreateSession && this._oCreateSession.opened)) {
         MessageBox.confirm(oBundle.getText("createCancelConfirm"), {
           onClose: function (sAction) {
             if (sAction === MessageBox.Action.OK) {
@@ -1525,7 +1768,7 @@ sap.ui.define([
         });
       }
 
-      CreateOrderService.save(oContext, oItemsBinding)
+      CreateOrderService.save(oContext, oItemsBinding, this._oCreateSession)
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
         // CreateOrderService.save()). Enrichment/IoH failing from here on is a
@@ -1589,6 +1832,8 @@ sap.ui.define([
     // see CreateOrderService.js/ServiceSchema.js).
     _completeCreate: function (sNewId) {
       this._oCreateListBinding = null;
+      this._oCreateSession = null;
+      this._bItemsSessionBound = false;
       this._setCreateMode(false);
       EventBus.getInstance().publish("app", "orderCreated", { orderId: sNewId });
       this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
@@ -1659,6 +1904,9 @@ sap.ui.define([
       this._destroyCreateContext();
       var oResult = CreateOrderService.enter(this.getView().getModel());
       this._oCreateListBinding = oResult.listBinding;
+      this._oCreateSession = oResult.session;
+      this._bItemsSessionBound = false;
+      this._bPostingFirstItem = false;
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
@@ -1681,9 +1929,11 @@ sap.ui.define([
       if (this._oCreateListBinding) {
         var oContext = this.getView().getBindingContext();
         if (oContext && oContext.isTransient && oContext.isTransient()) {
-          CreateOrderService.cancel(oContext);
+          CreateOrderService.cancel(oContext, this._oCreateSession);
         }
         this._oCreateListBinding = null;
+        this._oCreateSession = null;
+        this._bItemsSessionBound = false;
       }
     },
 

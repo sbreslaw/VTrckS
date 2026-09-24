@@ -239,7 +239,32 @@ sap.ui.define([], function () {
       material: "Product",
       itemText: "SalesOrderItemText",
       itemNumber: "SalesOrderItem",
+      // Ancillary Items & Opt-Out session prompt: despite its name, the
+      // OBSERVED wire behaviour (design/prompts/ancillary-Opt-Out.md +
+      // ancillary-out-out-uncheck_flow.md, both directions) is that the
+      // opt-out checkbox PATCHes ZZ1_SKIPADDANC_SDI on the MAIN item, NOT
+      // this field - kept here for back-compat (still a real property on the
+      // entity) but no longer bound to the Items grid checkbox, see
+      // skipAddAncillary below.
       optOutAncillary: "ZZ1_OptOutAncillary_SDI",
+      // The real opt-out flag - round-trips with the checkbox 1:1 (check ->
+      // true -> optional ancillary removed server-side; uncheck -> false ->
+      // reinserted with a NEW item number). See
+      // Detail.controller.js#onItemOptOutChange.
+      skipAddAncillary: "ZZ1_SKIPADDANC_SDI",
+      // Observed (same traces): goes true on the FIRST item POST (the
+      // ancillary determination user-exit ran) and STAYS true after uncheck -
+      // a sticky "determination ran" marker, moves independently of the
+      // checkbox. Do NOT bind this as has-ancillaries logic or cache/derive
+      // UI state from it - children-exist must be derived from the item LIST
+      // (HigherLevelItem) instead. Backend confirmation of the full trio's
+      // definitions is still owed (OPEN_QUESTIONS.md).
+      skipAncMarker: "ZZ1_SKIPANC",
+      // Ancillary sub-items carry the parent item's own SalesOrderItem number
+      // here (design/so.xml, MaxLength 6) - the only reliable, server-derived
+      // parent/child link; ancillary item numbers themselves are DISPOSABLE
+      // (never cached/keyed-by across an opt-out cycle, see session prompt §1).
+      higherLevelItem: "HigherLevelItem",
       quantity: "RequestedQuantity",
       unit: "RequestedQuantityUnit",
       itemCategory: "SalesOrderItemCategory",
@@ -412,6 +437,16 @@ sap.ui.define([], function () {
     // createReplayGroup/CreateOrderService.js#save). ---
     createUpdateGroup: "vrCreate",
     createPayloadUom: "EA",
+
+    // Ancillary Items & Opt-Out session prompt (v5 item-handling amendment):
+    // once a scratch item row is complete, it POSTs straight to the real
+    // sticky session (opened early via createAction, see
+    // CreateOrderService.js#_ensureSession) - immediate/auto-batched, same
+    // group the observed opt-out traces use for every in-session item
+    // PATCH/GET, NOT the deferred createReplayGroup above (that group stays
+    // reserved for the header-only scratch/replay steps ①③④ this amendment
+    // does not touch).
+    itemInteractiveGroup: "$auto",
 
     // v5 Required Fix 1 (group isolation): every request the replay at Save
     // sends — the CreateWithSalesOrderType call, the item deep-creates on the
