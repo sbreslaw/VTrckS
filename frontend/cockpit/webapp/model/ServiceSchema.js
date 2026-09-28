@@ -323,6 +323,16 @@ sap.ui.define([], function () {
       taxAmount: "TaxAmount"
     },
 
+    // Live-test fix (round 19): bound action (design/so.xml ~2178,
+    // IsBound="true", param "_it" SalesOrderItemType, no EntitySetPath ->
+    // bound directly on the item entity itself) that explicitly (re)triggers
+    // standard SD pricing determination for one item - confirmed live that
+    // NetAmount otherwise never gets (re)computed at all for any item beyond
+    // whatever the FIRST item's own post path happens to trigger (not a
+    // timing race - waiting/retrying a plain refresh never helped). See
+    // Detail.controller.js#_onItemCreateActivate.
+    updatePricesAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.UpdatePrices",
+
     // Item Detail view (FCL end column) — Session Prompt "Item Details View".
     // Step-0 field mapping against design/so.xml SalesOrderItemType (+ its
     // navigations, verified via grep, none guessed per Onboarding rule 7).

@@ -19,8 +19,8 @@
     <columns>
       <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
       <Column width="4rem" visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
-      <!-- Item # is a client-side-only placeholder (Detail.controller.js#_computeNextItemNumber), never sent to the backend - hidden in createMode so it doesn't read as a real assigned number. -->
-      <Column width="4rem" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${sectionFlags>/createMode} }"><Text text="{i18n>colItemNumber}" /></Column>
+      <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
+      <Column width="4rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
       <Column width="5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
       <Column width="8rem" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
       <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
@@ -77,7 +77,7 @@
                 {path: 'sectionFlags>/createMode'},
                 {path: 'createState>/providerChosen'}
               ], formatter: '.formatter.itemOptOutEnabled', useRawValues: true}" />
-          <Text text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${sectionFlags>/createMode} }" />
+          <Text text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
             enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
           <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
@@ -86,12 +86,24 @@
                §3.2: indented for an ancillary child row (HigherLevelItem set). -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
           <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. §3.2: an ancillary child row is always fully read-only.
-               Uses @$ui5.context.isTransient, NOT !SalesOrderItem - a scratch
-               row's placeholder client-side item number (10, 20, 30...,
-               _computeNextItemNumber) makes SalesOrderItem non-empty well
-               before the row is ever actually posted/numbered server-side. -->
+               Live-test fix (round 18): must NOT gate on
+               @$ui5.context.isTransient here (unlike the two OTHER, negated
+               uses of it above/below) - once ANY full-list refresh happens
+               after this row is persisted (onProdQtyChange,
+               onItemOptOutChange, _onItemCreateActivate's
+               created().then(...) all call _refreshItemsBinding ->
+               oBinding.refresh()), every row's context is recreated fresh
+               via GET, so isTransient() (never negated here) resolves to
+               undefined (not false) for rows never created via
+               ODataListBinding#create(); an expression binding that
+               resolves to undefined falls back to the control's property
+               DEFAULT - Input.editable defaults to true - flipping the
+               cell back to editable. !%{Product} alone (always a concrete
+               boolean, being negated) is enough: any already-numbered/
+               persisted row always has a Product, so this still locks
+               correctly and survives refreshes. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; ${@$ui5.context.isTransient} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
             showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
           <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it

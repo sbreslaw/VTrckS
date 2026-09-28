@@ -498,13 +498,25 @@ sap.ui.define([
       // one once this row's own create() settles under $auto).
       if (this._bItemsSessionBound) {
         oNewRowData.RequestedQuantity = 0;
+        // This binding's own group is $auto (unlike the pre-session scratch
+        // list's deferred "vrCreate") - a plain create() would POST an empty
+        // row to the backend the instant "Add Item" is clicked, 400ing
+        // (confirmed live). bInactive keeps it purely local until the user
+        // actually edits a field (requires $$ownRequest: true, already set
+        // by _rebindItemsGroup).
+        // Live-test fix (round 18): bAtEnd (3rd arg) true - new rows append
+        // at the bottom of the table, not the top.
+        oBinding.create(oNewRowData, false, true, true);
       } else {
         // Pre-session (still the local, deferred, never-submitted scratch
         // list): keep the existing client-only SD-style placeholder number
         // (10, 20, 30...) so the row doesn't display blank until Save.
         oNewRowData.SalesOrderItem = this._computeNextItemNumber(oBinding);
+        // Live-test fix (round 18): bAtEnd (2nd positional arg after
+        // bSkipRefresh) true - append at the bottom, matching the
+        // session-bound branch above.
+        oBinding.create(oNewRowData, false, true);
       }
-      oBinding.create(oNewRowData);
     },
 
     // Client-side-only SD-style numbering (10, 20, 30...) for a newly-added
@@ -669,6 +681,71 @@ sap.ui.define([
         && !!oRowContext.getProperty(oProps.orderIntention)
         && !!oRowContext.getProperty(oProps.fundType)
         && !isNaN(fQty) && fQty > 0;
+    },
+
+    // bInactive create() (onItemsAddRow, post-session-bound branch) only
+    // defers the row's FIRST edit - without this handler it would activate
+    // (and auto-POST via $auto) after just one field, still missing the
+    // other 3 mandatory ones. Keep re-deferring (preventDefault) on every
+    // edit until the row is genuinely complete, then let it through so it
+    // activates and submits itself normally.
+    _onItemCreateActivate: function (oEvent) {
+      var oRowContext = oEvent.getParameter("context");
+      if (!this._isScratchRowComplete(oRowContext)) {
+        oEvent.preventDefault();
+        return;
+      }
+      // Row 1 gets a free full-list refresh from _bindItemsTableToSession's
+      // rebindItems() (which is how it happens to pick up any ancillary
+      // child row the backend injects alongside it) - row 2+ never rebinds,
+      // so the model's own automatic post-create GET only ever re-fetches
+      // THIS row; without an explicit refresh here, a same-POST ancillary
+      // child added by the server stays invisible until some unrelated
+      // refresh (e.g. the opt-out toggle) happens to occur.
+      //
+      // Live-test fix (round 19): pricing (NetAmount) is never (re)determined
+      // for this row at all unless a bound UpdatePrices action is invoked
+      // explicitly - confirmed live that retrying the refresh indefinitely
+      // does NOT help, and confirmed live (round 19d) that the ITEM-bound
+      // overload (so.xml ~2178, bound to SalesOrderItemType) executes
+      // successfully (204 No Content) but still does NOT (re)price the row -
+      // same provider/material, only the insertion ORDER differs, so this
+      // is not a master-data/condition-record gap either. Switched to the
+      // HEADER-bound overload instead (so.xml ~2257, bound to
+      // SalesOrderManageType, same action name - UI5 resolves the right
+      // overload from the binding context's type) invoked on the sticky
+      // session's own header context (_oCreateSession.plainContext) - this
+      // is the same context whose OWN rebind (_bindItemsTableToSession) is
+      // how row 1 happens to get priced for free, so a document-level
+      // repricing call is a closer match to whatever that path actually
+      // triggers than a single-item call. PricingType "B" = SAP-standard
+      // "carry out new pricing" (TODO-VERIFY: no other value is documented
+      // in so.xml beyond MaxLength=1 - confirm "B" is accepted/correct once
+      // live-tested).
+      var that = this;
+      var oHeaderContext = this._oCreateSession && this._oCreateSession.plainContext;
+      var oModel = (oHeaderContext || oRowContext).getModel();
+      var oPricingAction = oHeaderContext
+        ? oModel.bindContext(ServiceSchema.updatePricesAction + "(...)", oHeaderContext)
+        : oModel.bindContext(ServiceSchema.updatePricesAction + "(...)", oRowContext);
+      oPricingAction.setParameter("PricingType", "B");
+      // Live-test fix (round 19e): the header entity has optimistic
+      // concurrency control (LastChangeDateTime) - this plainContext has
+      // never had that property read, so the model has no ETag to attach
+      // and the bound action 428s ("conditional required, use If-Match").
+      // Force a read first so the model can generate If-Match itself.
+      var pEnsureEtag = oHeaderContext ? oHeaderContext.requestProperty("LastChangeDateTime") : Promise.resolve();
+      oRowContext.created()
+        .then(function () { return pEnsureEtag; })
+        .then(function () { return oPricingAction.execute(); })
+        .then(function () { return that._refreshItemsBinding(); })
+        .catch(function (oError) {
+          // Previously silently swallowed - surfaced now so a failing
+          // UpdatePrices call (bad PricingType, ETag mismatch, etc.) isn't
+          // mistaken for "backend always returns 0".
+          // eslint-disable-next-line no-console
+          console.error("[round19] UpdatePrices/refresh failed", oError);
+        });
     },
 
     // Entry point called from every field-change handler above. Only ever
@@ -883,6 +960,7 @@ sap.ui.define([
     // (change-mode "vrEdit" or createMode "vrCreate", see _rebindItemsGroup),
     // so it is only sent when that section's Save actually runs.
     onItemsDeleteRow: function (oEvent) {
+      var that = this;
       var oBundle = this.getResourceBundle();
       var oRowContext = oEvent.getSource().getBindingContext();
       if (!oRowContext) {
@@ -893,12 +971,70 @@ sap.ui.define([
           if (sAction !== MessageBox.Action.OK) {
             return;
           }
-          oRowContext.delete().then(function () {
-            MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
-          }, function () {
-            MessageToast.show(oBundle.getText("itemsDeleteError"));
-          });
+          var oTable = that._byIdInSection("items", "itemsTable");
+          if (oTable) {
+            oTable.setBusy(true);
+          }
+          // A direct DELETE on an ancillary child's own row is rejected by
+          // the backend (confirmed live, both mandatory AND optional - see
+          // design/prompts/E008_Ancillary_Session_Prompt.md §3.4). The only
+          // server-sanctioned way to shed a parent's OPTIONAL children is the
+          // opt-out PATCH (§3.3); do that first (when this row has children),
+          // refresh, then delete the row itself - whatever ancillary rows
+          // still remain are the backend's own to reconcile when the parent
+          // line goes, not ours to delete client-side.
+          var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
+          var bHasChildren = that._getAncillaryChildContexts(sItemNumber).length > 0;
+          var pChain = bHasChildren
+            ? oRowContext.setProperty(ServiceSchema.itemProperties.skipAddAncillary, true)
+              .then(function () {
+                return that._refreshItemsBinding();
+              })
+              .then(function () {
+                // Confirmed live (batch trace): the backend unconditionally
+                // 400s deleting a parent that still has a MANDATORY
+                // ancillary child attached - opt-out only sheds the
+                // optional one(s). Don't even attempt that doomed DELETE;
+                // it always comes back as an opaque "Unspecified provider
+                // error" with no usable detail - tell the user why instead.
+                if (that._getAncillaryChildContexts(sItemNumber).length > 0) {
+                  return Promise.reject({ mandatoryAncillaryBlock: true });
+                }
+                return oRowContext.delete();
+              })
+            : oRowContext.delete();
+          pChain
+            .then(function () {
+              MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
+            })
+            .catch(function (oError) {
+              if (oError && oError.mandatoryAncillaryBlock) {
+                MessageToast.show(oBundle.getText("itemsDeleteBlockedByMandatoryAncillary"));
+                return;
+              }
+              var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), oBundle);
+              aSectionIds.forEach(function (sId) {
+                that._oSectionFactory.expandSection(sId);
+              });
+              that._openMessagePopover();
+            })
+            .then(function () {
+              if (oTable) {
+                oTable.setBusy(false);
+              }
+            });
         }
+      });
+    },
+
+    // Ancillary child rows (HigherLevelItem === the parent's own item number)
+    // that must be deleted alongside a primary item being deleted.
+    _getAncillaryChildContexts: function (sParentItemNumber) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      var aContexts = (oBinding && oBinding.getCurrentContexts) ? oBinding.getCurrentContexts() : [];
+      return aContexts.filter(function (oCtx) {
+        return sParentItemNumber && oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem) === sParentItemNumber;
       });
     },
 
@@ -1351,6 +1487,12 @@ sap.ui.define([
       // _refreshItemsBinding (opt-out toggle) can refresh it directly.
       oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $select: "SAP__Messages" });
       oTable.bindItems(oBindingInfo);
+      // bindItems() always creates a fresh binding instance - re-attach here
+      // (see _onItemCreateActivate) rather than relying on one set up once.
+      var oNewBinding = oTable.getBinding("items");
+      if (oNewBinding) {
+        oNewBinding.attachCreateActivate(this._onItemCreateActivate, this);
+      }
     },
 
     // SectionFactory.js content-loaded hook \u2014 fires once per section the
