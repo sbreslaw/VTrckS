@@ -2,13 +2,15 @@ sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/m/MessagePopover",
   "sap/m/MessageItem",
+  "sap/ui/core/Fragment",
   "sap/ui/core/Messaging",
   "sap/ui/model/json/JSONModel",
   "cdc/vaccreq/sections/SectionFactory",
   "cdc/vaccreq/sections/ItemSectionConfig",
   "cdc/vaccreq/model/formatter",
-  "cdc/vaccreq/model/ServiceSchema"
-], function (Controller, MessagePopover, MessageItem, Messaging, JSONModel, SectionFactory, ItemSectionConfig, formatter, ServiceSchema) {
+  "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/model/PricingColumns"
+], function (Controller, MessagePopover, MessageItem, Fragment, Messaging, JSONModel, SectionFactory, ItemSectionConfig, formatter, ServiceSchema, PricingColumns) {
   "use strict";
 
   // Item Details view (FCL end column) - Session Prompt "Item Details View".
@@ -23,7 +25,7 @@ sap.ui.define([
       this._oRouter = this.getOwnerComponent().getRouter();
       this._oRouter.getRoute("itemDetail").attachPatternMatched(this._onObjectMatched, this);
       this._aSectionMeta = ItemSectionConfig;
-      this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, null, "itemSectionFlags");
+      this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this), "itemSectionFlags");
       this.getView().setModel(this._createSectionFlagsModel(), "itemSectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "itemSectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
@@ -44,6 +46,27 @@ sap.ui.define([
         oPanel.setExpanded(true);
         this._oSectionFactory.ensurePanelContent(oPanel);
         oPanel.getDomRef().scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    },
+
+    // Controls loaded via a section's Fragment.load carry the panel's ID as an
+    // extra ID-preservation prefix (SectionFactory.js ensurePanelContent) -
+    // same fix already established in Detail.controller.js.
+    _byIdInSection: function (sSectionId, sControlId) {
+      var oPanel = this.byId(sSectionId);
+      return oPanel && Fragment.byId(oPanel.getId(), sControlId);
+    },
+
+    // SectionFactory.js content-loaded hook - fires once per section the
+    // first time its fragment content loads. "itemPrices" (Prices Tables
+    // session prompt) builds/binds the shared 7-column pricing table
+    // (model/PricingColumns.js) against this item context's own
+    // `_ItemPricingElement` navigation - the SAME module/definition
+    // Detail.controller.js uses for the header Price Totals table.
+    _onSectionContentLoaded: function (sSectionId) {
+      if (sSectionId === "itemPrices") {
+        var oTable = this._byIdInSection("itemPrices", "itemPricesTable");
+        PricingColumns.bindTable(oTable, this.getResourceBundle(), ServiceSchema.pricingElements.itemNavigation);
       }
     },
 

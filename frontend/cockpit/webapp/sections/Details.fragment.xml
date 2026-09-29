@@ -61,17 +61,14 @@
 							<!-- Client requirement (2026-09-01): real field (ZZ_KTEXT_SDH),
 								open for entry on Create only - change-mode PATCHability is
 								unconfirmed, see ServiceSchema.js updatableHeaderProperties. -->
-							<Text text="{ZZ_KTEXT_SDH}" visible="{= !${sectionFlags>/createMode} }">  
+							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-							</Text>
-							<Input value="{ZZ_KTEXT_SDH}" visible="{sectionFlags>/createMode}"
-								enabled="{createState>/providerChosen}"> 
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>							
-							</Input>
+								<Text text="{ZZ_KTEXT_SDH}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input value="{ZZ_KTEXT_SDH}" visible="{sectionFlags>/createMode}"
+									enabled="{createState>/providerChosen}"/>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
 
@@ -96,23 +93,20 @@
 								the transient context, createEnrich>/providerName+
 								/providerAddress are display-only mirrors of the picked
 								row (see Detail.controller.js#onProviderValueHelpRequest). -->
-							<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }">
+							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-							</Text>
-							<Input
-								value="{createEnrich>/providerName}"
-								showValueHelp="true"
-								valueHelpOnly="true"
-								editable="{= !%{createEnrich>/providerName} }"
-								visible="{sectionFlags>/createMode}"
-								tooltip="{i18n>providerLockedTooltip}"
-								valueHelpRequest=".onProviderValueHelpRequest">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Input>
+								<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input
+									value="{createEnrich>/providerName}"
+									showValueHelp="true"
+									valueHelpOnly="true"
+									editable="{= !%{createEnrich>/providerName} }"
+									visible="{sectionFlags>/createMode}"
+									tooltip="{i18n>providerLockedTooltip}"
+									valueHelpRequest=".onProviderValueHelpRequest"/>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
 
@@ -120,7 +114,7 @@
 						<f:label>
 							<Label text="{i18n>providerAddress}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -134,16 +128,13 @@
 								order has no backend context yet, so the address mirrors
 								whatever the VH picker returned
 								(createEnrich>/providerAddress). -->
-							<Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} }">
+							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-							</Text>
-							<Text text="{createEnrich>/providerAddress}" visible="{sectionFlags>/createMode}">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
+								<Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Text text="{createEnrich>/providerAddress}" visible="{sectionFlags>/createMode}"/>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
 
@@ -151,17 +142,12 @@
 						<f:label>
 							<Label text="{i18n>contact}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
 
 						<f:fields>
-							<Text text="{_SoldToPartyContactInfo/FullName}" visible="{= !${sectionFlags>/createMode} }">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
 							<!-- Session Prompt (Detail View Adjustments) 3.5: rewired to a
 								real VH dialog against the new custom service's
 								po>/ProviderContact entity set (ServiceSchema.
@@ -176,17 +162,19 @@
 								persistence back to the order is still pending (no
 								confirmed write path this session) - see
 								OPEN_QUESTIONS.md. -->
-							<Input
-								value="{createEnrich>/contactName}"
-								showValueHelp="true"
-								valueHelpOnly="true"
-								visible="{sectionFlags>/createMode}"
-								enabled="{createState>/providerChosen}"
-								valueHelpRequest=".onContactValueHelpRequest">
+							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-							</Input>
+								<Text text="{_SoldToPartyContactInfo/FullName}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input
+									value="{createEnrich>/contactName}"
+									showValueHelp="true"
+									valueHelpOnly="true"
+									visible="{sectionFlags>/createMode}"
+									enabled="{createState>/providerChosen}"
+									valueHelpRequest=".onContactValueHelpRequest"/>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
 
@@ -194,34 +182,176 @@
 						<f:label>
 							<Label text="{i18n>colEmployeeResponsible}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
 
 						<f:fields>
-							<Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" visible="{= !${sectionFlags>/createMode} }">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
 							<!-- Stub Value Help based on SAP user name (USR02) - hardcoded
 								picker for now; defaults to the current user
 								(sap.ushell.Container UserInfo service) on entering
 								createMode, local-only until the enrichment action is live.
 								v5 UX phasing: locked until a Provider is picked. -->
-							<Input
-								value="{createEnrich>/employeeResponsibleName}"
-								showValueHelp="true"
-								valueHelpOnly="true"
-								visible="{sectionFlags>/createMode}"
-								enabled="{createState>/providerChosen}"
-								valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
-								tooltip="{i18n>createEnrichmentUnavailable}">
+							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-							</Input>
+								<Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input
+									value="{createEnrich>/employeeResponsibleName}"
+									showValueHelp="true"
+									valueHelpOnly="true"
+									visible="{sectionFlags>/createMode}"
+									enabled="{createState>/providerChosen}"
+									valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
+									tooltip="{i18n>createEnrichmentUnavailable}"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>otherReason}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+								unaffected outside createMode (normal Change-Mode editing). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{SDDocumentReason}"
+									visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/SDDocumentReason'}">
+									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>category}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Session Prompt (Detail View Adjustments) 3.2: rebound to the
+								real, independently writable CustomerPurchaseOrderType header
+								property (ServiceSchema.headerProperties.category/
+								updatableHeaderProperties.category) - same edit-live pattern as
+								Order Reason above (Text when not editing, ComboBox against the
+								real /CustomerPurchaseOrderType VH entity set when editing).
+								Retires the old hardcoded Enums.CATEGORY Select entirely. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_CustomerPurchaseOrderType/CustomerPurchaseOrderType_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Select
+									width="100%"
+									selectedKey="{CustomerPurchaseOrderType}"
+									forceSelection="false"
+									visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/CustomerPurchaseOrderType'}">
+									<core:Item key="{CustomerPurchaseOrderType}" text="{CustomerPurchaseOrderType_Text}" />
+								</Select>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement visible="{= ${CustomerPurchaseOrderType} === 'EXIS' }">
+						<f:label>
+							<Label text="{i18n>filterExisId}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input value="{PurchaseOrderByCustomer}" visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
+				</f:formElements>
+			</f:FormContainer>
+
+<!-- DATES/STATUS -->
+
+			<f:FormContainer title="{i18n>detailsStatus}">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>colCreatedAt}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>colStatus}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Status derivation on create is also part of the still-
+								unbuilt enrichment action per ADDENDUM-001 - must stay
+								user-selectable per the create-order design, hardcoded
+								Select in createMode, local-only until then. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}"/>
+								<Select
+									selectedKey="{createEnrich>/status}"
+									visible="{sectionFlags>/createMode}"
+									width="100%"
+									enabled="{createState>/providerChosen}"
+									tooltip="{i18n>createEnrichmentUnavailable}"
+									items="{enums>/STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
 
@@ -229,7 +359,7 @@
 						<f:label>
 							<Label text="{i18n>filterPriority}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -250,158 +380,38 @@
 								_propagatePriorityToItems) - never on change here. Visible/
 								editable in every mode (not just createMode), gated the same way
 								as the other Details fields. -->
-							<Text text="{priorityState>/valueText}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }">
+							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-							</Text>
-							<Select
-								selectedKey="{priorityState>/value}"
-								visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
-								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-								items="{path: '/DeliveryPriority'}"
-								change=".onPriorityChange">
-								<core:Item key="{DeliveryPriority}" text="{DeliveryPriority_Text}" />
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Select>
-							<Text text="{i18n>priorityMixedHint}" visible="{= ${priorityState>/mixed} &amp;&amp; !${sectionFlags>/createMode} }" class="sapUiTinyMarginTop">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
+								<Text text="{priorityState>/valueText}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Select
+									selectedKey="{priorityState>/value}"
+									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
+									width="100%"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/DeliveryPriority'}"
+									change=".onPriorityChange">
+									<core:Item key="{DeliveryPriority}" text="{DeliveryPriority_Text}" />
+								</Select>
+								<Text text="{i18n>priorityMixedHint}" visible="{= ${priorityState>/mixed} &amp;&amp; !${sectionFlags>/createMode} }" class="sapUiTinyMarginTop"/>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>otherReason}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
 
-						<f:fields>
-							<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
-								unaffected outside createMode (normal Change-Mode editing). -->
-							<ComboBox
-								selectedKey="{SDDocumentReason}"
-								visible="{sectionFlags>/details/editing}"
-								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-								items="{path: '/SDDocumentReason'}">
-								<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</ComboBox>
-						</f:fields>
-					</f:FormElement>
+				</f:formElements>
+			</f:FormContainer>
 
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>category}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
+<!-- NOTES -->
 
-						<f:fields>
-							<!-- Session Prompt (Detail View Adjustments) 3.2: rebound to the
-								real, independently writable CustomerPurchaseOrderType header
-								property (ServiceSchema.headerProperties.category/
-								updatableHeaderProperties.category) - same edit-live pattern as
-								Order Reason above (Text when not editing, ComboBox against the
-								real /CustomerPurchaseOrderType VH entity set when editing).
-								Retires the old hardcoded Enums.CATEGORY Select entirely. -->
-							<Text text="{_CustomerPurchaseOrderType/CustomerPurchaseOrderType_Text}" visible="{= !${sectionFlags>/details/editing} }">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-							<Select
-								selectedKey="{CustomerPurchaseOrderType}"
-								forceSelection="false"
-								visible="{sectionFlags>/details/editing}"
-								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-								items="{path: '/CustomerPurchaseOrderType'}">
-								<core:Item key="{CustomerPurchaseOrderType}" text="{CustomerPurchaseOrderType_Text}" />
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Select>
-						</f:fields>
-					</f:FormElement>
-
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>colStatus}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- Status derivation on create is also part of the still-
-								unbuilt enrichment action per ADDENDUM-001 - must stay
-								user-selectable per the create-order design, hardcoded
-								Select in createMode, local-only until then. -->
-							<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-							<Select
-								selectedKey="{createEnrich>/status}"
-								visible="{sectionFlags>/createMode}"
-								enabled="{createState>/providerChosen}"
-								tooltip="{i18n>createEnrichmentUnavailable}"
-								items="{enums>/STATUS}">
-								<core:Item key="{enums>key}" text="{enums>text}" />
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Select>
-						</f:fields>
-					</f:FormElement>
-
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>filterExisId}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-							<Input value="{PurchaseOrderByCustomer}" visible="{sectionFlags>/details/editing}"
-								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Input>
-						</f:fields>
-					</f:FormElement>
-
+			<f:FormContainer title="{i18n>detailsNotes}">
+				<f:formElements>
 					<f:FormElement>
 						<f:label>
 							<Label text="{i18n>detailsNotes}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -416,33 +426,6 @@
 						</TextArea>
 						</f:fields>
 					</f:FormElement>
-
-
-				</f:formElements>
-	
-			</f:FormContainer>
-
-<!-- DATES -->
-
-			<f:FormContainer title="{i18n>detailsDates}">
-				<f:formElements>
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>colCreatedAt}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-						<f:fields>
-							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-						</f:fields>
-
-					</f:FormElement>
 				</f:formElements>
 			</f:FormContainer>
 
@@ -454,7 +437,7 @@
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -472,7 +455,7 @@
 						<f:label>
 							<Label text="{i18n>taxAmount}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -497,7 +480,7 @@
 						<f:label>
 							<Label text="{i18n>grossValue}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+									<l:GridData span="XL4 L4 M4 S12"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -514,8 +497,9 @@
 				</f:formElements>
 			</f:FormContainer>
 
-
 		</f:formContainers>
 	</f:Form>
 
 </core:FragmentDefinition>
+
+

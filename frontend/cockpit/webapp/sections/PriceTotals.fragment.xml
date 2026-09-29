@@ -1,6 +1,12 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <!-- Price Totals: no distinct pricing-condition breakdown entity was found on
-       this service beyond the header Net/Tax/Gross amounts already shown in the
-       Details section — design TBD, see PHASE2_AUDIT.md. -->
-  <MessageStrip text="{i18n>designTbd}" type="Information" showIcon="true" />
+  <!-- Prices Tables session prompt: real, read-only HeaderPricingElement
+       table (design/so.xml ~1198, via SalesOrderManageType's own
+       `_PricingElement` navigation). No toolbar, no editable controls, no
+       Actions/Status columns (deliberately dropped, see NOTES.md). Columns
+       and the `items` binding are applied programmatically by
+       Detail.controller.js#_onSectionContentLoaded via the shared
+       model/PricingColumns.js module (the SAME module/definition the
+       ItemDetail "Prices" table uses) - no static <columns>/<items> here,
+       so there is nothing to keep in sync between the two fragments. -->
+  <Table id="priceTotalsTable" noDataText="{i18n>pricingTableEmpty}" />
 </core:FragmentDefinition>

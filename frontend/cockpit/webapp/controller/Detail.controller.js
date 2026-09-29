@@ -32,6 +32,7 @@ sap.ui.define([
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor",
+  "cdc/vaccreq/model/PricingColumns",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/FundLogicService",
@@ -39,7 +40,7 @@ sap.ui.define([
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, Fragment,
-  Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor,
+  Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, FundLogicService, FundSplitDialog
 ) {
   "use strict";
@@ -52,9 +53,9 @@ sap.ui.define([
   // (StandardPartnerContactInfo, see _openContactValueHelpDialog).
   // "based on SAP User name (USR02)" - hardcoded sample user master rows.
   var EMPLOYEE_PICKER_ITEMS = [
-    { id: "JDOE", name: "John Doe" },
-    { id: "ASMITH", name: "Alice Smith" },
-    { id: "BJONES", name: "Bob Jones" }
+    { id: "JDOE", name: "John Doe (placeholder)" },
+    { id: "ASMITH", name: "Alice Smith (placeholder)" },
+    { id: "BJONES", name: "Bob Jones (placeholder)" }
   ];
 
   // Items fundType (MaterialGroup2) Select source - was a hardcoded core:Item
@@ -477,7 +478,12 @@ sap.ui.define([
       }
       var oNewRowData = {
         Product: "",
-        RequestedQuantity: null,
+        // RequestedQuantity is Nullable="false" AND Edm.Decimal (design/so.xml)
+        // - never leave it null even transiently, must be the STRING "0", not
+        // the number 0, or the POST's own error response comes back malformed
+        // (confirmed live, same as onProdQtyChange's own decimal-string
+        // requirement below).
+        RequestedQuantity: "0",
         RequestedQuantityUnit: ServiceSchema.createPayloadUom,
         // Nullable="false" (design/so.xml) - seeded here too, not just on
         // change (onProdQtyChange/onFundTypeChange), so a row never carries
@@ -492,12 +498,10 @@ sap.ui.define([
       // Ancillary Items & Opt-Out session prompt §3.1: once the Items table
       // has already switched to the real sticky session's own `_Item` list
       // (this._bItemsSessionBound, see _bindItemsTableToSession), a newly
-      // added row IS that real list - RequestedQuantity must be a real
-      // number (0), not null, and there's no more need for a client-side
+      // added row IS that real list - there's no more need for a client-side
       // placeholder SalesOrderItem (the model resolves the server-assigned
       // one once this row's own create() settles under $auto).
       if (this._bItemsSessionBound) {
-        oNewRowData.RequestedQuantity = 0;
         // This binding's own group is $auto (unlike the pre-session scratch
         // list's deferred "vrCreate") - a plain create() would POST an empty
         // row to the backend the instant "Add Item" is clicked, 400ing
@@ -672,15 +676,22 @@ sap.ui.define([
       this._checkItemRowComplete(oRowContext);
     },
 
-    // Ancillary Items & Opt-Out session prompt §3.1: a row is "complete" once
-    // it has a product, both classification Selects, and a positive quantity.
+    // A row only "completes" (and gets posted for real) once NDC + quantity +
+    // fund type + order intention are ALL set - reverted back to this after
+    // live-testing an NDC-only rule raced the row's own follow-up field
+    // edits against the backend (repo memory, round 23 live-test rounds
+    // 2/3). A row still incomplete when "Add Item" is clicked is NOT force-
+    // posted (round 24 live-test: the backend accepts a zero-quantity create
+    // but never durably persists it, 404ing on any later edit) - it just
+    // stays inactive/transient in the table, which never gets removed by
+    // adding another row, so nothing is lost by leaving it incomplete.
     _isScratchRowComplete: function (oRowContext) {
       var oProps = ServiceSchema.itemProperties;
       var fQty = parseFloat(oRowContext.getProperty(oProps.quantity));
       return !!oRowContext.getProperty(oProps.material)
-        && !!oRowContext.getProperty(oProps.orderIntention)
+        && !isNaN(fQty) && fQty > 0
         && !!oRowContext.getProperty(oProps.fundType)
-        && !isNaN(fQty) && fQty > 0;
+        && !!oRowContext.getProperty(oProps.orderIntention);
     },
 
     // bInactive create() (onItemsAddRow, post-session-bound branch) only
@@ -703,48 +714,34 @@ sap.ui.define([
       // child added by the server stays invisible until some unrelated
       // refresh (e.g. the opt-out toggle) happens to occur.
       //
-      // Live-test fix (round 19): pricing (NetAmount) is never (re)determined
-      // for this row at all unless a bound UpdatePrices action is invoked
-      // explicitly - confirmed live that retrying the refresh indefinitely
-      // does NOT help, and confirmed live (round 19d) that the ITEM-bound
-      // overload (so.xml ~2178, bound to SalesOrderItemType) executes
-      // successfully (204 No Content) but still does NOT (re)price the row -
-      // same provider/material, only the insertion ORDER differs, so this
-      // is not a master-data/condition-record gap either. Switched to the
-      // HEADER-bound overload instead (so.xml ~2257, bound to
-      // SalesOrderManageType, same action name - UI5 resolves the right
-      // overload from the binding context's type) invoked on the sticky
-      // session's own header context (_oCreateSession.plainContext) - this
-      // is the same context whose OWN rebind (_bindItemsTableToSession) is
-      // how row 1 happens to get priced for free, so a document-level
-      // repricing call is a closer match to whatever that path actually
-      // triggers than a single-item call. PricingType "B" = SAP-standard
-      // "carry out new pricing" (TODO-VERIFY: no other value is documented
-      // in so.xml beyond MaxLength=1 - confirm "B" is accepted/correct once
-      // live-tested).
+      // Live-test round 19/19b-e: tried an explicit bound UpdatePrices call
+      // (both item- and header-bound overloads, so.xml ~2178/~2257) to fix
+      // NetAmount staying "0.00" for item 2+. Item-bound: executes (204) but
+      // never reprices. Header-bound: needed an ETag prefetch to get past a
+      // 428, but once it actually ran it was confirmed (round 20) to reprice
+      // the WHOLE document server-side - which re-runs ancillary
+      // determination for EVERY item, silently reinstating/reclassifying a
+      // mandatory ancillary on items that had already been successfully
+      // opted-out, breaking the round-13 delete flow for unrelated items.
+      // Reverted to the safe round-17 baseline (refresh only, no pricing
+      // action) - NetAmount=0 for item 2+ is BLOCKED-BY-BACKEND again (see
+      // round 19c conclusion) and must not be "fixed" with a document-level
+      // repricing call again without also re-verifying every other item's
+      // ancillary/opt-out state afterward.
       var that = this;
-      var oHeaderContext = this._oCreateSession && this._oCreateSession.plainContext;
-      var oModel = (oHeaderContext || oRowContext).getModel();
-      var oPricingAction = oHeaderContext
-        ? oModel.bindContext(ServiceSchema.updatePricesAction + "(...)", oHeaderContext)
-        : oModel.bindContext(ServiceSchema.updatePricesAction + "(...)", oRowContext);
-      oPricingAction.setParameter("PricingType", "B");
-      // Live-test fix (round 19e): the header entity has optimistic
-      // concurrency control (LastChangeDateTime) - this plainContext has
-      // never had that property read, so the model has no ETag to attach
-      // and the bound action 428s ("conditional required, use If-Match").
-      // Force a read first so the model can generate If-Match itself.
-      var pEnsureEtag = oHeaderContext ? oHeaderContext.requestProperty("LastChangeDateTime") : Promise.resolve();
+      var oBundle = this.getResourceBundle();
       oRowContext.created()
-        .then(function () { return pEnsureEtag; })
-        .then(function () { return oPricingAction.execute(); })
         .then(function () { return that._refreshItemsBinding(); })
         .catch(function (oError) {
-          // Previously silently swallowed - surfaced now so a failing
-          // UpdatePrices call (bad PricingType, ETag mismatch, etc.) isn't
-          // mistaken for "backend always returns 0".
-          // eslint-disable-next-line no-console
-          console.error("[round19] UpdatePrices/refresh failed", oError);
+          // Surface the real backend message (SAP__Messages) the same way
+          // every other item failure does, instead of only console-logging -
+          // "Operation is not enabled"-class errors need their full message
+          // text/target to diagnose, not just this generic wrapper.
+          var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), oBundle);
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
         });
     },
 
@@ -775,6 +772,7 @@ sap.ui.define([
         return;
       }
       this._bPostingFirstItem = true;
+      this._aPendingIncompleteRows = this._aPendingIncompleteRows || [];
       var that = this;
       var oBundle = this.getResourceBundle();
       var oTable = this._byIdInSection("items", "itemsTable");
@@ -789,7 +787,13 @@ sap.ui.define([
           return that._migrateRemainingScratchRows(oOldItemsBinding, oRowContext);
         })
         .then(function () {
-          that._bindItemsTableToSession();
+          // Live-test bug: setBusy(false) below used to fire the instant this
+          // resolved, re-enabling the row's Qty/Fund/Intention inputs before
+          // the real list's own confirming GET (dataReceived) had actually
+          // completed - a fast edit right after NDC-pick could PATCH a
+          // SalesOrderItem key the backend hadn't fully settled yet (404).
+          // Must await that same GET, not just the table rebind call itself.
+          return that._bindItemsTableToSession();
         }, function (oError) {
           var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
           aSectionIds.forEach(function (sId) {
@@ -805,13 +809,16 @@ sap.ui.define([
         });
     },
 
-    // Best-effort: any OTHER scratch rows that were also already complete at
-    // the moment the first one posted get posted too (sequentially, so
-    // _ensureSession's own re-entrancy guard never races); any that were
-    // still incomplete have no valid server-postable data and are simply
-    // dropped (TODO-VERIFY - live-test whether users commonly have more than
-    // one half-filled row open at once; if so this may need a friendlier
-    // "finish or lose this row" prompt instead of a silent delete).
+    // Any OTHER scratch rows that were also already complete at the moment
+    // the first one posted get posted too (sequentially, so _ensureSession's
+    // own re-entrancy guard never races); any that were still incomplete
+    // have no valid server-postable data yet, but must NOT be silently lost
+    // (live-tested bug: a partially-filled row disappeared the moment ANY
+    // other row completed and triggered this migrate cycle) - their current
+    // field values are stashed on this._aPendingIncompleteRows and recreated
+    // as new inactive rows on the real session list once
+    // _bindItemsTableToSession switches the table over (see
+    // _recreatePendingIncompleteRows), so the user can keep completing them.
     _migrateRemainingScratchRows: function (oOldItemsBinding, oAlreadyPostedContext) {
       var that = this;
       var oHeaderContext = this.getView().getBindingContext();
@@ -826,6 +833,11 @@ sap.ui.define([
               oCtx.delete().catch(function () {});
             });
           }
+          var oPendingData = Object.assign({}, oCtx.getObject());
+          // Client-only scratch numbering (_computeNextItemNumber) - the real
+          // session list assigns its own key, never reuse this placeholder.
+          delete oPendingData.SalesOrderItem;
+          that._aPendingIncompleteRows.push(oPendingData);
           return oCtx.delete().catch(function () {});
         });
       }, Promise.resolve());
@@ -841,7 +853,7 @@ sap.ui.define([
     _bindItemsTableToSession: function () {
       var oTable = this._byIdInSection("items", "itemsTable");
       if (!oTable || !this._oCreateSession || !this._oCreateSession.plainContext) {
-        return;
+        return Promise.resolve();
       }
       oTable.setBindingContext(this._oCreateSession.plainContext);
       this._sItemsUpdateGroup = ServiceSchema.itemInteractiveGroup;
@@ -850,10 +862,45 @@ sap.ui.define([
       // The rebind's own GET is still async here - computing childParents
       // synchronously would run off the OLD (scratch/empty) contexts and
       // never get another chance to recompute; wait for the real fetch.
+      // Recreating pending rows (bAtEnd:true) also needs to wait for this
+      // same GET - creating at the end throws "Must know the final length"
+      // until the binding's real length is known (confirmed live). Callers
+      // (_postFirstItemRow) also rely on the returned promise to know the
+      // newly-posted row's own key is now backend-confirmed before letting
+      // the user edit it further (live-tested 404 race).
       var oBinding = oTable.getBinding("items");
-      if (oBinding) {
-        oBinding.attachEventOnce("dataReceived", this._computeAncillaryParents.bind(this));
+      if (!oBinding) {
+        this._recreatePendingIncompleteRows(oBinding);
+        return Promise.resolve();
       }
+      var that = this;
+      return new Promise(function (resolve) {
+        oBinding.attachEventOnce("dataReceived", function () {
+          that._computeAncillaryParents();
+          that._recreatePendingIncompleteRows(oBinding);
+          resolve();
+        });
+      });
+    },
+
+    // Re-creates any scratch rows stashed by _migrateRemainingScratchRows
+    // (still incomplete when another row's completion triggered the switch
+    // to the real session list) as new inactive rows on that same list -
+    // same bInactive create() onItemsAddRow already uses for item 2+, so the
+    // user's partial entry (NDC/quantity/etc.) survives and can still be
+    // completed normally.
+    _recreatePendingIncompleteRows: function (oBinding) {
+      var aPending = this._aPendingIncompleteRows;
+      this._aPendingIncompleteRows = [];
+      if (!oBinding || !aPending.length) {
+        return;
+      }
+      aPending.forEach(function (oRowData) {
+        // Edm.Decimal - must stay/become a STRING, see onItemsAddRow's own
+        // RequestedQuantity comment.
+        oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
+        oBinding.create(oRowData, false, true, true);
+      });
     },
 
     // Re-derives the {"<parentItemNumber>": true} childParents map (itemsMeta
@@ -1497,7 +1544,13 @@ sap.ui.define([
 
     // SectionFactory.js content-loaded hook \u2014 fires once per section the
     // first time its fragment content loads (user expand or a forced createMode
-    // expand). Only "items" needs a reaction (see _rebindItemsGroup above).
+    // expand). "items" reaction is pre-existing; "priceTotals" is new (Prices
+    // Tables session prompt) - build/bind the shared 7-column pricing table
+    // (model/PricingColumns.js) against this header context's own
+    // `_PricingElement` navigation. createMode has no header context yet
+    // (transient, pre-save) - PricingColumns.bindTable still runs so the
+    // columns exist, but the relative `items` binding simply yields zero rows
+    // until a real context exists, giving the designed empty state for free.
     _onSectionContentLoaded: function (sSectionId) {
       if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
@@ -1506,6 +1559,9 @@ sap.ui.define([
         // actually loaded (change mode - createMode items have no server-
         // computed TaxAmount yet, see _computeHeaderTaxAmount doc comment).
         this._computeHeaderTaxAmount();
+      } else if (sSectionId === "priceTotals") {
+        var oTable = this._byIdInSection("priceTotals", "priceTotalsTable");
+        PricingColumns.bindTable(oTable, this.getResourceBundle(), ServiceSchema.pricingElements.headerNavigation);
       }
     },
 
@@ -1910,7 +1966,13 @@ sap.ui.define([
         });
       }
 
-      CreateOrderService.save(oContext, oItemsBinding, this._oCreateSession)
+      // "Total Split Qty ... does not match the Order Qty" (SaveChanges) is a
+      // BACKEND-ONLY defect (round 21) - reproduced identically in the
+      // standard SAP "Manage Sales Order V2" Fiori app with ZZVFCQTY never
+      // touched by any client at all, so no client-side reconciliation before
+      // Save can fix it; removed after confirming the backend silently
+      // discards any client PATCH to ZZxxxQTY regardless of timing.
+      CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession)
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
         // CreateOrderService.save()). Enrichment/IoH failing from here on is a
@@ -2044,11 +2106,17 @@ sap.ui.define([
     // "detail" route uses. No backend contact happens until Save.
     _onCreateMatched: function () {
       this._destroyCreateContext();
+      // A prior "detail" route visit leaves an active bindElement() on the
+      // view - an element binding always wins over the plain
+      // setBindingContext() below (UI5 propagation rules), so without this
+      // every relative field/list would keep showing the last-viewed order.
+      this.getView().unbindElement();
       var oResult = CreateOrderService.enter(this.getView().getModel());
       this._oCreateListBinding = oResult.listBinding;
       this._oCreateSession = oResult.session;
       this._bItemsSessionBound = false;
       this._bPostingFirstItem = false;
+      this._aPendingIncompleteRows = [];
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);

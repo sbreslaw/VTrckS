@@ -403,19 +403,37 @@ sap.ui.define([], function () {
       orderCombinationIsAllowed: "OrderCombinationIsAllowed"
     },
 
-    // Prices section (session prompt 3.3 item 4) - TODO-VERIFY(prices-entity):
-    // treated as a placeholder per the session prompt's explicit instruction
-    // ("the entity set is in development"), even though Step-0 found that
-    // THIS temporary standard service already exposes a real, fully-fielded
-    // `ItemPricingElement` top-level EntitySet (so.xml line 2473, via the
-    // item's own `_ItemPricingElement` navigation) with a column set that
-    // maps closely to the prices.png screenshot - see OPEN_QUESTIONS.md for
-    // the proposed column<->property mapping given to the backend team. Left
-    // null/not wired here on purpose: the CANONICAL target service for this
-    // app (ZUI_VACCINEREQUEST_O4, per AGENT_ONBOARDING.md) does not have
-    // pricing yet, and the DoD calls for the real UI shell + designed empty
-    // state, not activating the temporary service's own pricing data.
-    itemPricingEntitySet: null,
+    // Prices Tables (Header "Price Totals" + Item "Prices") session prompt:
+    // supersedes the old itemPricingEntitySet-null placeholder. Both entities
+    // (design/so.xml ~1198/~1408) share an identical property shape - one
+    // shared module (model/PricingColumns.js) consumes this single block to
+    // build/bind BOTH tables, no duplicated column/property literals
+    // elsewhere. Step-0 verified: HeaderPricingElementType's real navigation
+    // is `_PricingElement` off SalesOrderManageType (so.xml ~550), not off a
+    // top-level query - always bind through the section's own header/item
+    // context, never entitySets.* top-level.
+    pricingElements: {
+      headerEntitySet: "HeaderPricingElement",
+      itemEntitySet: "ItemPricingElement",
+      headerNavigation: "_PricingElement",
+      itemNavigation: "_ItemPricingElement",
+      properties: {
+        step: "PricingProcedureStep",
+        counter: "PricingProcedureCounter",
+        conditionTypeName: "ConditionTypeName",
+        rateAmount: "ConditionRateAmount",
+        rateRatio: "ConditionRateRatio",
+        rateValueIsAmount: "ConditionRateValueIsAmount",
+        rateValueIsRatio: "ConditionRateValueIsRatio",
+        rateValueIsNull: "ConditionRateValueIsNull",
+        conditionCurrency: "ConditionCurrency",
+        conditionQuantity: "ConditionQuantity",
+        conditionQuantityUnit: "ConditionQuantityUnit",
+        conditionAmount: "ConditionAmount",
+        conditionAmountIsNull: "ConditionAmountIsNull",
+        transactionCurrency: "TransactionCurrency"
+      }
+    },
 
     customHeaderFields: [],
 

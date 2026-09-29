@@ -22,13 +22,18 @@ sap.ui.define([], function () {
   // sections: hidden ... in createMode per SectionConfig flag."
   var aSectionConfig = [
     { id: "details", titleKey: "sectionDetails", fragment: "cdc.vaccreq.sections.Details", expanded: true, editable: true, editLive: true, createVisible: true },
-    { id: "items", titleKey: "sectionItems", fragment: "cdc.vaccreq.sections.Items", expanded: false, editable: true, editLive: true, createVisible: true },
+    { id: "items", titleKey: "sectionItems", fragment: "cdc.vaccreq.sections.Items", expanded: true, editable: true, editLive: true, createVisible: true },
     { id: "inventory", titleKey: "sectionInventory", fragment: "cdc.vaccreq.sections.Inventory", expanded: false, editable: true, createVisible: true },
     { id: "shipping", titleKey: "sectionShipping", fragment: "cdc.vaccreq.sections.Shipping", expanded: false, editable: true, editLive: true, createVisible: true },
     { id: "shippingTransactions", titleKey: "sectionShippingTransactions", fragment: "cdc.vaccreq.sections.ShippingTransactions", expanded: false, editable: false },
     { id: "transactionHistory", titleKey: "sectionTransactionHistory", fragment: "cdc.vaccreq.sections.TransactionHistory", expanded: false, editable: false },
     { id: "orgData", titleKey: "sectionOrgData", fragment: "cdc.vaccreq.sections.OrgData", expanded: false, editable: true, editLive: true, createVisible: true },
-    { id: "priceTotals", titleKey: "sectionPriceTotals", fragment: "cdc.vaccreq.sections.PriceTotals", expanded: false, editable: false },
+    // Prices Tables session prompt item 4: createVisible so createMode
+    // (pre-save, transient header context) shows the section - the table's
+    // own relative `_PricingElement` binding then simply yields zero rows
+    // against that context, giving the designed empty state for free (no
+    // extra createMode-specific handling needed here).
+    { id: "priceTotals", titleKey: "sectionPriceTotals", fragment: "cdc.vaccreq.sections.PriceTotals", expanded: false, editable: false, createVisible: true },
     { id: "billing", titleKey: "sectionBilling", fragment: "cdc.vaccreq.sections.Billing", expanded: false, editable: true, editLive: true },
     { id: "paymentMethod", titleKey: "sectionPaymentMethod", fragment: "cdc.vaccreq.sections.PaymentMethod", expanded: false, editable: true },
     { id: "scheduledActions", titleKey: "sectionScheduledActions", fragment: "cdc.vaccreq.sections.ScheduledActions", expanded: false, editable: false },
