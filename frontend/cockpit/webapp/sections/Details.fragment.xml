@@ -58,15 +58,16 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Client requirement (2026-09-01): real field (ZZ_KTEXT_SDH),
-								open for entry on Create only - change-mode PATCHability is
+							<!-- Client requirement (2026-09-01): real field, renamed by the
+								backend team (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc - open
+								for entry on Create only - change-mode PATCHability is
 								unconfirmed, see ServiceSchema.js updatableHeaderProperties. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{ZZ_KTEXT_SDH}" visible="{= !${sectionFlags>/createMode} }"/>
-								<Input value="{ZZ_KTEXT_SDH}" visible="{sectionFlags>/createMode}"
+								<Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input value="{ZOrdDesc}" visible="{sectionFlags>/createMode}"
 									enabled="{createState>/providerChosen}"/>
 							</VBox>
 						</f:fields>
@@ -417,9 +418,16 @@
 						</f:label>
 
 						<f:fields>
-						<!-- Field mapping TBD (no header long-text source found in
-							this service, see i18n>notesPending) - UI element only. -->
-						<TextArea rows="3" width="100%" tooltip="{i18n>notesPending}">
+						<!-- Two-layer editable state: layer 1 is the normal per-section
+							{sectionFlags>/details/editing} gate (createMode already sets
+							this true, same as every other Details control), so display mode
+							is unambiguously read-only; layer 2 is a hardcoded "&& false" -
+							Notes has no write path yet (field mapping TBD, no header
+							long-text source found in this service, see i18n>notesPending),
+							so it stays non-editable even once the Details section is
+							switched to edit. Replace the "&& false" with a real capability
+							flag once the backend write path lands - do not remove layer 1. -->
+						<TextArea rows="3" width="100%" editable="{= ${sectionFlags>/details/editing} &amp;&amp; false }" tooltip="{i18n>notesPending}">
 							<layoutData>
 								<l:GridData span="XL8 L8 M8 S12"/>
 							</layoutData>

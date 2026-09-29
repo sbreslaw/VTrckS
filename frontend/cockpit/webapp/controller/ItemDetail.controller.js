@@ -131,6 +131,10 @@ sap.ui.define([
       }
       this._sOrderId = sOrderId;
       this._sItemNumber = sItemNumber;
+      // Display/Edit Consistency session prompt 4.3/4.4: mode plumbing only -
+      // stored for a LATER task to wire ItemDetail's own editable fields;
+      // this route always renders read-only regardless of mode today.
+      this._sMode = (oArgs["?query"] && oArgs["?query"].mode) || "display";
 
       var oView = this.getView();
       oView.setBusy(true);

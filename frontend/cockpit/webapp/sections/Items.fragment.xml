@@ -48,7 +48,7 @@
                      deliberately left untouched below - children stay
                      manually deletable per §3.4. -->
                 <MenuItem text="{i18n>rowActionEdit}" press=".onItemsEditPress"
-                  enabled="{= !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} }" />
+                  enabled="{= ${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} }" />
                 <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
                   enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
                 <!-- Fund Split (Trigger 2, design session prompt §3.3): enabled
@@ -56,7 +56,7 @@
                      Fund Type Select itself (createMode phasing) - SPL opens
                      edit mode, any other fund opens view mode (onItemsFundSplitPress). -->
                 <MenuItem text="{i18n>rowActionFundSplit}" press=".onItemsFundSplitPress"
-                  enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{MaterialGroup2} &amp;&amp; !%{HigherLevelItem} }"
+                  enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{MaterialGroup2} &amp;&amp; !%{HigherLevelItem} }"
                   tooltip="{i18n>rowActionFundSplitTooltip}" />
               </Menu>
             </menu>
@@ -77,9 +77,14 @@
                 {path: 'sectionFlags>/createMode'},
                 {path: 'createState>/providerChosen'}
               ], formatter: '.formatter.itemOptOutEnabled', useRawValues: true}" />
-          <Text text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }" />
+          <!-- Item Number Link -> ItemDetail, mode=display (Session Prompt "Display/Edit
+               Consistency" 4.4) - independent of /items/editing, works from both display
+               and edit; a child (ancillary) row's link still navigates to its own
+               read-only detail. -->
+          <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
+            press=".onItemNumberPress" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
-            enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
+            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
           <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
                carried over from the NDC's own IndustryStandardName on product
                selection (onItemNdcValueHelpRequest) - never typed in directly.
@@ -122,7 +127,7 @@
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
           <Select selectedKey="{MaterialGroup1}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
-            enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
             <core:Item key="MIX" text="Adult, Pediatric" />
@@ -135,7 +140,7 @@
                (formatter.fundTypeItemEnabled). Selecting SPL auto-opens the Fund Split
                dialog in edit mode (onFundTypeChange, Fund Split dialog session prompt). -->
           <Select selectedKey="{MaterialGroup2}" forceSelection="false" visible="{itemsColumns>/fundType}"
-            enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
             items="{fundTypes>/list}" change=".onFundTypeChange">
             <core:Item key="{fundTypes>key}" text="{fundTypes>text}"
               enabled="{parts: [{path: 'MaterialGroup1'}, {path: 'fundTypes>pediatricOnly'}, {path: 'fundTypes>disabled'}], formatter: '.formatter.fundTypeItemEnabled', useRawValues: true}" />

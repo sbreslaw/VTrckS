@@ -149,7 +149,7 @@
                 },
                 {
                     "name": "itemDetail",
-                    "pattern": "order/{orderId}/item/{itemPath}",
+                    "pattern": "order/{orderId}/item/{itemPath}:?query:}",
                     "layout": "EndColumnFullScreen",
                     "target": [
                         "master",

@@ -137,10 +137,11 @@ sap.ui.define([], function () {
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
-      // Client requirement (2026-09-01): real custom header field (SDH append),
-      // open for entry on Create (Details.fragment.xml) - see
-      // updatableHeaderProperties below for the create-replay persistence note.
-      description: "ZZ_KTEXT_SDH",
+      // Client requirement (2026-09-01): real custom header field, renamed by
+      // the backend team (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc - open for
+      // entry on Create (Details.fragment.xml) - see updatableHeaderProperties
+      // below for the create-replay persistence note.
+      description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: rebound from the old
       // SalesOrderType display-only alias to the REAL, independently writable
       // CustomerPurchaseOrderType property (so.xml ~line 389, MaxLength 4, its
@@ -704,8 +705,9 @@ sap.ui.define([], function () {
       // rendered as an editable Input in change mode (Details.fragment.xml
       // shows create-mode-only), so its PATCHability on an EXISTING order is
       // still unconfirmed/out of this task's scope - verify before ever
-      // wiring a change-mode Input for it.
-      description: "ZZ_KTEXT_SDH",
+      // wiring a change-mode Input for it. Renamed by the backend team
+      // (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc.
+      description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: real, independently
       // writable field (headerProperties.category above) - confirmed no
       // static Immutable/Computed annotation in so.xml, same as the other

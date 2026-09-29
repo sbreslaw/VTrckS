@@ -629,7 +629,11 @@ sap.ui.define([
       // Fund Split dialog session prompt, Trigger 1: selecting SPLIT opens the
       // allocation dialog in edit mode immediately - no
       // FundLogicService.applyFundSelection hook exists yet, wired directly here.
-      if (FundLogicService.isSplitFund(sKey)) {
+      // Defensive guard (Display/Edit Consistency session prompt 4.2): the Select
+      // itself is only editable when /items/editing is true, so this change
+      // event shouldn't be reachable otherwise - guarded anyway so the dialog
+      // can never auto-open from a display-mode row.
+      if (FundLogicService.isSplitFund(sKey) && this.getView().getModel("sectionFlags").getProperty("/items/editing")) {
         this._getFundSplitDialog().open(oRowContext, "edit");
       }
       this._checkItemRowComplete(oRowContext);
@@ -986,6 +990,8 @@ sap.ui.define([
     // Item Details view session prompt, 3.4: Items row Action menu "Edit" ->
     // FCL end column, always full screen (session prompt 3.1). Row context
     // supplies the SalesOrder/SalesOrderItem keys for the new route.
+    // Display/Edit Consistency session prompt 4.3: mode=edit is mode
+    // plumbing only - ItemDetail's own editable fields are a later task.
     onItemsEditPress: function (oEvent) {
       var oRowContext = oEvent.getSource().getBindingContext();
       if (!oRowContext) {
@@ -998,7 +1004,29 @@ sap.ui.define([
       }
       this._oRouter.navTo("itemDetail", {
         orderId: encodeURIComponent(sOrderId),
-        itemPath: encodeURIComponent(sItemNumber)
+        itemPath: encodeURIComponent(sItemNumber),
+        "?query": { mode: "edit" }
+      });
+    },
+
+    // Display/Edit Consistency session prompt 4.4: Item Number Link, navigates
+    // independently of /items/editing (works from both display and edit) -
+    // always mode=display, ItemDetail's natural built (read-only) state. A
+    // child (ancillary) row's link still navigates to its own read-only detail.
+    onItemNumberPress: function (oEvent) {
+      var oRowContext = oEvent.getSource().getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var sOrderId = oRowContext.getProperty(ServiceSchema.keys.orderId);
+      var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
+      if (!sOrderId || !sItemNumber) {
+        return;
+      }
+      this._oRouter.navTo("itemDetail", {
+        orderId: encodeURIComponent(sOrderId),
+        itemPath: encodeURIComponent(sItemNumber),
+        "?query": { mode: "display" }
       });
     },
 
