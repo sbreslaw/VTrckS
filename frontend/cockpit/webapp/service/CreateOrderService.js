@@ -42,17 +42,30 @@ sap.ui.define([
   // updatableHeaderProperties in ServiceSchema.js, not hand-maintained here —
   // see the comment there.
   var REPLAY_HEADER_PROPERTIES = ServiceSchema.createReplayHeaderProperties;
+  // Issue Batch 9-30-001 §2 (payload hygiene): the observed live create POST
+  // (issues/9-30-001.md #2) also sent SalesOrderItem ("000010" - the client's
+  // own scratch numbering, not a real key), SalesOrderItemText (the backend
+  // already defaults this from the Product master - see
+  // Detail.controller.js#onItemNdcValueHelpRequest's own doc comment), and
+  // ZZIndustryStandardName - none of which F3893 (the reference "Manage
+  // Sales Order" app) ever sends on create. This whitelist is the ONLY
+  // fields actually harvested onto the create payload (cleanItemPayload
+  // below) - the six ZZ*QTY mirrors are Nullable="false" Int32s and must
+  // always be present (onItemsAddRow seeds them to 0).
   var ITEM_PROPERTIES = [
     ServiceSchema.itemProperties.material,
-    ServiceSchema.itemProperties.itemText,
-    ServiceSchema.itemProperties.optOutAncillary,
     ServiceSchema.itemProperties.quantity,
     ServiceSchema.itemProperties.unit,
     ServiceSchema.itemProperties.exisId,
     ServiceSchema.itemProperties.orderIntention,
     ServiceSchema.itemProperties.fundType,
-    ServiceSchema.itemProperties.brand,
-    ServiceSchema.itemProperties.vfcQty
+    ServiceSchema.itemProperties.deliveryPriority,
+    ServiceSchema.itemProperties.vfcQty,
+    ServiceSchema.itemProperties.stateQty,
+    ServiceSchema.itemProperties.qty317,
+    ServiceSchema.itemProperties.chipQty,
+    ServiceSchema.itemProperties.panQty,
+    ServiceSchema.itemProperties.resQty
   ];
 
   // Never JSON.stringify the message model's data in a log statement —
@@ -80,7 +93,13 @@ sap.ui.define([
   function discardSession(oModel, sReason) {
     var oDiscardAction = oModel.bindContext(ServiceSchema.discardAction + "(...)");
     var pDiscard = oDiscardAction.execute(CREATE_REPLAY_GROUP);
-    oModel.submitBatch(CREATE_REPLAY_GROUP);
+    // Issue Batch 9-30-001 §5: submitBatch()'s OWN returned promise also
+    // rejects whenever the batch it just sent contains a failing request -
+    // leaving it unawaited/uncaught here is exactly the "Uncaught (in
+    // promise) Error: Unspecified provider error" seen in
+    // issues/9-30-001.md #5's console trace (pDiscard's catch below only
+    // ever covered oDiscardAction.execute()'s own promise, a SEPARATE one).
+    oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via pDiscard below */ });
     return pDiscard.catch(function (oDiscardError) {
       console.error("CreateOrderService: DiscardChanges cleanup failed (" + sReason + ")",
         "\nerror:", oDiscardError && oDiscardError.message, oDiscardError);
@@ -101,19 +120,15 @@ sap.ui.define([
     };
   }
 
-  // Strips OData control/instance-annotation keys (@odata.*, @$ui5.*, etc.)
-  // off a scratch row's own plain object before replaying/posting it -
-  // shared by the bulk replay loop (save()'s fallback path) and the new
-  // interactive single-item post (postItem below).
-  function hasSymbols(sPropertyName) {
-    var regex = /[^a-zA-Z0-9_-\s]/; // not a letter, digit, underscore, dash or space
-    return regex.test(sPropertyName);
-  }
-
+  // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the ITEM_PROPERTIES
+  // whitelist above - replaces the old "strip OData annotation keys, keep
+  // everything else" approach, which is what let SalesOrderItem/
+  // SalesOrderItemText/ZZIndustryStandardName (plain property names, no
+  // annotation characters to strip) leak into the create payload.
   function cleanItemPayload(oItemData) {
     var oClean = {};
     Object.keys(oItemData || {}).forEach(function (sProperty) {
-      if (!hasSymbols(sProperty) && oItemData[sProperty] !== undefined) {
+      if (ITEM_PROPERTIES.indexOf(sProperty) !== -1 && oItemData[sProperty] !== undefined) {
         oClean[sProperty] = oItemData[sProperty];
       }
     });
@@ -122,6 +137,12 @@ sap.ui.define([
 
   var CreateOrderService = {
     UPDATE_GROUP: CREATE_GROUP,
+
+    // Exposed so Detail.controller.js can re-seed local scratch rows from
+    // an orphaned session's row data (session-death recovery) with the
+    // exact same whitelist this module itself replays - no second,
+    // drift-prone copy of ITEM_PROPERTIES.
+    cleanItemPayload: cleanItemPayload,
 
     // Enter create mode: a transient list-binding context bound to the whole
     // Detail view — a local scratchpad only (see header comment above); no
@@ -298,7 +319,7 @@ sap.ui.define([
       // ①③④ themselves are otherwise UNCHANGED from the original v5 shape -
       // only WHEN ① ran (here vs. earlier) differs.
       if (oSession && oSession.opened && oSession.plainContext) {
-        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData);
+        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData, oSession);
       }
 
       // Fallback - session never opened interactively (e.g. Save reached
@@ -333,7 +354,11 @@ sap.ui.define([
       // .then() (that would deadlock: submitBatch() would never run because
       // execute() never resolves without it).
       var oExecutePromise = oAction.execute(CREATE_REPLAY_GROUP);
-      oModel.submitBatch(CREATE_REPLAY_GROUP);
+      // Issue Batch 9-30-001 §5: submitBatch()'s own promise also rejects on a
+      // failing batch - surfaced already via oExecutePromise's catch below,
+      // so swallow this second, redundant rejection instead of leaving it
+      // uncaught (see the identical fix/comment on discardSession above).
+      oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via oExecutePromise below */ });
 
       return oExecutePromise
         .catch(function (oError) {
@@ -383,7 +408,7 @@ sap.ui.define([
               });
             })
             .then(function () {
-              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData);
+              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession);
             });
         });
     },
@@ -393,7 +418,7 @@ sap.ui.define([
     // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
     // bound context - see the (still-applicable) v5 gotcha comment history
     // above for why a plain canonical-path context is required here instead.
-    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData) {
+    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession) {
       // v5 gotcha, round 6 (live test, 2026-08-28): without an explicit
       // $$updateGroupId here (unlike its sibling contexts elsewhere in this
       // flow), this operation binding fell back to "$auto" instead of
@@ -410,14 +435,32 @@ sap.ui.define([
       // model already cached a real ETag for this context from earlier
       // in-session activity (a wildcard match always succeeds).
       var oSavePromise = oSaveAction.execute(CREATE_REPLAY_GROUP, true);
-      oModel.submitBatch(CREATE_REPLAY_GROUP);
+      // Issue Batch 9-30-001 §5: same unhandled-rejection fix as
+      // discardSession/save()'s fallback path above.
+      oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via oSavePromise below */ });
 
       return oSavePromise
         .catch(function (oError) {
           console.error("CreateOrderService.save: SaveChanges request failed",
             "\nerror:", oError && oError.message, oError,
             "\nmessages:", logMessages());
+          // Issue Batch 9-30-001 §5 follow-up (live evidence, 2026-09-30):
+          // Branch B originally skipped DiscardChanges here, assuming a
+          // failed SaveChanges always kills the session server-side too
+          // (true in that one trace) - but a later retry proved the
+          // opposite: the session can survive a failed SaveChanges, and
+          // skipping the discard left it open server-side, so the NEXT
+          // Save's CreateWithSalesOrderType 400'd ("cannot process more
+          // than one sales document in one session"). Always attempt the
+          // best-effort discard now - discardSession() already swallows its
+          // own failure (e.g. the "session is off" case where it really was
+          // already dead), so this covers both outcomes instead of
+          // gambling on one.
           return discardSession(oModel, "SaveChanges failed").then(function () {
+            if (oSession) {
+              oSession.opened = false;
+              oSession.plainContext = null;
+            }
             throw oError;
           });
         })

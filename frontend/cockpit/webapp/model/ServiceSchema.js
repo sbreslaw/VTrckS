@@ -731,6 +731,29 @@ sap.ui.define([], function () {
     // + Details.fragment.xml/Items.fragment.xml $$updateGroupId bindings).
     editUpdateGroup: "vrEdit",
 
+    // Issue Batch 9-30-001 §3.1 (Notes write path): SalesOrderTextType is
+    // real and confirmed (design/metadata/so_C_SALESORDERMANAGE_2026-09-30.xml -
+    // Key SalesOrder+Language+LongTextID, property LongText), reached only
+    // via the header's own `_Text` navigation (never a top-level query).
+    textEntity: {
+      navigation: "_Text",
+      properties: {
+        salesOrder: "SalesOrder",
+        language: "Language",
+        longTextId: "LongTextID",
+        longText: "LongText"
+      }
+    },
+    // TODO-VERIFY(notes-long-text-id): no live backend access this session
+    // to read an existing order's own `_Text` rows and learn which
+    // LongTextID actually carries the CDC order notes (legacy KTEXT-family
+    // vs. a Z text ID, per Session Prompt Issue Batch 9-30-001 §2 Step-0) -
+    // never guessed. Left null on purpose: every notes read/write below
+    // degrades to a no-op (same BLOCKED-BY-SERVICE pattern as
+    // enrichmentAction/iohCreateAction) until a populated example is found
+    // and this constant is set to the real code. See OPEN_QUESTIONS.md.
+    notesLongTextId: null,
+
     showJurisdictionFilter: true,
     statusSource: "e008", // "standard" for temporary service, "e008" for swap-back
 
