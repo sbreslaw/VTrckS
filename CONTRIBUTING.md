@@ -1,5 +1,8 @@
 # Contributing to VTrckS (frontend/cockpit)
 
+> New here? Read **`DEVELOPER_PLAYBOOK.md`** first — it walks the whole branch/PR loop step by step,
+> including what to do when a push is rejected or a rebase conflicts. This file is the short reference.
+
 `main` is protected: **nobody commits to it directly.** All work lands through a pull request
 reviewed by the code owner.
 
