@@ -4,6 +4,7 @@
   xmlns="sap.m"
   xmlns:f="sap.f"
   xmlns:fb="sap.ui.comp.filterbar"
+  xmlns:t="sap.ui.table"
   xmlns:core="sap.ui.core">
   <f:DynamicPage id="masterPage" fitContent="true" headerExpanded="true">
     <f:title>
@@ -29,7 +30,6 @@
               <Button text="{i18n>variantManage}" press=".onVariantManage" />
               <Button text="{i18n>filterBarClear}" press=".onFilterBarClear" />
               <ToolbarSpacer />
-              <Button text="{i18n>tablePersonalize}" icon="sap-icon://action-settings" press=".onMasterTablePersonalize" />
             </OverflowToolbar>
             <fb:FilterBar id="filterBar" search=".onSearch" showFilterConfiguration="true">
               <fb:filterGroupItems>
@@ -128,19 +128,48 @@
       </f:DynamicPageHeader>
     </f:header>
     <f:content>
-      <Table
-        id="requestsTable"
-        inset="false"
-        growing="true"
-        growingThreshold="50"
-        noDataText="{= ${view>/masterHasSearch} ? undefined : ${i18n>masterNoDataBeforeSearch} }"
-        updateFinished=".onUpdateFinished">
-        <headerToolbar>
-          <Toolbar>
-            <Title text="{= ${view>/masterCount} + ' ' + ${i18n>resultsLabel}}" level="H3" />
-          </Toolbar>
-        </headerToolbar>
-      </Table>
+      <VBox fitContainer="true" renderType="Bare" width="100%" height="80%">
+        <t:Table
+          id="requestsTable"
+          selectionMode="Single"
+          alternateRowColors="true"
+          selectionBehavior="RowOnly"
+          visibleRowCountMode="Fixed"
+          visibleRowCount="10"
+          enableGrouping="true"
+          enableColumnReordering="true"
+          columnMove=".onColumnMove"
+          columnResize=".onColumnResize"
+          rowsUpdated=".onRowsUpdated"
+          noData="{= ${view>/masterHasSearch} ? undefined : ${i18n>masterNoDataBeforeSearch} }">
+          <t:extension>
+            <OverflowToolbar>
+              <Title text="{= ${i18n>masterTitle} + ' (' + ${view>/masterCount} + ' ' + ${i18n>resultsLabel} + ')'}" level="H3" />
+              <ToolbarSpacer />
+              <Button
+                icon="sap-icon://create"
+                text="{i18n>masterCreateButton}"
+                tooltip="{i18n>masterCreateTooltip}"
+                press=".onCreateRequest" />
+              <Button
+                icon="sap-icon://refresh"
+                text="{i18n>actionRefresh}"
+                tooltip="{i18n>actionRefresh}"
+                press=".onMasterRefresh" />
+              <Label text="{i18n>columnVariantLabel}" labelFor="columnVariantSelect" />
+              <Select id="columnVariantSelect" width="10rem" change=".onColumnVariantSelect" items="{columnVariants>/items}">
+                <core:Item key="{columnVariants>key}" text="{columnVariants>text}" />
+              </Select>
+              <Button text="{i18n>variantSaveAs}" press=".onColumnVariantSaveAs" />
+              <Button text="{i18n>variantManage}" press=".onColumnVariantManage" />
+              <Button
+                text="{i18n>tablePersonalize}"
+                icon="sap-icon://action-settings"
+                press=".onMasterTablePersonalize" />
+            </OverflowToolbar>
+          </t:extension>
+        </t:Table>
+      </VBox>
     </f:content>
   </f:DynamicPage>
 </mvc:View>

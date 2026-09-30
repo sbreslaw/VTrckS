@@ -1,0 +1,120 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form"
+  xmlns:l="sap.ui.layout">
+  <!-- Item Details view session prompt, 3.3.2 (shipping.png). Provider +
+       Provider Address are sourced from the ORDER context (display only,
+       per the session prompt), read via the item's own _SalesOrder
+       navigation back to the header. Display-first: read-only this phase. -->
+  <f:Form width="auto" editable="false">
+    <f:layout>
+      <f:ResponsiveGridLayout
+        labelSpanXL="4"
+        labelSpanL="4"
+        labelSpanM="4"
+        labelSpanS="12"
+        adjustLabelSpan="false"
+        emptySpanXL="0"
+        emptySpanL="0"
+        emptySpanM="0"
+        emptySpanS="0"
+        columnsXL="2"
+        columnsL="2"
+        columnsM="1"
+        singleContainerFullSize="false"
+      />
+    </f:layout>
+
+    <f:formContainers>
+      <f:FormContainer>
+        <f:formElements>
+
+          <f:FormElement>
+            <f:label>
+              <Label text="{i18n>shippingProvider}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <Text text="{path: '_SalesOrder/CustomerName', formatter: '.formatter.orDash'}">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </Text>
+            </f:fields>
+          </f:FormElement>
+
+          <f:FormElement>
+            <f:label>
+              <Label text="{i18n>providerAddress}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <Text text="{path: '_SalesOrder/_ShipToParty/FormattedPostalAddressDesc', formatter: '.formatter.orDash'}">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </Text>
+            </f:fields>
+          </f:FormElement>
+
+          <f:FormElement>
+            <f:label>
+              <Label text="{i18n>colDeliveryStatus}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <Text text="{path: '_DeliveryStatus/DeliveryStatus_Text', formatter: '.formatter.orDash'}">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </Text>
+            </f:fields>
+          </f:FormElement>
+
+          <f:FormElement>
+            <f:label>
+              <Label text="{i18n>itemDetailDlvBlockReason}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <!-- TODO-VERIFY(item-delivery-block-reason) - no distinct
+                   delivery-block-REASON property exists at item level (only
+                   DeliveryBlockStatus, a status code - so.xml Step-0 finding);
+                   showing that verified status here instead of guessing a
+                   reason field. -->
+              <Text text="{path: 'DeliveryBlockStatus', formatter: '.formatter.orDash'}" tooltip="{i18n>itemDetailPendingFieldTooltip}">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </Text>
+            </f:fields>
+          </f:FormElement>
+
+          <f:FormElement>
+            <f:label>
+              <Label text="{i18n>itemDetailDeliveryControl}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <Text text="{path: 'PartialDeliveryIsAllowed', formatter: '.formatter.orDash'}">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </Text>
+            </f:fields>
+          </f:FormElement>
+
+          <f:FormElement>
+            <f:label>
+              <Label text="{i18n>itemDetailCombineOrders}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <CheckBox selected="{OrderCombinationIsAllowed}" enabled="false">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </CheckBox>
+            </f:fields>
+          </f:FormElement>
+
+        </f:formElements>
+      </f:FormContainer>
+    </f:formContainers>
+  </f:Form>
+</core:FragmentDefinition>

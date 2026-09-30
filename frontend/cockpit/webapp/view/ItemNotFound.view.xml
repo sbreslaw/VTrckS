@@ -1,0 +1,16 @@
+<mvc:View
+  controllerName="cdc.vaccreq.controller.ItemNotFound"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m">
+  <!-- Not-found target for a stale/direct item-detail link (session prompt
+       3.1) - the order id/item number in the URL did not resolve to a real
+       item (deleted, never existed, or a permission/backend read error). -->
+  <MessagePage
+    text="{i18n>itemDetailNotFoundText}"
+    description="{i18n>itemDetailNotFoundDescription}"
+    icon="sap-icon://document-text">
+    <customButton>
+      <Button text="{i18n>itemDetailNotFoundBack}" press=".onBackPress" />
+    </customButton>
+  </MessagePage>
+</mvc:View>

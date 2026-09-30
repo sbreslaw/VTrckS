@@ -1,0 +1,13 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- Prices Tables session prompt: real, read-only ItemPricingElement
+       table (design/so.xml ~1408, via SalesOrderItemType's own
+       `_ItemPricingElement` navigation) - replaces the prior 9-column shell
+       + disabled toolbar (Insert/Reprice/Complete Reprice/Add/Edit
+       List/Filter all removed - deliberate narrowing to the read-only
+       7-column subset shared with the header Price Totals table, see
+       NOTES.md). Columns and the `items` binding are applied
+       programmatically by ItemDetail.controller.js#_onSectionContentLoaded
+       via the shared model/PricingColumns.js module (the SAME
+       module/definition the header table uses). -->
+  <Table id="itemPricesTable" noDataText="{i18n>pricingTableEmpty}" />
+</core:FragmentDefinition>

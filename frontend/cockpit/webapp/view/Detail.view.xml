@@ -30,20 +30,30 @@
         <f:content>
           <OverflowToolbar>
             <GenericTag id="detailStatus"
+              visible="{= !${sectionFlags>/createMode} }"
               design="StatusIconHidden">
            </GenericTag>
           </OverflowToolbar>
         </f:content>
 
         <f:actions>
-          <Button text="{i18n>actionSave}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
-          <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <!-- CRUD Task 1 v3 (In-Place Create): the global Save/Cancel for the
+               create spine — only visible while the "create" route is active
+               (design/prompts/CRUD Task 1 Prompt v3.md). -->
+          <Button id="createSaveBtn" text="{i18n>actionSave}" type="Emphasized"
+            visible="{sectionFlags>/createMode}" press=".onCreateSavePress" />
+          <Button id="createCancelBtn" text="{i18n>actionCancel}"
+            visible="{sectionFlags>/createMode}" press=".onCreateCancelPress" />
+          <Button text="{i18n>actionSave}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
+            visible="{= !${sectionFlags>/createMode} }" />
+          <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
+            visible="{= !${sectionFlags>/createMode} }" />
           <Button text="{i18n>actionNew}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button text="{i18n>actionCopy}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button text="{i18n>actionCreateReturn}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button text="{i18n>actionCreateReplacement}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
-          <Button icon="sap-icon://print" text="{i18n>actionPreviewOutput}" press=".onPreviewOutput" />
-          <Button icon="sap-icon://refresh" text="{i18n>actionRefresh}" press=".onRefresh" />
+          <Button icon="sap-icon://print" text="{i18n>actionPreviewOutput}" press=".onPreviewOutput" visible="{= !${sectionFlags>/createMode} }" />
+          <Button icon="sap-icon://refresh" text="{i18n>actionRefresh}" press=".onRefresh" visible="{= !${sectionFlags>/createMode} }" />
         </f:actions>
         <f:navigationActions>
           <Button
@@ -77,7 +87,10 @@
       <f:DynamicPageHeader>
         <HBox wrap="Wrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}">
           <items>
-            <Link text="{sectionsNav>title}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+            <!-- CRUD Task 1 v3: hide anchors for sections SectionFactory.js is
+                 hiding entirely while createMode is on (createVisible flag). -->
+            <Link text="{sectionsNav>title}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
+              visible="{= !${sectionFlags>/createMode} || ${sectionsNav>createVisible} }">
               <customData>
                 <core:CustomData key="panelId" value="{sectionsNav>id}" writeToDom="false" />
               </customData>

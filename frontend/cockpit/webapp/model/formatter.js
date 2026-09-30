@@ -15,7 +15,7 @@ sap.ui.define([
     return vValue;
   }
 
-  var mStatusTextE008 = {
+  var mStatusText = {
     "0A": "Draft (no status)",
     "1A": "In Process",
     "1B": "On-Hold",
@@ -29,7 +29,7 @@ sap.ui.define([
     "2C": "Cancelled"
   };
 
-  var mStatusStateE008 = {
+  var mStatusState = {
     "0A": "None",
     "1A": "Information",
     "1B": "Warning",
@@ -43,17 +43,12 @@ sap.ui.define([
     "2C": "None"
   };
 
-  var mStatusTextStandard = {
-    "A": "Not Processed",
-    "B": "Partially Processed",
-    "C": "Completed"
+  // SalesOrderType -> display label for the Details section title (only ZKB
+  // is a supported order type in this app - see ServiceSchema.js#fixedOrderTypes).
+  var mOrderTypeLabel = {
+    ZKB: "Vaccine Order"
   };
 
-  var mStatusStateStandard = {
-    "A": "Information",
-    "B": "Warning",
-    "C": "Success"
-  };
 
   // Extracted as plain functions (not object methods) so status formatting
   // works correctly regardless of how the caller invokes it: some XML fragments
@@ -83,33 +78,67 @@ sap.ui.define([
   };
 
   function fnStatusText(sCode) {
-    if (ServiceSchema.statusSource === "e008") {
+    if (!!sCode) {
       return removeFirstWord(sCode) || sCode || "Draft";
     }
-    return mStatusTextStandard[sCode] || sCode || "Draft";
+    return sCode || "Draft";
   }
 
   function fnStatusCode(sCode) {
-    if (ServiceSchema.statusSource === "e008") {
+    if (!!sCode) {
       let _code = sCode.split(' ')[0];
       return _code || '0A';
     }
-    return mStatusTextStandard[sCode] || sCode || "";
+    return sCode || "";
   }
 
   function fnUserStatusText(sCode) {
-    if (ServiceSchema.statusSource === "e008") {
-      return mStatusTextE008[sCode] || sCode || "";
+    if (!!sCode) {
+      return mStatusText[sCode] || sCode || "";
     }
-    return mStatusTextStandard[sCode] || sCode || "";
+    return sCode || "";
   }
 
   function fnStatusState(sCode) {
-    let _code = fnStatusCode(sCode);
-    if (ServiceSchema.statusSource === "e008") {
-      return mStatusStateE008[_code] || "None";
+    let _code = (!!sCode)?fnStatusCode(sCode):'';
+      return mStatusState[_code] || "None";
+  }
+
+  // Items fundType (MaterialGroup2) Select core:Item enablement - VFC/CHP
+  // require Adult+Pediatric/Pediatric order intention (client-stated gating,
+  // see fundTypes model); bDisabled is kept for any future permanently-
+  // disabled entry (none currently - SPL is selectable, see Detail.controller.js
+  // FUND_TYPES / the Fund Split dialog session prompt).
+  function fnFundTypeItemEnabled(sMaterialGroup1, bPediatricOnly, bDisabled) {
+    if (bDisabled) {
+      return false;
     }
-    return mStatusStateStandard[sCode] || "None";
+    if (bPediatricOnly) {
+      // Real MVGR1 codes (2026-09-16 client confirmation) - PED=Pediatric, MIX=Pediatric and Adult.
+      return sMaterialGroup1 === "PED" || sMaterialGroup1 === "MIX";
+    }
+    return true;
+  }
+
+  // Ancillary Items & Opt-Out session prompt §3.3: the Opt-Out checkbox is
+  // only ever meaningful/enabled on a PARENT row (never itself a child,
+  // sHigherLevelItem unset) that actually HAS ancillary children right now
+  // (oChildParents, keyed by SalesOrderItem - Detail.controller.js#
+  // _computeAncillaryParents), on top of the usual createMode phasing gate.
+  function fnItemOptOutEnabled(sItemNumber, sHigherLevelItem, oChildParents, bCreateMode, bProviderChosen) {
+    if (sHigherLevelItem) {
+      return false;
+    }
+    if (bCreateMode && !bProviderChosen) {
+      return false;
+    }
+    return !!(oChildParents && sItemNumber && oChildParents[sItemNumber]);
+  }
+
+  // The checkbox itself never renders on an ancillary child row (HigherLevelItem
+  // set) - a child never gets an opt-out control at all, not just a disabled one.
+  function fnItemOptOutVisible(bColumnVisible, sHigherLevelItem) {
+    return !!bColumnVisible && !sHigherLevelItem;
   }
 
   return {
@@ -139,6 +168,18 @@ sap.ui.define([
       return fnStatusState(sCode);
     },
 
+    fundTypeItemEnabled: function (sMaterialGroup1, bPediatricOnly, bDisabled) {
+      return fnFundTypeItemEnabled(sMaterialGroup1, bPediatricOnly, bDisabled);
+    },
+
+    itemOptOutEnabled: function (sItemNumber, sHigherLevelItem, oChildParents, bCreateMode, bProviderChosen) {
+      return fnItemOptOutEnabled(sItemNumber, sHigherLevelItem, oChildParents, bCreateMode, bProviderChosen);
+    },
+
+    itemOptOutVisible: function (bColumnVisible, sHigherLevelItem) {
+      return fnItemOptOutVisible(bColumnVisible, sHigherLevelItem);
+    },
+
     masterCreatedOn: function (sValue) {
       return sValue || "";
     },
@@ -156,8 +197,8 @@ sap.ui.define([
     },
 
     // BLOCKED-BY-SERVICE: no free-text order description on the header entity.
-    masterDescription: function () {
-      return EM_DASH;
+    masterDescription: function (sValue) {
+      return sValue || EM_DASH;
     },
 
     masterContact: function (sFullName) {
@@ -171,6 +212,19 @@ sap.ui.define([
       }
       if (oValue instanceof Date) {
         return oDateFormat.format(oValue);
+      }
+      return oValue;
+    },
+
+    // CRUD Task 1 v4: defaults the Details "Created At" field to today while
+    // in createMode (CreationDate is unset on a transient context - the real
+    // backend-assigned value is shown once the order is saved).
+    detailCreatedAt: function (oValue) {
+      if (oValue instanceof Date) {
+        return oDateFormat.format(oValue);
+      }
+      if (!oValue) {
+        return oDateFormat.format(new Date());
       }
       return oValue;
     },
@@ -237,6 +291,14 @@ sap.ui.define([
       return fnStatusState(sCode);
     },
 
+    // Section Panel title = "<order type label> <section text>" (e.g. "Vaccine
+    // Order Details"/"Vaccine Order Items" for ZKB), falling back to the plain
+    // i18n section text for an unmapped/not-yet-known order type.
+    orderTypeSectionTitle: function (sOrderType, sSectionText) {
+      var sLabel = mOrderTypeLabel[sOrderType];
+      return sLabel ? (sLabel + " " + sSectionText) : sSectionText;
+    },
+
     detailCreatedOnBy: function (sOn, sBy, sLabel) {
       sOn = sOn || "";
       sBy = sBy || "";
@@ -257,6 +319,34 @@ sap.ui.define([
 
     statusState: function (sCode) {
       return fnStatusState(sCode);
+    },
+
+    // Item Details view (FCL end column) - Title = "<Product> <Product_Text>".
+    itemDetailTitle: function (sProduct, sProductText) {
+      if (!sProduct) {
+        return "";
+      }
+      return sProductText ? (sProduct + " " + sProductText) : sProduct;
+    },
+
+    // Subtitle = "<orderPrefix>: <orderId> / <itemPrefix>: <itemNumber>",
+    // i18n-composed (sOrderPrefix/sItemPrefix come from i18n bundle text via
+    // the caller's binding parts, not hardcoded here).
+    itemDetailSubtitle: function (sOrderId, sItemNumber, sOrderPrefix, sItemPrefix) {
+      if (!sOrderId) {
+        return "";
+      }
+      return sOrderPrefix + ": " + sOrderId + " / " + sItemPrefix + ": " + (sItemNumber || "");
+    },
+
+    // No item-level Gross Value field exists (ZZ_GROSS_VALUE_SDH is
+    // header-only, so.xml confirmed) - computed client-side as Net + Tax,
+    // same pattern as the header's virtual Tax Amount
+    // (Detail.controller.js#_computeHeaderTaxAmount).
+    itemDetailGrossValue: function (sNetAmount, sTaxAmount) {
+      var fNet = parseFloat(sNetAmount) || 0;
+      var fTax = parseFloat(sTaxAmount) || 0;
+      return String(fNet + fTax);
     }
   };
 });

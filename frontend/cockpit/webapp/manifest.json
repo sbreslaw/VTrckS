@@ -14,6 +14,13 @@
                     "odataVersion": "4.0",
                     "localUri": "localService/metadata.xml"
                 }
+            },
+            "providerOrderService": {
+                "uri": "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
             }
         },
         "sourceTemplate": {
@@ -47,7 +54,8 @@
                 "sap.ui.layout": {},
                 "sap.ui.comp": {},
                 "sap.ui.unified": {},
-                "sap.ui.export": {}
+                "sap.ui.export": {},
+                "sap.ui.table": {}
             }
         },
         "models": {
@@ -60,6 +68,25 @@
             "": {
                 "dataSource": "mainService",
                 "preload": true,
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "groupId": "$auto",
+                    "groupProperties": {
+                        "vrEdit": {
+                            "submit": "API"
+                        },
+                        "vrCreate": {
+                            "submit": "API"
+                        },
+                        "vrCreateReplay": {
+                            "submit": "API"
+                        }
+                    }
+                }
+            },
+            "po": {
+                "dataSource": "providerOrderService",
                 "settings": {
                     "operationMode": "Server",
                     "autoExpandSelect": true,
@@ -110,6 +137,25 @@
                         "master",
                         "detail"
                     ]
+                },
+                {
+                    "name": "create",
+                    "pattern": "create",
+                    "layout": "MidColumnFullScreen",
+                    "target": [
+                        "master",
+                        "detail"
+                    ]
+                },
+                {
+                    "name": "itemDetail",
+                    "pattern": "order/{orderId}/item/{itemPath}:?query:}",
+                    "layout": "EndColumnFullScreen",
+                    "target": [
+                        "master",
+                        "detail",
+                        "itemDetail"
+                    ]
                 }
             ],
             "targets": {
@@ -124,6 +170,18 @@
                     "name": "Detail",
                     "level": 1,
                     "controlAggregation": "midColumnPages"
+                },
+                "itemDetail": {
+                    "id": "itemDetail",
+                    "name": "ItemDetail",
+                    "level": 2,
+                    "controlAggregation": "endColumnPages"
+                },
+                "itemNotFound": {
+                    "id": "itemNotFound",
+                    "name": "ItemNotFound",
+                    "level": 2,
+                    "controlAggregation": "endColumnPages"
                 }
             }
         }
