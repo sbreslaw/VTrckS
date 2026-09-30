@@ -438,25 +438,25 @@ sap.ui.define([
           console.error("CreateOrderService.save: SaveChanges request failed",
             "\nerror:", oError && oError.message, oError,
             "\nmessages:", logMessages());
-          // Issue Batch 9-30-001 §5 (Branch B - chosen from the live trace
-          // evidence in issues/9-30-001.md #5, WITHOUT a live F3893
-          // comparison this session - see NOTES.md): a rejected SaveChanges
-          // is treated as session-terminating. The observed trace shows
-          // DiscardChanges itself 400ing ("Session end when session is
-          // off") immediately after a failed SaveChanges - the sticky
-          // session is already gone server-side by then, so calling
-          // DiscardChanges here only reproduces that second, cascading
-          // error for no benefit. Skip it; mark the session dead so the
-          // NEXT Save (Detail.controller.js#onCreateSavePress retries with
-          // the SAME oSession object) falls through to save()'s fallback
-          // path and opens a brand-new session from scratch, replaying
-          // every item currently in the table (①②③④, unchanged) instead of
-          // reusing this dead one.
-          if (oSession) {
-            oSession.opened = false;
-            oSession.plainContext = null;
-          }
-          throw oError;
+          // Issue Batch 9-30-001 §5 follow-up (live evidence, 2026-09-30):
+          // Branch B originally skipped DiscardChanges here, assuming a
+          // failed SaveChanges always kills the session server-side too
+          // (true in that one trace) - but a later retry proved the
+          // opposite: the session can survive a failed SaveChanges, and
+          // skipping the discard left it open server-side, so the NEXT
+          // Save's CreateWithSalesOrderType 400'd ("cannot process more
+          // than one sales document in one session"). Always attempt the
+          // best-effort discard now - discardSession() already swallows its
+          // own failure (e.g. the "session is off" case where it really was
+          // already dead), so this covers both outcomes instead of
+          // gambling on one.
+          return discardSession(oModel, "SaveChanges failed").then(function () {
+            if (oSession) {
+              oSession.opened = false;
+              oSession.plainContext = null;
+            }
+            throw oError;
+          });
         })
         .then(function () {
           var oSaveResultContext = oSaveAction.getBoundContext();
