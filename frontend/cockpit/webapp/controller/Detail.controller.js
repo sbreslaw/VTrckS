@@ -893,7 +893,7 @@ sap.ui.define([
         .then(function (oNewItemContext) {
           oRowContext.delete().catch(function () {});
           if (oAllocationSnapshot) {
-            FundLogicService.applySnapshot(oNewItemContext, oAllocationSnapshot);
+            FundLogicService.transferSnapshot(oNewItemContext, oAllocationSnapshot);
           }
           return that._migrateRemainingScratchRows(oOldItemsBinding, oRowContext);
         })

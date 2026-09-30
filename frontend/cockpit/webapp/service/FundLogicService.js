@@ -155,6 +155,29 @@ sap.ui.define([
       return Promise.all(aPending);
     },
 
+    // Transfers a snapshot from an OLD row context onto a brand-new one
+    // (Detail.controller.js#_postFirstItemRow, right after postItem) without
+    // ever reading the new context's own current value first - unlike
+    // applySnapshot's reconcile logic, that read isn't just unsafe here, it
+    // ALWAYS logs "invalid segment" to the console even wrapped in try/catch
+    // (the _Cache layer logs the drill-down failure as a side effect of
+    // computing the rejected promise, before the rejection ever reaches
+    // application code) - because the create response this new context
+    // comes from only ever selects SAP__Messages, never these six fields.
+    // The later full-list rebind (_bindItemsTableToSession's dataReceived ->
+    // _reapplyFundAllocations) re-fetches this same row with the real
+    // $select and is where applySnapshot's smart reconcile actually runs.
+    transferSnapshot: function (oNewRowContext, oSnapshot) {
+      if (!oNewRowContext || !oSnapshot) {
+        return Promise.resolve();
+      }
+      var aPending = ZZ_FIELDS
+        .filter(function (sField) { return oSnapshot[sField] !== undefined; })
+        .map(function (sField) { return oNewRowContext.setProperty(sField, oSnapshot[sField]); });
+      mAllocationCache[oNewRowContext.getPath()] = oSnapshot;
+      return Promise.all(aPending);
+    },
+
     // Convenience: re-apply THIS row's own previously-cached snapshot (by its
     // current path) - the common case after a create/PATCH/refresh response
     // has just zeroed the fields back out. No-op if nothing was ever cached
