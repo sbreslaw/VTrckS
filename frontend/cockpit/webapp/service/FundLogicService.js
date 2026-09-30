@@ -124,7 +124,11 @@ sap.ui.define([
     // echoed back as 0 (the known read-path defect) is restored from the
     // snapshot. Any authoritative non-zero value also updates the cache, so
     // a LATER echo-zero doesn't revert to a now-stale pre-recalculation
-    // number.
+    // number. getProperty (unlike setProperty) throws "invalid segment" if
+    // this field was never part of THIS context's own request - true right
+    // after _postFirstItemRow's postItem, whose create response only
+    // selects SAP__Messages - so a throw here must be treated the same as
+    // "unreadable/unknown", not as "confirmed 0".
     applySnapshot: function (oRowContext, oSnapshot) {
       if (!oRowContext || !oSnapshot) {
         return Promise.resolve();
@@ -132,7 +136,12 @@ sap.ui.define([
       var oNewSnapshot = {};
       var aPending = [];
       ZZ_FIELDS.forEach(function (sField) {
-        var iCurrent = parseInt(oRowContext.getProperty(sField), 10);
+        var iCurrent;
+        try {
+          iCurrent = parseInt(oRowContext.getProperty(sField), 10);
+        } catch (oError) {
+          iCurrent = NaN;
+        }
         if (!isNaN(iCurrent) && iCurrent !== 0) {
           oNewSnapshot[sField] = iCurrent;
         } else if (oSnapshot[sField]) {
