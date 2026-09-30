@@ -7,14 +7,16 @@ server:
     - name: fiori-tools-proxy
       afterMiddleware: compression
       configuration:
-        ignoreCertErrors: false
+        ignoreCertErrors: true
+        ui5:
+          path:
+            - /resources
+            - /test-resources
+          url: https://ui5.sap.com
         backend:
           - path: /sap
             url: https://sapapp2dh1.cdc.gov:44300
-          - path: /resources
-            url: https://sapapp2dh1.cdc.gov:44300/sap/public/bc/ui5_ui5
-          - path: /test-resources
-            url: https://sapapp2dh1.cdc.gov:44300/sap/public/bc/ui5_ui5
+            client: "100"
     - name: fiori-tools-appreload
       afterMiddleware: compression
       configuration:

@@ -13,11 +13,14 @@ sap.ui.define([
 
 
 			let _self = this,
-				_sp = this.getOwnerComponent().getComponentData().startupParameters;
+				_componentData = this.getOwnerComponent().getComponentData() || {},
+				_sp = _componentData.startupParameters;
 			let _amode = (!!_sp)?_sp.mode || []: [];
 			let _mode = (_amode.length>0?_amode[0]:'');
 			let _cMode = (_mode==='Approve'?'A':'');
-			let _user = sap.ushell.Container.getService('UserInfo');
+			let _user = sap.ushell && sap.ushell.Container
+				? sap.ushell.Container.getService('UserInfo')
+				: { getId: function () { return ''; }, getFullName: function () { return ''; } };
 			let _usrId = _user.getId();
 
 			let _key = "/ContextSet(User='"+_usrId+"',Mode='"+_cMode+"')";
