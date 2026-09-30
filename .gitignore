@@ -1,0 +1,38 @@
+# ---- Node / UI5 tooling ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm/
+
+# ---- UI5 / Fiori tools build & deploy output ----
+frontend/cockpit/dist/
+frontend/cockpit/webapp/**/Component-preload.js
+frontend/cockpit/webapp/**/*-dbg.js
+frontend/cockpit/webapp/**/*.js.map
+frontend/cockpit/.fiori-tools/
+frontend/cockpit/archive.zip
+*.mtar
+
+# ---- Local environment / secrets (never commit) ----
+.env
+.env.*
+frontend/cockpit/.env
+**/ui5-deploy-local.yaml
+
+# ---- IDE / OS noise ----
+.vscode/settings.json.local
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Logs / temp ----
+*.log
+*.tmp
+.cache/
+
+# NOTE: design docs, session prompts, NOTES.md and other agentic artifacts live in the
+# companion repo VTrckS-design and must NOT be added here. (Old local-only excludes were
+# retired with that move; see CONTRIBUTING.md.)
