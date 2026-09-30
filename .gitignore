@@ -33,6 +33,5 @@ desktop.ini
 *.tmp
 .cache/
 
-# NOTE: design docs, session prompts, NOTES.md and other agentic artifacts live in the
-# companion repo VTrckS-design and must NOT be added here. (Old local-only excludes were
-# retired with that move; see CONTRIBUTING.md.)
+# NOTE: design docs, task specs and project notes are maintained by the code owner outside
+# this repo and must NOT be added here.
