@@ -100,7 +100,7 @@
 								</layoutData>
 								<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }"/>
 								<Input id="providerInput"
-									value="{createEnrich>/providerName}"
+									value="{path: 'createEnrich>/providerName', mode: 'OneWay'}"
 									showValueHelp="true"
 									valueHelpOnly="false"
 									showSuggestion="true"
@@ -113,9 +113,11 @@
 									suggest=".onProviderSuggest"
 									suggestionItemSelected=".onProviderSuggestionSelected"
 									change=".onProviderChange">
-									<suggestionItems path="/CustomerSalesArea" parameters="{$select: 'Customer,CustomerName,CityName,PostalCode,Country_Text,SalesOrganization,DistributionChannel,Division'}">
-										<core:ListItem text="{CustomerName}" additionalText="{Customer}"/>
-									</suggestionItems>
+									<!-- Live-test follow-up: suggestionItems is no longer declared
+										 here - a static nested aggregation with an absolute path
+										 polluted the header context's own autoExpandSelect with a
+										 bogus "Customer" property (confirmed live) - now bound
+										 lazily by Detail.controller.js#onProviderSuggest on first use. -->
 								</Input>
 							</VBox>
 						</f:fields>

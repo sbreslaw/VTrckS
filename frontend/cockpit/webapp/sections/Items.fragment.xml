@@ -115,9 +115,11 @@
             suggest=".onItemNdcSuggest"
             suggestionItemSelected=".onItemNdcSuggestionSelected"
             change=".onItemNdcChange">
-            <suggestionItems path="/Product" parameters="{$select: 'Product,Product_Text'}">
-              <core:ListItem text="{Product_Text}" additionalText="{Product}"/>
-            </suggestionItems>
+            <!-- Live-test (9-30-001 follow-up): suggestionItems is no longer
+                 declared here - a static nested aggregation with an absolute
+                 path polluted the outer _Item list's own $select (confirmed
+                 live 404 on "Product_Text") - now bound lazily by
+                 Detail.controller.js#onItemNdcSuggest on first use. -->
           </Input>
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
           <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it

@@ -18,6 +18,7 @@ sap.ui.define([
   "sap/m/SelectDialog",
   "sap/m/StandardListItem",
   "sap/ui/core/Item",
+  "sap/ui/core/ListItem",
   "sap/ui/core/Fragment",
   "sap/ui/core/Messaging",
   "sap/ui/core/EventBus",
@@ -39,7 +40,7 @@ sap.ui.define([
   "cdc/vaccreq/controller/FundSplitDialog"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
-  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, Fragment,
+  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, CoreListItem, Fragment,
   Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, FundLogicService, FundSplitDialog
 ) {
@@ -586,7 +587,21 @@ sap.ui.define([
         var oProps = ServiceSchema.productProperties;
         var oBinding = oInput.getBinding("suggestionItems");
         if (!oBinding) {
-          return;
+          // Live-test (9-30-001 follow-up): a declarative suggestionItems
+          // aggregation nested in this row template polluted the outer
+          // _Item list's own autoExpandSelect $select with "Product_Text"
+          // (not a real _Item property - confirmed live 404) - bound
+          // lazily here instead, well after the table's own binding is
+          // already resolved, so autoExpandSelect never sees it.
+          // Live-test follow-up: $select must carry the same fields
+          // _applyNdcPick reads (brand/UOM), or the suggestion path silently
+          // defaults Product/Product_Text only and leaves Brand/UOM unset.
+          oInput.bindAggregation("suggestionItems", {
+            path: "/" + ServiceSchema.entitySets.product,
+            parameters: { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") },
+            template: new CoreListItem({ text: "{" + oProps.text + "}", additionalText: "{" + oProps.id + "}" })
+          });
+          oBinding = oInput.getBinding("suggestionItems");
         }
         var aFilters = [];
         if (sValue) {
@@ -1635,7 +1650,20 @@ sap.ui.define([
         var oArea = ServiceSchema.salesArea;
         var oBinding = oInput.getBinding("suggestionItems");
         if (!oBinding) {
-          return;
+          // Live-test follow-up: a declarative suggestionItems aggregation
+          // nested in this header-bound Form polluted the header context's
+          // own autoExpandSelect with a bogus "Customer" property (confirmed
+          // live) - bound lazily here instead, well after the header's own
+          // binding is already resolved, so autoExpandSelect never sees it.
+          oInput.bindAggregation("suggestionItems", {
+            path: "/" + ServiceSchema.entitySets.customerSalesArea,
+            parameters: {
+              $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
+                oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
+            },
+            template: new CoreListItem({ text: "{" + oProps.customerName + "}", additionalText: "{" + oProps.customer + "}" })
+          });
+          oBinding = oInput.getBinding("suggestionItems");
         }
         var aFilters = [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)];
         if (sValue) {
@@ -1763,7 +1791,7 @@ sap.ui.define([
       // read) back into the row on every field edit - reduces how often the
       // allocation-cache reapply above is even needed, doesn't replace it
       // (the create POST itself still unavoidably returns a representation).
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: "SAP__Messages" });
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.ZZ_FIELDS).join(",") });
       oTable.bindItems(oBindingInfo);
       // bindItems() always creates a fresh binding instance - re-attach here
       // (see _onItemCreateActivate) rather than relying on one set up once.
@@ -1966,7 +1994,11 @@ sap.ui.define([
           template: new CoreItem({
             key: "{" + ServiceSchema.valueHelpProperties.partnerFunctionCode + "}",
             text: "{" + ServiceSchema.valueHelpProperties.partnerFunctionText + "}"
-          })
+          }),
+          // A fresh template is created every onPartiesAddRow call and never
+          // reused across Select instances - false so its own destroy()
+          // happens with this Select, not leaked (UI5 "FUTURE FATAL" warning).
+          templateShareable: false
         }
       });
       var oCustomerInput = new Input({

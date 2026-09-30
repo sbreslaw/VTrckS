@@ -138,6 +138,13 @@ sap.ui.define([
 
     clearAllocationCache: function () {
       mAllocationCache = {};
-    }
+    },
+
+    // Live-test (9-30-001 follow-up): these six fields are never bound to
+    // any Items table control, so autoExpandSelect never includes them in
+    // the _Item list's own $select on its own - Detail.controller.js's
+    // _rebindItemsGroup must force them in explicitly, or the getProperty()
+    // calls above throw "invalid segment" (confirmed live).
+    ZZ_FIELDS: ZZ_FIELDS
   };
 });
