@@ -1,0 +1,4 @@
+# Code owners are automatically requested for review on every PR touching these paths,
+# and (with "Require review from Code Owners" enabled on main) must approve before merge.
+*                           @sbreslaw
+/frontend/cockpit/webapp/   @sbreslaw
