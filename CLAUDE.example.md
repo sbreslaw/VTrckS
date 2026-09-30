@@ -1,3 +1,4 @@
+<!-- TEMPLATE: copy this file to CLAUDE.md (untracked, personal) and adjust for your own tooling. The copy is git-ignored; this template is the shared baseline. -->
 # VTrckS — auto-loaded agent kickoff
 
 This repo is the CDC VTrckS E008 ordering cockpit (`frontend/cockpit`). `main` is branch-protected: pull request + code-owner review required; direct pushes are rejected by GitHub.

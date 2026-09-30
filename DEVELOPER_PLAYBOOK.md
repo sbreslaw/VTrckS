@@ -30,6 +30,11 @@ cd VTrckS
 git config user.name  "Your Name"
 git config user.email "you@example.com"
 ```
+Copy the two agent-instruction templates to their live names (they are personal and git-ignored, so you can adjust them freely):
+```bash
+cp CLAUDE.example.md CLAUDE.md
+cp .github/copilot-instructions.example.md .github/copilot-instructions.md
+```
 Open the folder in VS Code. The app lives under `frontend/cockpit/`. Read `CONTRIBUTING.md` (2 minutes)
 and skim `frontend/cockpit/webapp/model/ServiceSchema.js` — every OData name in the app lives there,
 which matters for §8.

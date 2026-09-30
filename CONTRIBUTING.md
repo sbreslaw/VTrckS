@@ -6,6 +6,9 @@
 `main` is protected: **nobody commits to it directly.** All work lands through a pull request
 reviewed by the code owner.
 
+## First-time setup
+Copy `CLAUDE.example.md` → `CLAUDE.md` and `.github/copilot-instructions.example.md` → `.github/copilot-instructions.md`. Both live copies are git-ignored (personal); the `.example` files are the shared baseline.
+
 ## Daily flow
 ```bash
 git checkout main && git pull                 # always start from fresh main
