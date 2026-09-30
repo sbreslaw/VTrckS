@@ -1046,11 +1046,21 @@ sap.ui.define([
       this._rebindItemsGroup(this._sItemsUpdateGroup);
       var oNewBinding = oTable.getBinding("items");
       if (oNewBinding) {
-        aRowData.forEach(function (oRowData) {
+        // A just-`bindItems()`-created binding hasn't resolved its own
+        // length yet (unlike onItemsAddRow's bAtEnd:true, which only ever
+        // runs long after the Table's own rendering cycle has already
+        // resolved it) - create(..., bAtEnd:true) here throws synchronously
+        // ("Must know the final length to create at the end"). Insert at
+        // the front instead (no length needed either way); item numbers are
+        // assigned up front (in original order) so reverse-inserting them
+        // doesn't also reverse the client-only placeholder numbering.
+        aRowData.forEach(function (oRowData, iIndex) {
           oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
-          oRowData.SalesOrderItem = this._computeNextItemNumber(oNewBinding);
-          oNewBinding.create(oRowData, false, true);
-        }, this);
+          oRowData.SalesOrderItem = ("000000" + ((iIndex + 1) * 10)).slice(-6);
+        });
+        aRowData.slice().reverse().forEach(function (oRowData) {
+          oNewBinding.create(oRowData, false, false);
+        });
       }
       FundLogicService.clearAllocationCache();
     },
