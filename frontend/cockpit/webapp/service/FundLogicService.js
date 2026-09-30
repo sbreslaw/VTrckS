@@ -114,17 +114,35 @@ sap.ui.define([
     },
 
     // Re-applies a given snapshot (own or transferred from another row) onto
-    // this context's six ZZ*QTY fields and re-caches it under THIS context's
-    // own path - a no-op (no network traffic) for any field already at that
-    // value; only actually re-PATCHes the fields the last response zeroed out.
+    // this context's six ZZ*QTY fields and re-caches the result under THIS
+    // context's own path. Live-test follow-up: must NOT blindly overwrite
+    // every field - a field the backend returns as a real, non-zero value
+    // (e.g. a legitimate server-side quantity recalculation, confirmed live:
+    // entered 10 -> backend adjusted to 140, mirror recalculated to match)
+    // is authoritative and would otherwise get stomped back down to the
+    // stale client-entered number; only a field the backend genuinely
+    // echoed back as 0 (the known read-path defect) is restored from the
+    // snapshot. Any authoritative non-zero value also updates the cache, so
+    // a LATER echo-zero doesn't revert to a now-stale pre-recalculation
+    // number.
     applySnapshot: function (oRowContext, oSnapshot) {
       if (!oRowContext || !oSnapshot) {
         return Promise.resolve();
       }
-      var aPending = ZZ_FIELDS
-        .filter(function (sField) { return oSnapshot[sField] !== undefined; })
-        .map(function (sField) { return oRowContext.setProperty(sField, oSnapshot[sField]); });
-      mAllocationCache[oRowContext.getPath()] = oSnapshot;
+      var oNewSnapshot = {};
+      var aPending = [];
+      ZZ_FIELDS.forEach(function (sField) {
+        var iCurrent = parseInt(oRowContext.getProperty(sField), 10);
+        if (!isNaN(iCurrent) && iCurrent !== 0) {
+          oNewSnapshot[sField] = iCurrent;
+        } else if (oSnapshot[sField]) {
+          aPending.push(oRowContext.setProperty(sField, oSnapshot[sField]));
+          oNewSnapshot[sField] = oSnapshot[sField];
+        } else {
+          oNewSnapshot[sField] = 0;
+        }
+      });
+      mAllocationCache[oRowContext.getPath()] = oNewSnapshot;
       return Promise.all(aPending);
     },
 
