@@ -109,7 +109,16 @@
                correctly and survives refreshes. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
-            showValueHelp="true" valueHelpOnly="true" valueHelpRequest=".onItemNdcValueHelpRequest" />
+            showValueHelp="true" valueHelpOnly="false"
+            showSuggestion="true" filterSuggests="false" startSuggestion="2"
+            valueHelpRequest=".onItemNdcValueHelpRequest"
+            suggest=".onItemNdcSuggest"
+            suggestionItemSelected=".onItemNdcSuggestionSelected"
+            change=".onItemNdcChange">
+            <suggestionItems path="/Product" parameters="{$select: 'Product,Product_Text'}">
+              <core:ListItem text="{Product_Text}" additionalText="{Product}"/>
+            </suggestionItems>
+          </Input>
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
           <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
                gets a promise to await before refreshing the list for recalculated

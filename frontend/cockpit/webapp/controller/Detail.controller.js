@@ -545,25 +545,96 @@ sap.ui.define([
     // away for immediate feedback, ahead of the batch save that would
     // otherwise be the only place the backend defaults it from the material.
     onItemNdcValueHelpRequest: function (oEvent) {
-      var oProps = ServiceSchema.productProperties;
       var oBundle = this.getResourceBundle();
       var oRowContext = oEvent.getSource().getBindingContext();
       this._openProductValueHelpDialog(oBundle.getText("ndcCodePickerTitle"), function (oItem) {
-        oRowContext.setProperty(ServiceSchema.itemProperties.material, oItem[oProps.id]);
-        oRowContext.setProperty(ServiceSchema.itemProperties.itemText, oItem[oProps.text]);
-        // Client requirement (2026-09-01): ZI_PRODUCTSTDVH_EXT - carry the NDC's
-        // IndustryStandardName over to the item's own brand field.
-        oRowContext.setProperty(ServiceSchema.itemProperties.brand, oItem[oProps.industryStandardName]);
-        // Session Prompt (Detail View Adjustments) 3.7: carry the NDC's own
-        // BaseUnit over to the item's RequestedQuantityUnit - UOM is read-only
-        // again (Items.fragment.xml), always sourced from the selected
-        // Product, never typed in directly.
-        if (oItem[oProps.baseUnit]) {
-          oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
-        }
-        this._checkItemRowComplete(oRowContext);
+        this._applyNdcPick(oRowContext, oItem);
       }.bind(this));
     },
+
+    // Shared by the Value Help dialog's confirm callback above AND the new
+    // typeahead suggestionItemSelected handler below (Issue Batch 9-30-001
+    // §3.4) - same raw Product row object either way.
+    _applyNdcPick: function (oRowContext, oItem) {
+      var oProps = ServiceSchema.productProperties;
+      oRowContext.setProperty(ServiceSchema.itemProperties.material, oItem[oProps.id]);
+      oRowContext.setProperty(ServiceSchema.itemProperties.itemText, oItem[oProps.text]);
+      // Client requirement (2026-09-01): ZI_PRODUCTSTDVH_EXT - carry the NDC's
+      // IndustryStandardName over to the item's own brand field.
+      oRowContext.setProperty(ServiceSchema.itemProperties.brand, oItem[oProps.industryStandardName]);
+      // Session Prompt (Detail View Adjustments) 3.7: carry the NDC's own
+      // BaseUnit over to the item's RequestedQuantityUnit - UOM is read-only
+      // again (Items.fragment.xml), always sourced from the selected
+      // Product, never typed in directly.
+      if (oItem[oProps.baseUnit]) {
+        oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
+      }
+      this._checkItemRowComplete(oRowContext);
+    },
+
+    // Issue Batch 9-30-001 §3.4: NDC typeahead - filters the row's own
+    // templated Input's "suggestionItems" aggregation binding (bound against
+    // /Product, Items.fragment.xml), Contains on id/text, debounced per-row
+    // (keyed by the row context's own path so two different rows' timers
+    // never clobber each other).
+    onItemNdcSuggest: function (oEvent) {
+      var sValue = oEvent.getParameter("suggestValue");
+      var oInput = oEvent.getSource();
+      var oRowContext = oInput.getBindingContext();
+      var sKey = "ndc:" + (oRowContext ? oRowContext.getPath() : "");
+      this._debounce(sKey, function () {
+        var oProps = ServiceSchema.productProperties;
+        var oBinding = oInput.getBinding("suggestionItems");
+        if (!oBinding) {
+          return;
+        }
+        var aFilters = [];
+        if (sValue) {
+          aFilters.push(new Filter({
+            filters: [
+              new Filter(oProps.text, FilterOperator.Contains, sValue),
+              new Filter(oProps.id, FilterOperator.Contains, sValue)
+            ],
+            and: false
+          }));
+        }
+        oBinding.filter(aFilters);
+      });
+    },
+
+    onItemNdcSuggestionSelected: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var oRowContext = oInput.getBindingContext();
+      var oSelectedRow = oEvent.getParameter("selectedRow") || oEvent.getParameter("selectedItem");
+      var oProductContext = oSelectedRow && oSelectedRow.getBindingContext();
+      if (!oRowContext || !oProductContext) {
+        return;
+      }
+      this._applyNdcPick(oRowContext, oProductContext.getObject());
+      this._setNdcValueState(oInput, true);
+    },
+
+    // Issue Batch 9-30-001 §3.4 (documented, accepted risk - see NOTES.md):
+    // the NDC Input's own "value" is a DIRECT two-way binding to the real
+    // Product property (Items.fragment.xml), unlike Provider's separate
+    // display-buffer model - free text typed here can reach the backend via
+    // its own PATCH before a suggestion/VH selection validates it. Flagging
+    // Error state on a mismatch is the only mitigation this session adds;
+    // a full per-row display-buffer model is a larger change than this
+    // issue asked for.
+    onItemNdcChange: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var oRowContext = oInput.getBindingContext();
+      var sValue = oEvent.getParameter("value");
+      var sCurrent = oRowContext ? oRowContext.getProperty(ServiceSchema.itemProperties.material) : "";
+      this._setNdcValueState(oInput, !sValue || sValue === sCurrent);
+    },
+
+    _setNdcValueState: function (oInput, bValid) {
+      oInput.setValueState(bValid ? "None" : "Error");
+      oInput.setValueStateText(bValid ? "" : this.getResourceBundle().getText("ndcInvalidSelection"));
+    },
+
 
     // Looks up the fund type entry (FUND_TYPES/"fundTypes" model) matching
     // the row's current MaterialGroup2 selection.
@@ -598,6 +669,9 @@ sap.ui.define([
       if (oFundType && oFundType.targetField) {
         aPending.push(oRowContext.setProperty(oFundType.targetField, iValue));
       }
+      // Issue Batch 9-30-001 §2: snapshot the six ZZ*QTY fields right after
+      // writing one of them - see FundLogicService.js's own cache comment.
+      FundLogicService.cacheAllocation(oRowContext);
 
       this._checkItemRowComplete(oRowContext);
       // Backend recalculates BOTH this row's own quantity (e.g. 100 -> 140)
@@ -626,6 +700,8 @@ sap.ui.define([
           oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0);
         }
       });
+      // Issue Batch 9-30-001 §2: same snapshot as onProdQtyChange above.
+      FundLogicService.cacheAllocation(oRowContext);
       // Fund Split dialog session prompt, Trigger 1: selecting SPLIT opens the
       // allocation dialog in edit mode immediately - no
       // FundLogicService.applyFundSelection hook exists yet, wired directly here.
@@ -735,6 +811,13 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getResourceBundle();
       oRowContext.created()
+        .then(function () {
+          // Issue Batch 9-30-001 \u00a72: the create response itself always
+          // reads the six ZZ*QTY fields back as 0 (backend read-path defect,
+          // see FundLogicService.js) - restore this row's own last-written
+          // values before the refresh below re-renders it.
+          return FundLogicService.reapplyAllocation(oRowContext);
+        })
         .then(function () { return that._refreshItemsBinding(); })
         .catch(function (oError) {
           // Surface the real backend message (SAP__Messages) the same way
@@ -785,9 +868,18 @@ sap.ui.define([
       if (oTable) {
         oTable.setBusy(true);
       }
+      // Issue Batch 9-30-001 \u00a72: this row's own path is about to change
+      // (scratch context -> the real posted item's own context) - snapshot
+      // its six ZZ*QTY fields under the OLD path now, so they can be
+      // transferred onto the NEW context below (the create response itself
+      // always reads them back as 0 - see FundLogicService.js).
+      var oAllocationSnapshot = FundLogicService.getSnapshot(oRowContext);
       CreateOrderService.postItem(this._oCreateSession, oHeaderContext, oRowContext.getObject())
-        .then(function () {
+        .then(function (oNewItemContext) {
           oRowContext.delete().catch(function () {});
+          if (oAllocationSnapshot) {
+            FundLogicService.applySnapshot(oNewItemContext, oAllocationSnapshot);
+          }
           return that._migrateRemainingScratchRows(oOldItemsBinding, oRowContext);
         })
         .then(function () {
@@ -881,6 +973,7 @@ sap.ui.define([
       return new Promise(function (resolve) {
         oBinding.attachEventOnce("dataReceived", function () {
           that._computeAncillaryParents();
+          that._reapplyFundAllocations(oBinding);
           that._recreatePendingIncompleteRows(oBinding);
           resolve();
         });
@@ -939,9 +1032,21 @@ sap.ui.define([
       return new Promise(function (resolve) {
         oBinding.attachEventOnce("dataReceived", function () {
           that._computeAncillaryParents();
+          that._reapplyFundAllocations(oBinding);
           resolve();
         });
         oBinding.refresh();
+      });
+    },
+
+    // Issue Batch 9-30-001 §2: re-applies every current row's own cached
+    // ZZ*QTY snapshot (no-op for rows nothing was ever cached for) - called
+    // after every full items-list (re)fetch, since any such GET response
+    // always reads these six fields back as 0 (see FundLogicService.js).
+    _reapplyFundAllocations: function (oBinding) {
+      var aContexts = (oBinding && oBinding.getCurrentContexts) ? oBinding.getCurrentContexts() : [];
+      aContexts.forEach(function (oCtx) {
+        FundLogicService.reapplyAllocation(oCtx);
       });
     },
 
@@ -1218,7 +1323,10 @@ sap.ui.define([
         employeeResponsibleName: this._getCurrentUserFullName(),
         status: "",
         shipToPartyId: "",
-        shipToPartyName: ""
+        shipToPartyName: "",
+        // Issue Batch 9-30-001 \u00a73.1: local-only createMode Notes buffer -
+        // no backend write path yet, see Details.fragment.xml's own comment.
+        notes: ""
       };
     },
 
@@ -1487,23 +1595,112 @@ sap.ui.define([
     onProviderValueHelpRequest: function () {
       var that = this;
       var oBundle = this.getResourceBundle();
-      var oContext = this.getView().getBindingContext();
       // _openShipToPartyValueHelpDialog's fnApply gets a normalized
       // {id, fullName, address, salesOrganization, distributionChannel,
       // division} shape (composed from CustomerSalesArea's fields), not a raw
       // ServiceSchema property-name lookup.
       this._openShipToPartyValueHelpDialog(oBundle.getText("providerPickerTitle"), function (oItem) {
-        oContext.setProperty(ServiceSchema.headerProperties.providerId, oItem.id);
-        oContext.setProperty(ServiceSchema.headerProperties.salesOrganization, oItem.salesOrganization);
-        oContext.setProperty(ServiceSchema.headerProperties.distributionChannel, oItem.distributionChannel);
-        oContext.setProperty(ServiceSchema.headerProperties.division, oItem.division);
-        var oEnrichModel = that.getView().getModel("createEnrich");
-        oEnrichModel.setProperty("/providerName", oItem.fullName);
-        oEnrichModel.setProperty("/providerAddress", oItem.address);
-        that.getView().getModel("createState").setProperty("/providerChosen", true);
-        that._prefillMainContact(oItem.id);
+        that._applyProviderPick(oItem);
       });
     },
+
+    // Shared by the Value Help dialog's confirm callback above AND the new
+    // typeahead suggestionItemSelected handler below (Issue Batch 9-30-001
+    // §3.3) - same normalized {id, fullName, address, salesOrganization,
+    // distributionChannel, division} shape either way.
+    _applyProviderPick: function (oItem) {
+      var oContext = this.getView().getBindingContext();
+      oContext.setProperty(ServiceSchema.headerProperties.providerId, oItem.id);
+      oContext.setProperty(ServiceSchema.headerProperties.salesOrganization, oItem.salesOrganization);
+      oContext.setProperty(ServiceSchema.headerProperties.distributionChannel, oItem.distributionChannel);
+      oContext.setProperty(ServiceSchema.headerProperties.division, oItem.division);
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      oEnrichModel.setProperty("/providerName", oItem.fullName);
+      oEnrichModel.setProperty("/providerAddress", oItem.address);
+      this.getView().getModel("createState").setProperty("/providerChosen", true);
+      this._prefillMainContact(oItem.id);
+      this._setProviderValueState(true);
+    },
+
+    // Issue Batch 9-30-001 §3.3: Provider typeahead - filters the Input's own
+    // "suggestionItems" aggregation binding (Details.fragment.xml) the same
+    // way _openShipToPartyValueHelpDialog's own search handler does (soft
+    // pre-filter on SalesOrganization + Contains on name/code), debounced so
+    // every keystroke doesn't fire its own $filter request.
+    onProviderSuggest: function (oEvent) {
+      var sValue = oEvent.getParameter("suggestValue");
+      var oInput = oEvent.getSource();
+      this._debounce("provider", function () {
+        var oProps = ServiceSchema.customerSalesAreaProperties;
+        var oArea = ServiceSchema.salesArea;
+        var oBinding = oInput.getBinding("suggestionItems");
+        if (!oBinding) {
+          return;
+        }
+        var aFilters = [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)];
+        if (sValue) {
+          aFilters.push(new Filter({
+            filters: [
+              new Filter(oProps.customerName, FilterOperator.Contains, sValue),
+              new Filter(oProps.customer, FilterOperator.Contains, sValue)
+            ],
+            and: false
+          }));
+        }
+        oBinding.filter(aFilters);
+      });
+    },
+
+    onProviderSuggestionSelected: function (oEvent) {
+      var oSelectedRow = oEvent.getParameter("selectedRow") || oEvent.getParameter("selectedItem");
+      var oRowContext = oSelectedRow && oSelectedRow.getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oRow = oRowContext.getObject();
+      this._applyProviderPick({
+        id: oRow[oProps.customer],
+        fullName: oRow[oProps.customerName],
+        address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+          .filter(function (sPart) { return !!sPart; })
+          .join(", "),
+        salesOrganization: oRow[oProps.salesOrganization],
+        distributionChannel: oRow[oProps.distributionChannel],
+        division: oRow[oProps.division]
+      });
+    },
+
+    // Issue Batch 9-30-001 §3.3: free typing no longer auto-confirms a
+    // Provider (unlike the old valueHelpOnly Input) - a typed value that
+    // doesn't match the last confirmed pick is flagged Error until a real
+    // suggestion/VH row is chosen; SoldToParty/sales-area properties on the
+    // context are only ever set by _applyProviderPick above, never by typing.
+    onProviderChange: function (oEvent) {
+      var sValue = oEvent.getParameter("value");
+      var sConfirmed = this.getView().getModel("createEnrich").getProperty("/providerName");
+      this._setProviderValueState(!sValue || sValue === sConfirmed);
+    },
+
+    _setProviderValueState: function (bValid) {
+      var oInput = this._byIdInSection("details", "providerInput");
+      if (!oInput) {
+        return;
+      }
+      oInput.setValueState(bValid ? "None" : "Error");
+      oInput.setValueStateText(bValid ? "" : this.getResourceBundle().getText("providerInvalidSelection"));
+    },
+
+    // Generic per-control-instance debounce (Issue Batch 9-30-001 §3.3/§3.4) -
+    // sKey distinguishes independent debounce timers (Provider vs. a given
+    // NDC row's own Input all share timers by their own row path, see
+    // onItemNdcSuggest below).
+    _debounce: function (sKey, fnCallback) {
+      this._mDebounceTimers = this._mDebounceTimers || {};
+      clearTimeout(this._mDebounceTimers[sKey]);
+      this._mDebounceTimers[sKey] = setTimeout(fnCallback, 300);
+    },
+
 
     // Session Prompt (Detail View Adjustments) 3.5: rewired off
     // `/StandardPartnerContactInfo` onto `po>/ProviderContact`, filtered to
@@ -1560,7 +1757,13 @@ sap.ui.define([
       // cache by default and refuses direct refresh() ("Refresh on this
       // binding is not supported!"); this gives it its own request/cache so
       // _refreshItemsBinding (opt-out toggle) can refresh it directly.
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $select: "SAP__Messages" });
+      // Issue Batch 9-30-001 \u00a72: $$patchWithoutSideEffects forces
+      // "Prefer: return=minimal" on every PATCH through this binding, so the
+      // server stops echoing the full entity (and its always-zeroed ZZ*QTY
+      // read) back into the row on every field edit - reduces how often the
+      // allocation-cache reapply above is even needed, doesn't replace it
+      // (the create POST itself still unavoidably returns a representation).
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: "SAP__Messages" });
       oTable.bindItems(oBindingInfo);
       // bindItems() always creates a fresh binding instance - re-attach here
       // (see _onItemCreateActivate) rather than relying on one set up once.
@@ -2066,6 +2269,10 @@ sap.ui.define([
       this._oCreateListBinding = null;
       this._oCreateSession = null;
       this._bItemsSessionBound = false;
+      // Issue Batch 9-30-001 \u00a72: the new order's own post-save load is now
+      // the authoritative server truth - any stale cached allocation from
+      // this create session must not bleed into a later, unrelated create.
+      FundLogicService.clearAllocationCache();
       this._setCreateMode(false);
       EventBus.getInstance().publish("app", "orderCreated", { orderId: sNewId });
       this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
@@ -2172,6 +2379,9 @@ sap.ui.define([
         this._oCreateListBinding = null;
         this._oCreateSession = null;
         this._bItemsSessionBound = false;
+        // Issue Batch 9-30-001 \u00a72: this create attempt is fully abandoned -
+        // drop any allocation snapshots cached for it.
+        FundLogicService.clearAllocationCache();
       }
     },
 

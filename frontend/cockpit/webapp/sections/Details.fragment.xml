@@ -99,14 +99,24 @@
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 								<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }"/>
-								<Input
+								<Input id="providerInput"
 									value="{createEnrich>/providerName}"
 									showValueHelp="true"
-									valueHelpOnly="true"
+									valueHelpOnly="false"
+									showSuggestion="true"
+									filterSuggests="false"
+									startSuggestion="2"
 									editable="{= !%{createEnrich>/providerName} }"
 									visible="{sectionFlags>/createMode}"
 									tooltip="{i18n>providerLockedTooltip}"
-									valueHelpRequest=".onProviderValueHelpRequest"/>
+									valueHelpRequest=".onProviderValueHelpRequest"
+									suggest=".onProviderSuggest"
+									suggestionItemSelected=".onProviderSuggestionSelected"
+									change=".onProviderChange">
+									<suggestionItems path="/CustomerSalesArea" parameters="{$select: 'Customer,CustomerName,CityName,PostalCode,Country_Text,SalesOrganization,DistributionChannel,Division'}">
+										<core:ListItem text="{CustomerName}" additionalText="{Customer}"/>
+									</suggestionItems>
+								</Input>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
@@ -418,16 +428,21 @@
 						</f:label>
 
 						<f:fields>
-						<!-- Two-layer editable state: layer 1 is the normal per-section
-							{sectionFlags>/details/editing} gate (createMode already sets
-							this true, same as every other Details control), so display mode
-							is unambiguously read-only; layer 2 is a hardcoded "&& false" -
-							Notes has no write path yet (field mapping TBD, no header
-							long-text source found in this service, see i18n>notesPending),
-							so it stays non-editable even once the Details section is
-							switched to edit. Replace the "&& false" with a real capability
-							flag once the backend write path lands - do not remove layer 1. -->
-						<TextArea rows="3" width="100%" editable="{= ${sectionFlags>/details/editing} &amp;&amp; false }" tooltip="{i18n>notesPending}">
+						<!-- Issue Batch 9-30-001 §3.1: createMode's own Notes entry is now
+							editable unconditionally (client-reported bug) - bound to the
+							"createEnrich" local-only model (see
+							Detail.controller.js#_createEnrichDefaults), same pattern as
+							Employee Responsible/Contact. No backend write path exists for
+							this yet (ServiceSchema.js#notesLongTextId is null,
+							TODO-VERIFY) - the typed value is carried in-memory only for
+							this createMode session and is NOT sent anywhere on Save;
+							change-mode editing of an EXISTING order's notes is unaffected
+							(still read-only, unchanged, out of this issue's scope) since
+							there is no local buffer wired for it. -->
+						<TextArea rows="3" width="100%"
+							value="{createEnrich>/notes}"
+							editable="{= ${sectionFlags>/createMode} || (${sectionFlags>/details/editing} &amp;&amp; false) }"
+							tooltip="{i18n>notesPending}">
 							<layoutData>
 								<l:GridData span="XL8 L8 M8 S12"/>
 							</layoutData>
