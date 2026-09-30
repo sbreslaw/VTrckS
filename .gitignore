@@ -19,10 +19,12 @@ frontend/cockpit/archive.zip
 frontend/cockpit/.env
 **/ui5-deploy-local.yaml
 
-# ---- Personal, per-developer agent instructions (never shared) ----
+# ---- Personal, per-developer agent instruction files (never shared) ----
+# Copy CLAUDE.example.md -> CLAUDE.md and .github/copilot-instructions.example.md -> .github/copilot-instructions.md
+CLAUDE.md
+.github/copilot-instructions.md
 CLAUDE.local.md
 *.local.md
-.github/*.local.md
 
 # ---- IDE / OS noise ----
 .vscode/settings.json.local
