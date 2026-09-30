@@ -19,6 +19,11 @@ frontend/cockpit/archive.zip
 frontend/cockpit/.env
 **/ui5-deploy-local.yaml
 
+# ---- Personal, per-developer agent instructions (never shared) ----
+CLAUDE.local.md
+*.local.md
+.github/*.local.md
+
 # ---- IDE / OS noise ----
 .vscode/settings.json.local
 .idea/
