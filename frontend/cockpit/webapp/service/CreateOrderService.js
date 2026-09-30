@@ -138,6 +138,12 @@ sap.ui.define([
   var CreateOrderService = {
     UPDATE_GROUP: CREATE_GROUP,
 
+    // Exposed so Detail.controller.js can re-seed local scratch rows from
+    // an orphaned session's row data (session-death recovery) with the
+    // exact same whitelist this module itself replays - no second,
+    // drift-prone copy of ITEM_PROPERTIES.
+    cleanItemPayload: cleanItemPayload,
+
     // Enter create mode: a transient list-binding context bound to the whole
     // Detail view — a local scratchpad only (see header comment above); no
     // backend contact happens here, and its own group is never submitted.

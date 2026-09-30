@@ -1015,6 +1015,46 @@ sap.ui.define([
       });
     },
 
+    // Issue Batch 9-30-001 §5 follow-up (live evidence, 2026-09-30): once
+    // CreateOrderService.js always DiscardChanges'es a failed SaveChanges's
+    // session, the Items table is still bound to that now-dead session's
+    // context (_bindItemsTableToSession switched it there earlier) - any
+    // further inline edit (the user correcting their mistake) live-PATCHes
+    // a session that no longer exists server-side (404). Unwinds the table
+    // back to fresh LOCAL scratch rows (the same deferred, never-submitted
+    // group the pre-session table used) seeded with each row's current
+    // data, so editing continues safely until the next Save opens a
+    // brand-new session and replays them. No-op if items were never
+    // actually switched to a session in the first place.
+    _revertItemsToScratch: function () {
+      if (!this._bItemsSessionBound) {
+        return;
+      }
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oOldBinding = oTable && oTable.getBinding("items");
+      var aRowData = (oOldBinding && oOldBinding.getCurrentContexts ? oOldBinding.getCurrentContexts() : [])
+        .map(function (oCtx) { return CreateOrderService.cleanItemPayload(oCtx.getObject() || {}); })
+        .concat(this._aPendingIncompleteRows || []);
+      this._aPendingIncompleteRows = [];
+      this._bItemsSessionBound = false;
+      this._bPostingFirstItem = false;
+      if (!oTable) {
+        return;
+      }
+      oTable.setBindingContext(this.getView().getBindingContext());
+      this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
+      this._rebindItemsGroup(this._sItemsUpdateGroup);
+      var oNewBinding = oTable.getBinding("items");
+      if (oNewBinding) {
+        aRowData.forEach(function (oRowData) {
+          oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
+          oRowData.SalesOrderItem = this._computeNextItemNumber(oNewBinding);
+          oNewBinding.create(oRowData, false, true);
+        }, this);
+      }
+      FundLogicService.clearAllocationCache();
+    },
+
     // Re-derives the {"<parentItemNumber>": true} childParents map (itemsMeta
     // model) off the Items table's CURRENT contexts - called after every real-
     // list (re)bind/refresh, never cached/guessed from the SKIPANC marker (see
@@ -2288,6 +2328,7 @@ sap.ui.define([
           } else {
             // step ① (CreateOrderService.save) itself failed — nothing was
             // created, stay in createMode to retry; messages already shown above.
+            that._revertItemsToScratch();
             that._openMessagePopover();
           }
         });
