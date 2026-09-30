@@ -1,8 +1,8 @@
 ## What / why
-<!-- One paragraph. Link the session prompt if agent-executed: VTrckS-design/prompts/<file>.md -->
+<!-- One paragraph. Reference the task/spec you were given, if any. -->
 
 ## Evidence
-- NOTES entry: `VTrckS-design@<sha>` (commit AFTER this branch was pushed — code first, notes second)
+- Task/spec reference (if provided by the code owner):
 - Live test: <!-- what was exercised on the dev system; network trace / SE16 / VA03 check where relevant -->
 - Console clean: [ ]   Keyboard pass: [ ]   i18n complete: [ ]
 
