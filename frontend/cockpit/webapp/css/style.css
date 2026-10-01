@@ -1,0 +1,83 @@
+.masterListPage,
+.masterListPage .sapFDynamicPageContentWrapper,
+.masterListPage .sapFDynamicPageContent,
+.masterListPage .sapFDynamicPageContentFitContainer {
+  height: 100%;
+}
+
+.masterListPage .sapFDynamicPageContent {
+  padding: 0;
+}
+
+.masterVariantTitle.sapFDynamicPageTitle {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+}
+
+.masterFilterHeader.sapFDynamicPageHeader {
+  padding: 0.5rem 1rem 1.25rem;
+  box-shadow: none;
+}
+
+.masterSearchFilterBar.sapUiCompFilterBar {
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.masterSearchFilterBar .sapUiCompFilterBarItem {
+  flex-basis: 13.5rem !important;
+  max-width: 13.5rem !important;
+  width: 13.5rem !important;
+}
+
+.masterSearchFilterBar .sapUiCompFilterBarItemLabel {
+  font-size: 0.75rem;
+}
+
+.masterSearchFilterBar [id$="-btnShowHide"] {
+  display: none;
+}
+
+.masterTableShell {
+  box-sizing: border-box;
+  min-height: 22rem;
+  padding: 0.75rem 1rem 0;
+}
+
+.masterResultsTable.sapUiTable {
+  border: 1px solid var(--sapList_BorderColor);
+  background: var(--sapList_Background);
+}
+
+.masterResultsTableNoHorizontalScroll .sapUiTableHSb {
+  display: none !important;
+}
+
+.masterTableToolbar.sapMTB {
+  height: 2.75rem;
+  border-bottom: 1px solid var(--sapList_BorderColor);
+  padding: 0 0.5rem;
+}
+
+.masterTableToolbar .sapMBtn,
+.masterTableToolbar .sapMSlt {
+  margin-left: 0.125rem;
+}
+
+.masterTableToolbar .sapMTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.masterResultsTable .sapMIllustratedMessage {
+  max-width: none;
+}
+
+@media (max-width: 75rem) {
+  .masterSearchFilterBar .sapUiCompFilterBarItem {
+    flex-basis: 12rem !important;
+    max-width: 12rem !important;
+    width: 12rem !important;
+  }
+}
+

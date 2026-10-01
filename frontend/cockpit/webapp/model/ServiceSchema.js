@@ -207,6 +207,7 @@ sap.ui.define([], function () {
     customerSalesAreaProperties: {
       customer: "Customer",
       customerName: "CustomerName",
+      organizationName2: "OrganizationBPName2",
       cityName: "CityName",
       postalCode: "PostalCode",
       countryText: "Country_Text",
@@ -236,6 +237,10 @@ sap.ui.define([], function () {
     productProperties: {
       id: "Product",
       text: "Product_Text",
+      // The legacy picker displays Base Category, but the live ProductType
+      // exposes no category property. Keep the column blank rather than
+      // presenting ProductExternalID as unrelated category data.
+      group: null,
       // Client requirement (2026-09-01): I_ProductStdVH extended by
       // ZI_PRODUCTSTDVH_EXT to add this field - carried over to the item's
       // own ZZIndustryStandardName (brand) on NDC selection, see
@@ -682,8 +687,8 @@ sap.ui.define([], function () {
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
     // custom service (zui_providerorder_srv, manifest.json model "po") -
-    // ProviderContact is the only entity this app reads from it this session;
-    // ZZ_IoH stays ON HOLD (do not wire - see 3.8/NOTES.md) and ProductUOM is
+    // ProviderContact and SoldToDetails are read from this service. ZZ_IoH
+    // stays ON HOLD (do not wire - see 3.8/NOTES.md) and ProductUOM is
     // unused/unwired (noted only, see OPEN_QUESTIONS.md).
     providerOrderService: {
       // TODO-VERIFY: URL follows the standard OData v4 SEGW/RAP binding-name
@@ -696,7 +701,12 @@ sap.ui.define([], function () {
       // /IWFND/MAINT_SERVICE or the Fiori launchpad's service catalog before
       // relying on this in a live test.
       entitySets: {
-        providerContact: "ProviderContact"
+        providerContact: "ProviderContact",
+        soldToDetails: "SoldToDetails"
+      },
+      soldToDetailsProperties: {
+        soldToParty: "SoldToParty",
+        identificationNumber: "IdentificationNumber"
       },
       // ProviderContactType (design/zui_providerorder_meta.xml) - key is
       // BusinessPartnerCompany + BusinessPartnerPerson; BusinessPartnerCompany
