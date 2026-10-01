@@ -75,7 +75,10 @@ sap.ui.define([], function () {
       // look up the createMode default's text description, see
       // Detail.controller.js#_setCreateMode.
       deliveryStatus: "OverallDeliveryStatus",
-      deliveryBlockStatus: "OverallDeliveryBlockStatus"
+      deliveryBlockStatus: "OverallDeliveryBlockStatus",
+      // DF-1025: full code list (SalesDocumentRjcnReasonType); the property's own
+      // ValueList points at i_salesdocallowedrjcnrsn (per-doc-type), the backend enforces that.
+      rejectionReason: "SalesDocumentRjcnReason"
     },
 
     navigation: {
@@ -342,6 +345,21 @@ sap.ui.define([], function () {
     // timing race - waiting/retrying a plain refresh never helped). See
     // Detail.controller.js#_onItemCreateActivate.
     updatePricesAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.UpdatePrices",
+
+    // DF-1025: SalesDocumentRjcnReason is Core.Computed (not PATCHable) - these bound
+    // item actions (no ReturnType) are its only write path. See onItemRejectionReasonChange.
+    itemActions: {
+      setRejectionReason: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.SetRejectionReason",
+      setRejectionReasonParameter: "SalesDocumentRjcnReason",
+      removeRejectionReason: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.RemoveRejectionReason"
+    },
+
+    // Per-row action availability (SalesOrderItemOperationControl) - bound in
+    // Items.fragment.xml's Rejection Reason Select `editable`; listed here for grep isolation.
+    itemOperationControl: {
+      setRejectionReason: "__OperationControl/SetRejectionReason",
+      removeRejectionReason: "__OperationControl/RemoveRejectionReason"
+    },
 
     // Item Detail view (FCL end column) — Session Prompt "Item Details View".
     // Step-0 field mapping against design/so.xml SalesOrderItemType (+ its
@@ -657,7 +675,9 @@ sap.ui.define([], function () {
       customerPurchaseOrderTypeCode: "CustomerPurchaseOrderType",
       customerPurchaseOrderTypeText: "CustomerPurchaseOrderType_Text",
       partnerFunctionCode: "PartnerFunction",
-      partnerFunctionText: "PartnerFunction_Text"
+      partnerFunctionText: "PartnerFunction_Text",
+      rejectionReasonCode: "SalesDocumentRjcnReason",
+      rejectionReasonText: "SalesDocumentRjcnReason_Text"
     },
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new

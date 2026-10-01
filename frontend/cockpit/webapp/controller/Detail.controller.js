@@ -158,6 +158,7 @@ sap.ui.define([
       // items load (change mode) - see _computeAncillaryParents.
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
+      this._loadRejectionReasonVH();
 
     },
 
@@ -238,7 +239,13 @@ sap.ui.define([
       var aContexts = oBinding ? oBinding.getContexts(0, oBinding.getLength()) : [];
       var oBundle = this.getResourceBundle();
       var oVisibility = this.getView().getModel("itemsColumns").getData();
-
+      // DF-1025: the nav text is no longer bound (not in $select) - resolve the code via the VH list.
+      var mRejectionText = {};
+      this.getView().getModel("rejectionReasons").getProperty("/list").forEach(function (oEntry) {
+        if (oEntry.key) {
+          mRejectionText[oEntry.key] = oEntry.text;
+        }
+      });
       var aCols = ITEMS_COLUMN_KEYS
         .filter(function (sKey) { return sKey !== "rowAction" && oVisibility[sKey] !== false; })
         .map(function (sKey) {
@@ -264,7 +271,7 @@ sap.ui.define([
           poReference: "\u2014",
           deliveryStatus: oCtx.getProperty(ServiceSchema.navigation.itemToDeliveryStatus + "/" + ServiceSchema.itemProperties.deliveryStatusText),
           netValue: oCtx.getProperty(ServiceSchema.itemProperties.netAmount),
-          rejectionReason: oCtx.getProperty(ServiceSchema.navigation.itemToRejectionReason + "/" + ServiceSchema.itemProperties.rejectionReasonText)
+          rejectionReason: mRejectionText[oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)] || ""
         };
       });
 
@@ -1191,6 +1198,52 @@ sap.ui.define([
         });
     },
 
+    // DF-1025: SalesDocumentRjcnReason is Core.Computed, so the Select's OneWay binding
+    // never writes - a pick invokes SetRejectionReason, clearing invokes
+    // RemoveRejectionReason (bound item actions, no return context), then a full
+    // items refresh so the row shows server state only. On failure the Select reverts.
+    onItemRejectionReasonChange: function (oEvent) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oSelect = oEvent.getSource();
+      var oRowContext = oSelect.getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var sKey = oSelectedItem ? oSelectedItem.getKey() : "";
+      var oActions = ServiceSchema.itemActions;
+      var oAction = oRowContext.getModel().bindContext(
+        (sKey ? oActions.setRejectionReason : oActions.removeRejectionReason) + "(...)", oRowContext);
+      if (sKey) {
+        oAction.setParameter(oActions.setRejectionReasonParameter, sKey);
+      }
+      var oRow = oSelect.getParent();
+      oRow.setBusy(true);
+      function syncFromServer() {
+        var oCtx = oSelect.getBindingContext();
+        oSelect.setSelectedKey((oCtx && oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)) || "");
+      }
+      oAction.invoke(ServiceSchema.itemInteractiveGroup)
+        .then(function () {
+          return that._refreshItemsBinding();
+        })
+        .catch(function (oError) {
+          var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), oBundle);
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
+        })
+        .then(function () {
+          if (oSelect.isDestroyed()) {
+            return;
+          }
+          syncFromServer();
+          oRow.setBusy(false);
+        });
+    },
+
     // Item Details view session prompt, 3.4: Items row Action menu "Edit" ->
     // FCL end column, always full screen (session prompt 3.1). Row context
     // supplies the SalesOrder/SalesOrderItem keys for the new route.
@@ -2009,6 +2062,26 @@ sap.ui.define([
     // binds directly to "/DeliveryPriority") and as a text lookup cache so the
     // read-only Text display (priorityState>/valueText) doesn't need its own
     // per-row nav-property read.
+    // DF-1025: one-time load of the rejection-reason code list into a JSON model
+    // (Items.fragment.xml Select items) - leading "" entry = no reason.
+    _loadRejectionReasonVH: function () {
+      var oProps = ServiceSchema.valueHelpProperties;
+      var oVHModel = new JSONModel({ list: [{ key: "", text: this.getResourceBundle().getText("rejectionReasonNone") }] });
+      this.getView().setModel(oVHModel, "rejectionReasons");
+      var oListBinding = this.getOwnerComponent().getModel().bindList(
+        "/" + ServiceSchema.entitySets.rejectionReason, undefined, undefined, undefined,
+        { $select: [oProps.rejectionReasonCode, oProps.rejectionReasonText].join(",") }
+      );
+      oListBinding.requestContexts(0, 200).then(function (aContexts) {
+        var aList = oVHModel.getProperty("/list").concat(aContexts.map(function (oCtx) {
+          return { key: oCtx.getProperty(oProps.rejectionReasonCode), text: oCtx.getProperty(oProps.rejectionReasonText) };
+        }));
+        oVHModel.setProperty("/list", aList);
+      }, function () {
+        // Non-fatal: the Select then only offers "none"; the read failure is in the message model.
+      });
+    },
+
     _loadDeliveryPriorityVH: function () {
       var that = this;
       var oProps = ServiceSchema.valueHelpProperties;
