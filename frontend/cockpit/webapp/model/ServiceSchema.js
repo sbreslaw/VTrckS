@@ -451,6 +451,14 @@ sap.ui.define([], function () {
       "ZKB"
     ],
 
+    // Client requirement (2026-10-01): createMode defaults seeded by
+    // CreateOrderService.js#enter - Category defaults to "Direct Entry" (UI)
+    // and stays read-only for the lifetime of create mode
+    // (Details.fragment.xml); Shipping Condition defaults to "01" (Standard
+    // Mail) but stays user-editable.
+    defaultCategory: "UI",
+    defaultShippingCondition: "01",
+
     // --- CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — the
     // "Provider-first bootstrap" mandate (Fix-Sequencing Prompt/v4) is VOID:
     // CreateWithSalesOrderType alone can never be a standalone, user-visible

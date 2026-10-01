@@ -269,7 +269,11 @@
 								updatableHeaderProperties.category) - same edit-live pattern as
 								Order Reason above (Text when not editing, ComboBox against the
 								real /CustomerPurchaseOrderType VH entity set when editing).
-								Retires the old hardcoded Enums.CATEGORY Select entirely. -->
+								Retires the old hardcoded Enums.CATEGORY Select entirely.
+								Client request (2026-10-01): createMode defaults this to "Direct
+								Entry" (CreateOrderService.js#enter) and keeps it read-only for
+								the lifetime of create mode - unlike every other field here,
+								never unlocked by providerChosen. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
@@ -280,7 +284,7 @@
 									selectedKey="{CustomerPurchaseOrderType}"
 									forceSelection="false"
 									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									enabled="{= !${sectionFlags>/createMode} }"
 									items="{path: '/CustomerPurchaseOrderType'}">
 									<core:Item key="{CustomerPurchaseOrderType}" text="{CustomerPurchaseOrderType_Text}" />
 								</Select>
