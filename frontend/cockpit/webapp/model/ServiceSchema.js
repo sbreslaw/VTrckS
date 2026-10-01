@@ -66,7 +66,16 @@ sap.ui.define([], function () {
       // 3.9: HeaderPartnerType (so.xml ~line 1065), reached in this app only
       // via the header's _Partner navigation (never queried top-level) -
       // listed here for completeness/grep-isolation, not used as a bind path.
-      headerPartner: "HeaderPartner"
+      headerPartner: "HeaderPartner",
+      // Client requirement (2026-10-01): real top-level fixed-values entity
+      // sets (OverallDeliveryStatusType/OverallDeliveryBlockStatusType,
+      // so.xml ~line 667/1824) - queried directly (not via the header's
+      // _OverallDeliveryStatus/_OverallDeliveryBlockStatus navigation, which
+      // cannot resolve against the transient createMode scratch context) to
+      // look up the createMode default's text description, see
+      // Detail.controller.js#_setCreateMode.
+      deliveryStatus: "OverallDeliveryStatus",
+      deliveryBlockStatus: "OverallDeliveryBlockStatus"
     },
 
     navigation: {
@@ -458,6 +467,12 @@ sap.ui.define([], function () {
     // Mail) but stays user-editable.
     defaultCategory: "UI",
     defaultShippingCondition: "01",
+    // Client requirement (2026-10-01): createMode defaults seeded by
+    // CreateOrderService.js#enter - Delivery Status defaults to "A" (Not yet
+    // processed) and Delivery Block Status defaults to " " (no block), both
+    // display-only (Shipping.fragment.xml, not in updatableHeaderProperties).
+    defaultDeliveryStatus: "A",
+    defaultDeliveryBlockStatus: " ",
 
     // --- CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — the
     // "Provider-first bootstrap" mandate (Fix-Sequencing Prompt/v4) is VOID:

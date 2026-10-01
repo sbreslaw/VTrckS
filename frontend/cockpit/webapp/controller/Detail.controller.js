@@ -132,7 +132,14 @@ sap.ui.define([
       // binds `enabled` off this flag and unlocks once a Provider is picked
       // (onProviderValueHelpRequest below) - reset each time createMode is
       // (re-)entered, see _setCreateMode.
-      this.getView().setModel(new JSONModel({ providerChosen: false }), "createState");
+      // deliveryStatusText/deliveryBlockStatusText: the Delivery Status/
+      // Delivery Block Status fields have no edit control (display-only,
+      // not in updatableHeaderProperties) - populated by _setCreateMode via
+      // a direct codelist lookup (see below) once the defaults are seeded,
+      // since the header's own _OverallDeliveryStatus/
+      // _OverallDeliveryBlockStatus navigation cannot resolve against the
+      // transient createMode scratch context (client requirement 2026-10-01).
+      this.getView().setModel(new JSONModel({ providerChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       // Session Prompt (Detail View Adjustments) 3.1: virtual header Priority -
       // {value, valueText, mixed, dirty} computed from/propagated to item
@@ -1360,9 +1367,44 @@ sap.ui.define([
         this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("createState").setProperty("/providerChosen", false);
+        this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
+        this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
+        this._lookupCreateModeStatusTexts();
         this.getView().getModel("priorityState").setData({ value: "", valueText: "", mixed: false, dirty: false });
         this.getView().getModel("headerCalc").setProperty("/taxAmount", 0);
       }
+    },
+
+    // Delivery Status/Delivery Block Status createMode defaults (client
+    // requirement 2026-10-01): looks each default code up directly against
+    // its own top-level codelist entity set (ServiceSchema.entitySets.
+    // deliveryStatus/deliveryBlockStatus) - NOT via the header's own
+    // _OverallDeliveryStatus/_OverallDeliveryBlockStatus navigation, which
+    // cannot resolve against the transient createMode scratch context (no
+    // backend contact happens for it until Save, see CreateOrderService.js#
+    // enter) - same exact-match lookup shape as onItemNdcChange/
+    // onProviderChange above.
+    _lookupCreateModeStatusTexts: function () {
+      var that = this;
+      var oModel = this.getView().getModel();
+      function lookup(sEntitySet, sKeyProperty, sKeyValue) {
+        var oBinding = oModel.bindList(
+          "/" + sEntitySet, undefined, undefined,
+          [new Filter(sKeyProperty, FilterOperator.EQ, sKeyValue)],
+          { $select: [sKeyProperty, sKeyProperty + "_Text"].join(",") }
+        );
+        return oBinding.requestContexts(0, 1).then(function (aContexts) {
+          return aContexts.length ? aContexts[0].getObject()[sKeyProperty + "_Text"] : "";
+        });
+      }
+      lookup(ServiceSchema.entitySets.deliveryStatus, ServiceSchema.headerProperties.deliveryStatus, ServiceSchema.defaultDeliveryStatus)
+        .then(function (sText) {
+          that.getView().getModel("createState").setProperty("/deliveryStatusText", sText);
+        }).catch(function () {});
+      lookup(ServiceSchema.entitySets.deliveryBlockStatus, ServiceSchema.headerProperties.deliveryBlockStatus, ServiceSchema.defaultDeliveryBlockStatus)
+        .then(function (sText) {
+          that.getView().getModel("createState").setProperty("/deliveryBlockStatusText", sText);
+        }).catch(function () {});
     },
 
     // Resolves Enums.js's {key, i18nKey} lists into {key, text} once, so the
