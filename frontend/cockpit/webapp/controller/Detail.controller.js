@@ -399,7 +399,7 @@ sap.ui.define([
     // requestSideEffects errors on that ("Key predicate ... changed") since it
     // expects a nav's target identity to stay stable. A full context reload
     // (same as reopening the order) sidesteps that merge check entirely.
-    _aSectionsNeedingFullReload: ["details", "shipping", "orgData", "billing"],
+    _aSectionsNeedingFullReload: ["details", "shipping", "orgData"],
 
     onSectionSavePress: function (sSectionId) {
       var that = this;
