@@ -132,7 +132,14 @@ sap.ui.define([
       // binds `enabled` off this flag and unlocks once a Provider is picked
       // (onProviderValueHelpRequest below) - reset each time createMode is
       // (re-)entered, see _setCreateMode.
-      this.getView().setModel(new JSONModel({ providerChosen: false }), "createState");
+      // deliveryStatusText/deliveryBlockStatusText: the Delivery Status/
+      // Delivery Block Status fields have no edit control (display-only,
+      // not in updatableHeaderProperties) - populated by _setCreateMode via
+      // a direct codelist lookup (see below) once the defaults are seeded,
+      // since the header's own _OverallDeliveryStatus/
+      // _OverallDeliveryBlockStatus navigation cannot resolve against the
+      // transient createMode scratch context (client requirement 2026-10-01).
+      this.getView().setModel(new JSONModel({ providerChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       // Session Prompt (Detail View Adjustments) 3.1: virtual header Priority -
       // {value, valueText, mixed, dirty} computed from/propagated to item
@@ -399,7 +406,7 @@ sap.ui.define([
     // requestSideEffects errors on that ("Key predicate ... changed") since it
     // expects a nav's target identity to stay stable. A full context reload
     // (same as reopening the order) sidesteps that merge check entirely.
-    _aSectionsNeedingFullReload: ["details", "shipping", "orgData", "billing"],
+    _aSectionsNeedingFullReload: ["details", "shipping", "orgData"],
 
     onSectionSavePress: function (sSectionId) {
       var that = this;
@@ -633,16 +640,43 @@ sap.ui.define([
     // the NDC Input's own "value" is a DIRECT two-way binding to the real
     // Product property (Items.fragment.xml), unlike Provider's separate
     // display-buffer model - free text typed here can reach the backend via
-    // its own PATCH before a suggestion/VH selection validates it. Flagging
-    // Error state on a mismatch is the only mitigation this session adds;
-    // a full per-row display-buffer model is a larger change than this
-    // issue asked for.
+    // its own PATCH before a suggestion/VH selection validates it.
+    // Live-test (2026-10-01): typing/pasting a full NDC and tabbing out
+    // (no suggestion/VH pick) left Text/Brand/UOM unpopulated. Root cause:
+    // the OLD "sValue === sCurrent means valid, do nothing" check was
+    // always true here regardless of HOW the value got in - the two-way
+    // binding already commits the typed value into Product before this
+    // handler even runs, so comparing against it can never catch a plain
+    // manual type. Now always looks the value up by exact Product id and,
+    // if found, applies it the same way a suggestion/VH pick would
+    // (_applyNdcPick) - harmless if this "change" followed a suggestion
+    // pick that already applied the same row (just a redundant re-fetch of
+    // the same values). Error state is the fallback for no match.
     onItemNdcChange: function (oEvent) {
+      var that = this;
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
       var sValue = oEvent.getParameter("value");
-      var sCurrent = oRowContext ? oRowContext.getProperty(ServiceSchema.itemProperties.material) : "";
-      this._setNdcValueState(oInput, !sValue || sValue === sCurrent);
+      if (!oRowContext || !sValue) {
+        this._setNdcValueState(oInput, true);
+        return;
+      }
+      var oProps = ServiceSchema.productProperties;
+      var oLookupBinding = oRowContext.getModel().bindList(
+        "/" + ServiceSchema.entitySets.product, undefined, undefined,
+        [new Filter(oProps.id, FilterOperator.EQ, sValue)],
+        { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") }
+      );
+      oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
+        if (aContexts.length) {
+          that._applyNdcPick(oRowContext, aContexts[0].getObject());
+          that._setNdcValueState(oInput, true);
+        } else {
+          that._setNdcValueState(oInput, false);
+        }
+      }).catch(function () {
+        that._setNdcValueState(oInput, false);
+      });
     },
 
     _setNdcValueState: function (oInput, bValid) {
@@ -1333,9 +1367,44 @@ sap.ui.define([
         this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("createState").setProperty("/providerChosen", false);
+        this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
+        this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
+        this._lookupCreateModeStatusTexts();
         this.getView().getModel("priorityState").setData({ value: "", valueText: "", mixed: false, dirty: false });
         this.getView().getModel("headerCalc").setProperty("/taxAmount", 0);
       }
+    },
+
+    // Delivery Status/Delivery Block Status createMode defaults (client
+    // requirement 2026-10-01): looks each default code up directly against
+    // its own top-level codelist entity set (ServiceSchema.entitySets.
+    // deliveryStatus/deliveryBlockStatus) - NOT via the header's own
+    // _OverallDeliveryStatus/_OverallDeliveryBlockStatus navigation, which
+    // cannot resolve against the transient createMode scratch context (no
+    // backend contact happens for it until Save, see CreateOrderService.js#
+    // enter) - same exact-match lookup shape as onItemNdcChange/
+    // onProviderChange above.
+    _lookupCreateModeStatusTexts: function () {
+      var that = this;
+      var oModel = this.getView().getModel();
+      function lookup(sEntitySet, sKeyProperty, sKeyValue) {
+        var oBinding = oModel.bindList(
+          "/" + sEntitySet, undefined, undefined,
+          [new Filter(sKeyProperty, FilterOperator.EQ, sKeyValue)],
+          { $select: [sKeyProperty, sKeyProperty + "_Text"].join(",") }
+        );
+        return oBinding.requestContexts(0, 1).then(function (aContexts) {
+          return aContexts.length ? aContexts[0].getObject()[sKeyProperty + "_Text"] : "";
+        });
+      }
+      lookup(ServiceSchema.entitySets.deliveryStatus, ServiceSchema.headerProperties.deliveryStatus, ServiceSchema.defaultDeliveryStatus)
+        .then(function (sText) {
+          that.getView().getModel("createState").setProperty("/deliveryStatusText", sText);
+        }).catch(function () {});
+      lookup(ServiceSchema.entitySets.deliveryBlockStatus, ServiceSchema.headerProperties.deliveryBlockStatus, ServiceSchema.defaultDeliveryBlockStatus)
+        .then(function (sText) {
+          that.getView().getModel("createState").setProperty("/deliveryBlockStatusText", sText);
+        }).catch(function () {});
     },
 
     // Resolves Enums.js's {key, i18nKey} lists into {key, text} once, so the
@@ -1754,10 +1823,60 @@ sap.ui.define([
     // doesn't match the last confirmed pick is flagged Error until a real
     // suggestion/VH row is chosen; SoldToParty/sales-area properties on the
     // context are only ever set by _applyProviderPick above, never by typing.
+    // Live-test (2026-10-01): typing/pasting an exact provider code or name
+    // and tabbing out (no suggestion/VH pick) just sat in Error state with
+    // nothing loaded - same underlying gap as the NDC Input (onItemNdcChange)
+    // but here there was no lookup attempt at all. Now looks the typed value
+    // up the same way the typeahead's own filter does (customer code OR
+    // name, within the fixed sales area) and, on an exact single match,
+    // applies it via _applyProviderPick like a suggestion/VH pick would.
     onProviderChange: function (oEvent) {
+      var that = this;
+      var oInput = oEvent.getSource();
       var sValue = oEvent.getParameter("value");
       var sConfirmed = this.getView().getModel("createEnrich").getProperty("/providerName");
-      this._setProviderValueState(!sValue || sValue === sConfirmed);
+      if (!sValue || sValue === sConfirmed) {
+        this._setProviderValueState(true);
+        return;
+      }
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oArea = ServiceSchema.salesArea;
+      var oLookupBinding = this.getView().getModel().bindList(
+        "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
+        [
+          new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
+          new Filter({
+            filters: [
+              new Filter(oProps.customerName, FilterOperator.EQ, sValue),
+              new Filter(oProps.customer, FilterOperator.EQ, sValue)
+            ],
+            and: false
+          })
+        ],
+        {
+          $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
+            oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
+        }
+      );
+      oLookupBinding.requestContexts(0, 2).then(function (aContexts) {
+        if (aContexts.length === 1) {
+          var oRow = aContexts[0].getObject();
+          that._applyProviderPick({
+            id: oRow[oProps.customer],
+            fullName: oRow[oProps.customerName],
+            address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+              .filter(function (sPart) { return !!sPart; })
+              .join(", "),
+            salesOrganization: oRow[oProps.salesOrganization],
+            distributionChannel: oRow[oProps.distributionChannel],
+            division: oRow[oProps.division]
+          });
+        } else {
+          that._setProviderValueState(false);
+        }
+      }).catch(function () {
+        that._setProviderValueState(false);
+      });
     },
 
     _setProviderValueState: function (bValid) {

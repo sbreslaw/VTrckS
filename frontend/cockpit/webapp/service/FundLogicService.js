@@ -31,6 +31,14 @@ sap.ui.define([
     ServiceSchema.itemProperties.panQty,
     ServiceSchema.itemProperties.resQty
   ];
+  // Live-test, 2026-10-01: the backend's own first-item POST can ALSO return
+  // an adjusted RequestedQuantity (e.g. 1 -> 10, a pack-size/minimum-order
+  // rule) - a snapshot taken before that adjustment must be rescaled to the
+  // new total before being restored, or the allocation silently stays stuck
+  // at the pre-adjustment number (surfaces later as the backend's own
+  // "Total Split Qty does not match the Order Qty" validation). Stashed
+  // alongside the six ZZ fields under this key, not in ZZ_FIELDS itself.
+  var QUANTITY_FIELD = ServiceSchema.itemProperties.quantity;
   var mAllocationCache = {};
 
   function snapshotZzFields(oRowContext) {
@@ -38,7 +46,39 @@ sap.ui.define([
     ZZ_FIELDS.forEach(function (sField) {
       oSnapshot[sField] = oRowContext.getProperty(sField);
     });
+    oSnapshot[QUANTITY_FIELD] = parseFloat(oRowContext.getProperty(QUANTITY_FIELD)) || 0;
     return oSnapshot;
+  }
+
+  // Proportionally rescales every nonzero ZZ field in a snapshot to a NEW
+  // RequestedQuantity total - a single-fund (one nonzero field) snapshot
+  // simply becomes the new total; a split snapshot keeps its relative
+  // proportions. The last nonzero field absorbs the rounding remainder so
+  // the fields still sum EXACTLY to the new quantity (the backend's own
+  // split-total validation requires an exact match). No-op if there's
+  // nothing to rescale from/to.
+  function rescaleSnapshot(oSnapshot, fNewQty) {
+    var fOldQty = oSnapshot[QUANTITY_FIELD];
+    if (!fOldQty || !fNewQty || fOldQty === fNewQty) {
+      return oSnapshot;
+    }
+    var aNonZeroFields = ZZ_FIELDS.filter(function (sField) { return oSnapshot[sField]; });
+    if (!aNonZeroFields.length) {
+      return oSnapshot;
+    }
+    var oResult = Object.assign({}, oSnapshot);
+    var iRunningTotal = 0;
+    aNonZeroFields.forEach(function (sField, iIndex) {
+      if (iIndex === aNonZeroFields.length - 1) {
+        oResult[sField] = fNewQty - iRunningTotal;
+      } else {
+        var iScaled = Math.round(oSnapshot[sField] * fNewQty / fOldQty);
+        oResult[sField] = iScaled;
+        iRunningTotal += iScaled;
+      }
+    });
+    oResult[QUANTITY_FIELD] = fNewQty;
+    return oResult;
   }
 
   // vRow: an item row's Context, a plain object keyed by ServiceSchema
@@ -133,6 +173,8 @@ sap.ui.define([
       if (!oRowContext || !oSnapshot) {
         return Promise.resolve();
       }
+      var fCurrentQty = parseFloat(oRowContext.getProperty(QUANTITY_FIELD)) || 0;
+      var oEffectiveSnapshot = rescaleSnapshot(oSnapshot, fCurrentQty);
       var oNewSnapshot = {};
       var aPending = [];
       ZZ_FIELDS.forEach(function (sField) {
@@ -144,38 +186,40 @@ sap.ui.define([
         }
         if (!isNaN(iCurrent) && iCurrent !== 0) {
           oNewSnapshot[sField] = iCurrent;
-        } else if (oSnapshot[sField]) {
-          aPending.push(oRowContext.setProperty(sField, oSnapshot[sField]));
-          oNewSnapshot[sField] = oSnapshot[sField];
+        } else if (oEffectiveSnapshot[sField]) {
+          aPending.push(oRowContext.setProperty(sField, oEffectiveSnapshot[sField]));
+          oNewSnapshot[sField] = oEffectiveSnapshot[sField];
         } else {
           oNewSnapshot[sField] = 0;
         }
       });
+      oNewSnapshot[QUANTITY_FIELD] = fCurrentQty;
       mAllocationCache[oRowContext.getPath()] = oNewSnapshot;
       return Promise.all(aPending);
     },
 
-    // Transfers a snapshot from an OLD row context onto a brand-new one
-    // (Detail.controller.js#_postFirstItemRow, right after postItem) without
-    // ever reading the new context's own current value first - unlike
-    // applySnapshot's reconcile logic, that read isn't just unsafe here, it
-    // ALWAYS logs "invalid segment" to the console even wrapped in try/catch
-    // (the _Cache layer logs the drill-down failure as a side effect of
-    // computing the rejected promise, before the rejection ever reaches
-    // application code) - because the create response this new context
-    // comes from only ever selects SAP__Messages, never these six fields.
-    // The later full-list rebind (_bindItemsTableToSession's dataReceived ->
-    // _reapplyFundAllocations) re-fetches this same row with the real
-    // $select and is where applySnapshot's smart reconcile actually runs.
+    // Carries a snapshot from an OLD row context onto a brand-new one's own
+    // cache key (Detail.controller.js#_postFirstItemRow, right after
+    // postItem) - cache move only, no setProperty: that new context's own
+    // request only ever selected SAP__Messages, so neither a read (would log
+    // "invalid segment", even wrapped in try/catch - the _Cache layer logs
+    // the drill-down failure as a side effect of computing the rejected
+    // promise, before the rejection reaches application code) nor a same-
+    // tick write here is ever user-visible anyway (the Items table stays on
+    // the OLD scratch row until _bindItemsTableToSession's dataReceived
+    // switches it). Live-test, 2026-10-01: a same-tick write here was also
+    // actively WRONG whenever the backend's create response adjusted
+    // RequestedQuantity (e.g. 1 -> 10) - it could only ever replay the
+    // stale pre-adjustment numbers, since this context can't read the new
+    // quantity back to rescale against. Just move the cache entry so the
+    // very next _reapplyFundAllocations (applySnapshot) - which DOES have
+    // the real, now-fetched row, quantity included - finds it under the new
+    // path and does the one real, rescale-aware restore.
     transferSnapshot: function (oNewRowContext, oSnapshot) {
       if (!oNewRowContext || !oSnapshot) {
-        return Promise.resolve();
+        return;
       }
-      var aPending = ZZ_FIELDS
-        .filter(function (sField) { return oSnapshot[sField] !== undefined; })
-        .map(function (sField) { return oNewRowContext.setProperty(sField, oSnapshot[sField]); });
       mAllocationCache[oNewRowContext.getPath()] = oSnapshot;
-      return Promise.all(aPending);
     },
 
     // Convenience: re-apply THIS row's own previously-cached snapshot (by its

@@ -164,6 +164,10 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.salesOrganization] = ServiceSchema.salesArea.salesOrganization;
       oInitialData[ServiceSchema.headerProperties.distributionChannel] = ServiceSchema.salesArea.distributionChannel;
       oInitialData[ServiceSchema.headerProperties.division] = ServiceSchema.salesArea.organizationDivision;
+      oInitialData[ServiceSchema.headerProperties.category] = ServiceSchema.defaultCategory;
+      oInitialData[ServiceSchema.headerProperties.shippingCondition] = ServiceSchema.defaultShippingCondition;
+      oInitialData[ServiceSchema.headerProperties.deliveryStatus] = ServiceSchema.defaultDeliveryStatus;
+      oInitialData[ServiceSchema.headerProperties.deliveryBlockStatus] = ServiceSchema.defaultDeliveryBlockStatus;
       var oContext = oListBinding.create(oInitialData);
       // Deleting this transient, never-submitted context later (Cancel, or
       // save()'s own cleanup after replay) cancels its still-pending POST,

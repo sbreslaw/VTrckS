@@ -12,8 +12,10 @@ sap.ui.define([], function () {
   // (Detail.controller.js#_createSectionFlagsModel). `editLive` (CRUD Task 2,
   // Change Mode) marks the sections whose Edit button is actually wired to a
   // real PATCH/ETag edit session (SectionFactory.js) \u2014 Details, Items, Shipping,
-  // Org Data, Billing (added 2026-08-21); every other `editable: true` section
-  // keeps the disabled, tooltip-only placeholder behavior ("later phase").
+  // Org Data; every other `editable: true` section keeps the disabled,
+  // tooltip-only placeholder behavior ("later phase").
+  // Billing removed 2026-10-01 (client request) - Billing.fragment.xml is
+  // kept on disk but no longer referenced here.
   //
   // `createVisible` (CRUD Task 1 v3, In-Place Create) marks the sections that
   // stay visible/expanded while the Detail view is in createMode; every other
@@ -34,7 +36,6 @@ sap.ui.define([], function () {
     // against that context, giving the designed empty state for free (no
     // extra createMode-specific handling needed here).
     { id: "priceTotals", titleKey: "sectionPriceTotals", fragment: "cdc.vaccreq.sections.PriceTotals", expanded: false, editable: false, createVisible: true },
-    { id: "billing", titleKey: "sectionBilling", fragment: "cdc.vaccreq.sections.Billing", expanded: false, editable: true, editLive: true },
     { id: "paymentMethod", titleKey: "sectionPaymentMethod", fragment: "cdc.vaccreq.sections.PaymentMethod", expanded: false, editable: true },
     { id: "scheduledActions", titleKey: "sectionScheduledActions", fragment: "cdc.vaccreq.sections.ScheduledActions", expanded: false, editable: false },
     { id: "status", titleKey: "sectionStatus", fragment: "cdc.vaccreq.sections.Status", expanded: false, editable: false },
