@@ -108,7 +108,7 @@
                persisted row always has a Product, so this still locks
                correctly and survives refreshes. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !${sectionFlags>/items/postingFirstRow} }"
             showValueHelp="true" valueHelpOnly="false"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
@@ -127,7 +127,7 @@
                ancillary quantities); a two-way binding's own internal PATCH here would
                race that refresh exactly like the opt-out checkbox's did. -->
           <Input value="{path: 'RequestedQuantity', mode: 'OneWay'}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !${sectionFlags>/items/postingFirstRow} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
                unit EA is not defined" SaveChanges error, see createPayloadUom
@@ -138,7 +138,7 @@
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
           <Select selectedKey="{MaterialGroup1}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !${sectionFlags>/items/postingFirstRow} }" change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
             <core:Item key="MIX" text="Adult, Pediatric" />
@@ -151,7 +151,7 @@
                (formatter.fundTypeItemEnabled). Selecting SPL auto-opens the Fund Split
                dialog in edit mode (onFundTypeChange, Fund Split dialog session prompt). -->
           <Select selectedKey="{MaterialGroup2}" forceSelection="false" visible="{itemsColumns>/fundType}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !${sectionFlags>/items/postingFirstRow} }"
             items="{fundTypes>/list}" change=".onFundTypeChange">
             <core:Item key="{fundTypes>key}" text="{fundTypes>text}"
               enabled="{parts: [{path: 'MaterialGroup1'}, {path: 'fundTypes>pediatricOnly'}, {path: 'fundTypes>disabled'}], formatter: '.formatter.fundTypeItemEnabled', useRawValues: true}" />

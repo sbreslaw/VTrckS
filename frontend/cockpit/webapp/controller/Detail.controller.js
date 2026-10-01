@@ -914,6 +914,7 @@ sap.ui.define([
         })
         .then(function () {
           that._bPostingFirstItem = false;
+          that.getView().getModel("sectionFlags").setProperty("/items/postingFirstRow", false);
           if (oTable) {
             oTable.setBusy(false);
           }
@@ -2379,6 +2380,11 @@ sap.ui.define([
           }
         }
       });
+      // _postFirstItemRow's own editable=\"\" gate (Items.fragment.xml) -
+      // see that function's comment for why setBusy() alone isn't enough.
+      if (oData.items) {
+        oData.items.postingFirstRow = false;
+      }
       return new JSONModel(oData);
     },
 
