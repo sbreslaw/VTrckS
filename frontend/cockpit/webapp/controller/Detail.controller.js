@@ -2391,10 +2391,22 @@ sap.ui.define([
       // replay - CreateOrderService.js's item deep-create step copies ALL own
       // properties of each scratch context (not a fixed whitelist), so this
       // needs no other change there to actually replay.
+      // Posted (session-bound) rows PATCH immediately in $auto - SaveChanges must wait for
+      // those, or it ends the sticky session first ("400 Session timed out or not found").
       var sCreatePriority = this.getView().getModel("priorityState").getProperty("/value");
+      var aPriorityPatches = [];
       if (sCreatePriority && oItemsBinding) {
         oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
-          oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
+          var pPatch = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
+          if (!pPatch) {
+            return;
+          }
+          if (that._bItemsSessionBound && !(oItemContext.isTransient && oItemContext.isTransient())) {
+            aPriorityPatches.push(pPatch);
+          } else {
+            // Deferred/inactive row: never sent on its own, so never awaited.
+            pPatch.catch(function () {});
+          }
         });
       }
 
@@ -2404,7 +2416,10 @@ sap.ui.define([
       // touched by any client at all, so no client-side reconciliation before
       // Save can fix it; removed after confirming the backend silently
       // discards any client PATCH to ZZxxxQTY regardless of timing.
-      CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession)
+      Promise.all(aPriorityPatches)
+        .then(function () {
+          return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession);
+        })
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
         // CreateOrderService.save()). Enrichment/IoH failing from here on is a

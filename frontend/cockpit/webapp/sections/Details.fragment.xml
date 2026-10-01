@@ -293,7 +293,7 @@
 					</f:FormElement>
 
 
-					<f:FormElement visible="{= ${CustomerPurchaseOrderType} === 'EXIS' }">
+					<f:FormElement visible="{= %{CustomerPurchaseOrderType} === 'EXIS' }">
 						<f:label>
 							<Label text="{i18n>filterExisId}" required="false">
 								<layoutData>
