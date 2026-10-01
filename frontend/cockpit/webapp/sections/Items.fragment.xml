@@ -5,7 +5,9 @@
        express conditionally - no $$updateGroupId is declared here at all;
        Detail.controller.js#_rebindItemsGroup rebinds it (with the right
        literal group id) the first time this fragment's content loads, for
-       both the "detail" and "create" routes. -->
+       both the "detail" and "create" routes.
+       DF-1025: the Rejection Reason column shows in both modes; it is written
+       only via bound actions (Computed property), never through this binding. -->
   <Table id="itemsTable" items="{_Item}" growing="true" growingThreshold="20">
     <headerToolbar>
       <OverflowToolbar>
@@ -32,8 +34,7 @@
       <Column width="7rem" visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
       <Column width="7rem" visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
       <Column width="6rem" hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
-      <!-- Rejection Reason only ever applies to an already-existing order's items - meaningless in createMode. -->
-      <Column width="10rem" visible="{= ${itemsColumns>/rejectionReason} &amp;&amp; !${sectionFlags>/createMode} }"><Text text="{i18n>colRejectionReason}" /></Column>
+      <Column width="10rem" visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
     </columns>
     <items>
       <ColumnListItem>
@@ -159,7 +160,21 @@
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
           <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" visible="{itemsColumns>/netValue}" />
-          <Text text="{_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text}" visible="{= ${itemsColumns>/rejectionReason} &amp;&amp; !${sectionFlags>/createMode} }" />
+          <!-- DF-1025: SalesDocumentRjcnReason is Computed - selectedKey is OneWay (display
+               only); writes go through the bound SetRejectionReason/RemoveRejectionReason
+               actions in onItemRejectionReasonChange. Items come from the JSON
+               "rejectionReasons" model: an absolute OData list nested in this row template
+               would pollute _Item's autoExpandSelect $select. Editable only on a posted
+               createMode row (sticky session); change mode stays read-only until the
+               sessionless-action ruling (OPEN_QUESTIONS DF-1025). -->
+          <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'OneWay'}" forceSelection="false" width="100%"
+            visible="{itemsColumns>/rejectionReason}"
+            items="{rejectionReasons>/list}"
+            editable="{= !!(${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (%{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"
+            tooltip="{= %{sectionFlags>/items/editing} &amp;&amp; !%{sectionFlags>/createMode} ? ${i18n>rejectionReasonChangeModePending} : '' }"
+            change=".onItemRejectionReasonChange">
+            <core:Item key="{rejectionReasons>key}" text="{rejectionReasons>text}" />
+          </Select>
         </cells>
       </ColumnListItem>
     </items>
