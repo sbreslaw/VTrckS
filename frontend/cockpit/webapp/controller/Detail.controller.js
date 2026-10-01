@@ -1781,10 +1781,60 @@ sap.ui.define([
     // doesn't match the last confirmed pick is flagged Error until a real
     // suggestion/VH row is chosen; SoldToParty/sales-area properties on the
     // context are only ever set by _applyProviderPick above, never by typing.
+    // Live-test (2026-10-01): typing/pasting an exact provider code or name
+    // and tabbing out (no suggestion/VH pick) just sat in Error state with
+    // nothing loaded - same underlying gap as the NDC Input (onItemNdcChange)
+    // but here there was no lookup attempt at all. Now looks the typed value
+    // up the same way the typeahead's own filter does (customer code OR
+    // name, within the fixed sales area) and, on an exact single match,
+    // applies it via _applyProviderPick like a suggestion/VH pick would.
     onProviderChange: function (oEvent) {
+      var that = this;
+      var oInput = oEvent.getSource();
       var sValue = oEvent.getParameter("value");
       var sConfirmed = this.getView().getModel("createEnrich").getProperty("/providerName");
-      this._setProviderValueState(!sValue || sValue === sConfirmed);
+      if (!sValue || sValue === sConfirmed) {
+        this._setProviderValueState(true);
+        return;
+      }
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oArea = ServiceSchema.salesArea;
+      var oLookupBinding = this.getView().getModel().bindList(
+        "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
+        [
+          new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
+          new Filter({
+            filters: [
+              new Filter(oProps.customerName, FilterOperator.EQ, sValue),
+              new Filter(oProps.customer, FilterOperator.EQ, sValue)
+            ],
+            and: false
+          })
+        ],
+        {
+          $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
+            oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
+        }
+      );
+      oLookupBinding.requestContexts(0, 2).then(function (aContexts) {
+        if (aContexts.length === 1) {
+          var oRow = aContexts[0].getObject();
+          that._applyProviderPick({
+            id: oRow[oProps.customer],
+            fullName: oRow[oProps.customerName],
+            address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+              .filter(function (sPart) { return !!sPart; })
+              .join(", "),
+            salesOrganization: oRow[oProps.salesOrganization],
+            distributionChannel: oRow[oProps.distributionChannel],
+            division: oRow[oProps.division]
+          });
+        } else {
+          that._setProviderValueState(false);
+        }
+      }).catch(function () {
+        that._setProviderValueState(false);
+      });
     },
 
     _setProviderValueState: function (bValid) {
