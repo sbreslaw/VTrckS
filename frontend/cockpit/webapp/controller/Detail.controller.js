@@ -724,10 +724,19 @@ sap.ui.define([
       // itself is only editable when /items/editing is true, so this change
       // event shouldn't be reachable otherwise - guarded anyway so the dialog
       // can never auto-open from a display-mode row.
+      // Live-test bug (2026-10-01): completing the row (below) posts it to the
+      // session right away, including deleting/replacing THIS scratch context -
+      // if that happened while the dialog above was still open, the user's
+      // "Done" would commit the split onto the already-dead context (404).
+      // Wait for the dialog to actually close (Done or Cancel) first.
       if (FundLogicService.isSplitFund(sKey) && this.getView().getModel("sectionFlags").getProperty("/items/editing")) {
-        this._getFundSplitDialog().open(oRowContext, "edit");
+        var that = this;
+        this._getFundSplitDialog().open(oRowContext, "edit").then(function () {
+          that._checkItemRowComplete(oRowContext);
+        });
+      } else {
+        this._checkItemRowComplete(oRowContext);
       }
-      this._checkItemRowComplete(oRowContext);
     },
 
     // Fund Split dialog session prompt, Trigger 2 (item Action menu): mode is

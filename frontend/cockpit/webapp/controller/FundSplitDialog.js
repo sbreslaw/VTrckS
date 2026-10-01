@@ -16,6 +16,7 @@ sap.ui.define([
     this._oDialog = null;
     this._oModel = null;
     this._oRowContext = null;
+    this._fnResolveClosed = null;
   }
 
   FundSplitDialog.prototype._getDialog = function () {
@@ -70,6 +71,12 @@ sap.ui.define([
       oDialog.setModel(that._oModel, "split");
       that._recalcTotal();
       oDialog.open();
+      // Resolves on Done/Cancel (below) - callers that also need to react to
+      // the ROW (e.g. post it to the session) must wait for this, not just
+      // the dialog opening, or they'd race the user's still-in-progress split.
+      return new Promise(function (resolve) {
+        that._fnResolveClosed = resolve;
+      });
     });
   };
 
@@ -96,6 +103,7 @@ sap.ui.define([
   FundSplitDialog.prototype.onDonePress = function () {
     FundLogicService.commitSplit(this._oRowContext, this._oModel.getProperty("/rows") || []);
     this._oDialog.close();
+    this._resolveClosed();
   };
 
   // Discards the working copy - the row's own context/properties were never
@@ -103,6 +111,14 @@ sap.ui.define([
   // sap.m.Dialog handles the same way by default).
   FundSplitDialog.prototype.onCancelPress = function () {
     this._oDialog.close();
+    this._resolveClosed();
+  };
+
+  FundSplitDialog.prototype._resolveClosed = function () {
+    if (this._fnResolveClosed) {
+      this._fnResolveClosed();
+      this._fnResolveClosed = null;
+    }
   };
 
   FundSplitDialog.prototype.formatIdText = function (sId, sText) {
