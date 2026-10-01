@@ -139,7 +139,12 @@ sap.ui.define([
       // since the header's own _OverallDeliveryStatus/
       // _OverallDeliveryBlockStatus navigation cannot resolve against the
       // transient createMode scratch context (client requirement 2026-10-01).
-      this.getView().setModel(new JSONModel({ providerChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
+      // priorityLocked: DeliveryPriority 422s ("Read-only fields must not be
+      // changed") on any PATCH once an item is actually posted - set true the
+      // instant the first item posts (_bindItemsTableToSession) so the user
+      // can no longer change Priority after that point (see
+      // _applyCreatePriorityToRow/onCreateSavePress).
+      this.getView().setModel(new JSONModel({ providerChosen: false, priorityLocked: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       // Session Prompt (Detail View Adjustments) 3.1: virtual header Priority -
       // {value, valueText, mixed, dirty} computed from/propagated to item
@@ -516,6 +521,13 @@ sap.ui.define([
         // (confirmed live). bInactive keeps it purely local until the user
         // actually edits a field (requires $$ownRequest: true, already set
         // by _rebindItemsGroup).
+        // Priority is already locked by the time this branch runs (the first
+        // posted item locked it) - stamp today's frozen value now, since a
+        // later PATCH to DeliveryPriority 422s once this row posts.
+        var sLockedPriority = this.getView().getModel("priorityState").getProperty("/value");
+        if (sLockedPriority) {
+          oNewRowData[ServiceSchema.itemProperties.deliveryPriority] = sLockedPriority;
+        }
         // Live-test fix (round 18): bAtEnd (3rd arg) true - new rows append
         // at the bottom of the table, not the top.
         oBinding.create(oNewRowData, false, true, true);
@@ -923,6 +935,11 @@ sap.ui.define([
       // transferred onto the NEW context below (the create response itself
       // always reads them back as 0 - see FundLogicService.js).
       var oAllocationSnapshot = FundLogicService.getSnapshot(oRowContext);
+      // DeliveryPriority becomes backend read-only the instant this POST
+      // lands (422 "Read-only fields must not be changed" on any later PATCH)
+      // - stamp the header Priority Select's current value now, it can never
+      // be corrected afterward.
+      this._applyCreatePriorityToRow(oRowContext);
       CreateOrderService.postItem(this._oCreateSession, oHeaderContext, oRowContext.getObject())
         .then(function (oNewItemContext) {
           oRowContext.delete().catch(function () {});
@@ -974,6 +991,9 @@ sap.ui.define([
       return aOthers.reduce(function (pChain, oCtx) {
         return pChain.then(function () {
           if (that._isScratchRowComplete(oCtx)) {
+            // Same one-shot stamp as _postFirstItemRow - this row is about to
+            // post too, and DeliveryPriority can't be corrected afterward.
+            that._applyCreatePriorityToRow(oCtx);
             return CreateOrderService.postItem(that._oCreateSession, oHeaderContext, oCtx.getObject()).then(function () {
               oCtx.delete().catch(function () {});
             });
@@ -1004,6 +1024,9 @@ sap.ui.define([
       this._sItemsUpdateGroup = ServiceSchema.itemInteractiveGroup;
       this._rebindItemsGroup(this._sItemsUpdateGroup);
       this._bItemsSessionBound = true;
+      // Locks the header Priority Select for good this create session -
+      // DeliveryPriority is now read-only on every already-posted item.
+      this.getView().getModel("createState").setProperty("/priorityLocked", true);
       // The rebind's own GET is still async here - computing childParents
       // synchronously would run off the OLD (scratch/empty) contexts and
       // never get another chance to recompute; wait for the real fetch.
@@ -1072,6 +1095,9 @@ sap.ui.define([
       this._aPendingIncompleteRows = [];
       this._bItemsSessionBound = false;
       this._bPostingFirstItem = false;
+      // Items are plain scratch rows again - Priority is editable until the
+      // next item actually posts.
+      this.getView().getModel("createState").setProperty("/priorityLocked", false);
       if (!oTable) {
         return;
       }
@@ -1367,6 +1393,7 @@ sap.ui.define([
         this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("createState").setProperty("/providerChosen", false);
+        this.getView().getModel("createState").setProperty("/priorityLocked", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
         this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
         this._lookupCreateModeStatusTexts();
@@ -2093,6 +2120,17 @@ sap.ui.define([
     // item contexts are fetched and their property changes are staged -
     // NOT once they're sent; sending happens via EditRequestService.save's
     // own submitBatch).
+    // Create-mode-only counterpart to _propagatePriorityToItems below - a row
+    // not yet posted (still transient) can have this stamped any number of
+    // times (it only ever lands in the row's own eventual deep-create
+    // payload), unlike a real posted item (see callers).
+    _applyCreatePriorityToRow: function (oRowContext) {
+      var sPriority = this.getView().getModel("priorityState").getProperty("/value");
+      if (sPriority) {
+        oRowContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sPriority);
+      }
+    },
+
     _propagatePriorityToItems: function (oContext, sPriorityValue) {
       var oModel = oContext.getModel();
       var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oContext, undefined, undefined, {
@@ -2387,25 +2425,21 @@ sap.ui.define([
       var sNewId;
 
       // Session Prompt (Detail View Adjustments) 3.1: harvest the createMode
-      // Priority Select's value onto every scratch item context BEFORE the
-      // replay - CreateOrderService.js's item deep-create step copies ALL own
-      // properties of each scratch context (not a fixed whitelist), so this
-      // needs no other change there to actually replay.
-      // Posted (session-bound) rows PATCH immediately in $auto - SaveChanges must wait for
-      // those, or it ends the sticky session first ("400 Session timed out or not found").
+      // Priority Select's value onto every STILL-TRANSIENT scratch item
+      // context - CreateOrderService.js's item deep-create step copies ALL
+      // own properties of each scratch context (not a fixed whitelist), so
+      // this needs no other change there to actually replay. An already-
+      // posted (session-bound) row must NOT be re-patched here - confirmed
+      // live this field goes backend read-only the instant a row posts, any
+      // later PATCH 422s ("Read-only fields must not be changed"); those rows
+      // already got it stamped once, pre-POST, by _applyCreatePriorityToRow,
+      // and the Priority Select itself is locked from that point on
+      // (createState>/priorityLocked, set in _bindItemsTableToSession).
       var sCreatePriority = this.getView().getModel("priorityState").getProperty("/value");
-      var aPriorityPatches = [];
       if (sCreatePriority && oItemsBinding) {
         oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
-          var pPatch = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
-          if (!pPatch) {
-            return;
-          }
-          if (that._bItemsSessionBound && !(oItemContext.isTransient && oItemContext.isTransient())) {
-            aPriorityPatches.push(pPatch);
-          } else {
-            // Deferred/inactive row: never sent on its own, so never awaited.
-            pPatch.catch(function () {});
+          if (oItemContext.isTransient && oItemContext.isTransient()) {
+            oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority).catch(function () {});
           }
         });
       }
@@ -2416,10 +2450,7 @@ sap.ui.define([
       // touched by any client at all, so no client-side reconciliation before
       // Save can fix it; removed after confirming the backend silently
       // discards any client PATCH to ZZxxxQTY regardless of timing.
-      Promise.all(aPriorityPatches)
-        .then(function () {
-          return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession);
-        })
+      CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession)
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
         // CreateOrderService.save()). Enrichment/IoH failing from here on is a

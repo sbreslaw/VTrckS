@@ -406,7 +406,8 @@
 									selectedKey="{priorityState>/value}"
 									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
 									width="100%"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${createState>/priorityLocked} }"
+									tooltip="{i18n>priorityLockedTooltip}"
 									items="{path: '/DeliveryPriority'}"
 									change=".onPriorityChange">
 									<core:Item key="{DeliveryPriority}" text="{DeliveryPriority_Text}" />
