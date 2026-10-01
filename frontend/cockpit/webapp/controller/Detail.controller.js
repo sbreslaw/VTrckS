@@ -633,16 +633,43 @@ sap.ui.define([
     // the NDC Input's own "value" is a DIRECT two-way binding to the real
     // Product property (Items.fragment.xml), unlike Provider's separate
     // display-buffer model - free text typed here can reach the backend via
-    // its own PATCH before a suggestion/VH selection validates it. Flagging
-    // Error state on a mismatch is the only mitigation this session adds;
-    // a full per-row display-buffer model is a larger change than this
-    // issue asked for.
+    // its own PATCH before a suggestion/VH selection validates it.
+    // Live-test (2026-10-01): typing/pasting a full NDC and tabbing out
+    // (no suggestion/VH pick) left Text/Brand/UOM unpopulated. Root cause:
+    // the OLD "sValue === sCurrent means valid, do nothing" check was
+    // always true here regardless of HOW the value got in - the two-way
+    // binding already commits the typed value into Product before this
+    // handler even runs, so comparing against it can never catch a plain
+    // manual type. Now always looks the value up by exact Product id and,
+    // if found, applies it the same way a suggestion/VH pick would
+    // (_applyNdcPick) - harmless if this "change" followed a suggestion
+    // pick that already applied the same row (just a redundant re-fetch of
+    // the same values). Error state is the fallback for no match.
     onItemNdcChange: function (oEvent) {
+      var that = this;
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
       var sValue = oEvent.getParameter("value");
-      var sCurrent = oRowContext ? oRowContext.getProperty(ServiceSchema.itemProperties.material) : "";
-      this._setNdcValueState(oInput, !sValue || sValue === sCurrent);
+      if (!oRowContext || !sValue) {
+        this._setNdcValueState(oInput, true);
+        return;
+      }
+      var oProps = ServiceSchema.productProperties;
+      var oLookupBinding = oRowContext.getModel().bindList(
+        "/" + ServiceSchema.entitySets.product, undefined, undefined,
+        [new Filter(oProps.id, FilterOperator.EQ, sValue)],
+        { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") }
+      );
+      oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
+        if (aContexts.length) {
+          that._applyNdcPick(oRowContext, aContexts[0].getObject());
+          that._setNdcValueState(oInput, true);
+        } else {
+          that._setNdcValueState(oInput, false);
+        }
+      }).catch(function () {
+        that._setNdcValueState(oInput, false);
+      });
     },
 
     _setNdcValueState: function (oInput, bValid) {
