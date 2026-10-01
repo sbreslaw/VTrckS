@@ -30,6 +30,11 @@ cd VTrckS
 git config user.name  "Your Name"
 git config user.email "you@example.com"
 ```
+Copy the two agent-instruction templates to their live names (they are personal and git-ignored, so you can adjust them freely):
+```bash
+cp CLAUDE.example.md CLAUDE.md
+cp .github/copilot-instructions.example.md .github/copilot-instructions.md
+```
 Open the folder in VS Code. The app lives under `frontend/cockpit/`. Read `CONTRIBUTING.md` (2 minutes)
 and skim `frontend/cockpit/webapp/model/ServiceSchema.js` — every OData name in the app lives there,
 which matters for §8.
@@ -165,8 +170,8 @@ The full set is in the program guidelines; these are the ones that come up in ne
 | What | Where |
 |---|---|
 | The app | this repo, `frontend/cockpit/` |
-| Design decisions, specs, task prompts, project notes | companion repo `VTrckS-design` — ask the code owner if you need something from it; relevant excerpts are usually linked in the PR or task |
-| Program-wide UI5 guidelines | `VTrckS-design/guidelines/CDC_UI5_Development_Guidelines.md` (ask for a copy) |
+| Design decisions, specs, task descriptions, project notes | maintained by the code owner; the relevant excerpts come with each task or PR |
+| Program-wide UI5 guidelines | provided by the code owner as a document (ask for the current copy) |
 | Questions | the code owner — earlier is always better than later; a 2-minute question beats a rewritten PR |
 
 ---

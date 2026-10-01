@@ -99,7 +99,18 @@
 							</Label>
 						</f:label>
 						<f:fields>
-							<Text text="{OverallDeliveryStatus}">
+							<!-- Client requirement (2026-10-01): show the status description,
+								not the raw code. In createMode the header's own
+								_OverallDeliveryStatus navigation can't resolve against the
+								transient scratch context, so that case is covered separately by
+								createState>/deliveryStatusText (Detail.controller.js#
+								_lookupCreateModeStatusTexts). -->
+							<Text text="{_OverallDeliveryStatus/OverallDeliveryStatus_Text}" visible="{= !${sectionFlags>/createMode} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<Text text="{createState>/deliveryStatusText}" visible="{sectionFlags>/createMode}">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
@@ -116,7 +127,15 @@
 							</Label>
 						</f:label>
 						<f:fields>
-							<Text text="{OverallDeliveryBlockStatus}">
+							<!-- Client requirement (2026-10-01): same createMode split as Delivery
+								Status above - createState>/deliveryBlockStatusText covers the
+								transient scratch context. -->
+							<Text text="{_OverallDeliveryBlockStatus/OverallDeliveryBlockStatus_Text}" visible="{= !${sectionFlags>/createMode} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<Text text="{createState>/deliveryBlockStatusText}" visible="{sectionFlags>/createMode}">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>

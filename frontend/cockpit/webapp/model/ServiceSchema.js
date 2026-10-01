@@ -66,7 +66,19 @@ sap.ui.define([], function () {
       // 3.9: HeaderPartnerType (so.xml ~line 1065), reached in this app only
       // via the header's _Partner navigation (never queried top-level) -
       // listed here for completeness/grep-isolation, not used as a bind path.
-      headerPartner: "HeaderPartner"
+      headerPartner: "HeaderPartner",
+      // Client requirement (2026-10-01): real top-level fixed-values entity
+      // sets (OverallDeliveryStatusType/OverallDeliveryBlockStatusType,
+      // so.xml ~line 667/1824) - queried directly (not via the header's
+      // _OverallDeliveryStatus/_OverallDeliveryBlockStatus navigation, which
+      // cannot resolve against the transient createMode scratch context) to
+      // look up the createMode default's text description, see
+      // Detail.controller.js#_setCreateMode.
+      deliveryStatus: "OverallDeliveryStatus",
+      deliveryBlockStatus: "OverallDeliveryBlockStatus",
+      // DF-1025: full code list (SalesDocumentRjcnReasonType); the property's own
+      // ValueList points at i_salesdocallowedrjcnrsn (per-doc-type), the backend enforces that.
+      rejectionReason: "SalesDocumentRjcnReason"
     },
 
     navigation: {
@@ -334,6 +346,21 @@ sap.ui.define([], function () {
     // Detail.controller.js#_onItemCreateActivate.
     updatePricesAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.UpdatePrices",
 
+    // DF-1025: SalesDocumentRjcnReason is Core.Computed (not PATCHable) - these bound
+    // item actions (no ReturnType) are its only write path. See onItemRejectionReasonChange.
+    itemActions: {
+      setRejectionReason: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.SetRejectionReason",
+      setRejectionReasonParameter: "SalesDocumentRjcnReason",
+      removeRejectionReason: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.RemoveRejectionReason"
+    },
+
+    // Per-row action availability (SalesOrderItemOperationControl) - bound in
+    // Items.fragment.xml's Rejection Reason Select `editable`; listed here for grep isolation.
+    itemOperationControl: {
+      setRejectionReason: "__OperationControl/SetRejectionReason",
+      removeRejectionReason: "__OperationControl/RemoveRejectionReason"
+    },
+
     // Item Detail view (FCL end column) — Session Prompt "Item Details View".
     // Step-0 field mapping against design/so.xml SalesOrderItemType (+ its
     // navigations, verified via grep, none guessed per Onboarding rule 7).
@@ -450,6 +477,20 @@ sap.ui.define([], function () {
       // "ZVR1" placeholder here — see OPEN_QUESTIONS.md item 9/NOTES.md).
       "ZKB"
     ],
+
+    // Client requirement (2026-10-01): createMode defaults seeded by
+    // CreateOrderService.js#enter - Category defaults to "Direct Entry" (UI)
+    // and stays read-only for the lifetime of create mode
+    // (Details.fragment.xml); Shipping Condition defaults to "01" (Standard
+    // Mail) but stays user-editable.
+    defaultCategory: "UI",
+    defaultShippingCondition: "01",
+    // Client requirement (2026-10-01): createMode defaults seeded by
+    // CreateOrderService.js#enter - Delivery Status defaults to "A" (Not yet
+    // processed) and Delivery Block Status defaults to " " (no block), both
+    // display-only (Shipping.fragment.xml, not in updatableHeaderProperties).
+    defaultDeliveryStatus: "A",
+    defaultDeliveryBlockStatus: " ",
 
     // --- CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — the
     // "Provider-first bootstrap" mandate (Fix-Sequencing Prompt/v4) is VOID:
@@ -634,7 +675,9 @@ sap.ui.define([], function () {
       customerPurchaseOrderTypeCode: "CustomerPurchaseOrderType",
       customerPurchaseOrderTypeText: "CustomerPurchaseOrderType_Text",
       partnerFunctionCode: "PartnerFunction",
-      partnerFunctionText: "PartnerFunction_Text"
+      partnerFunctionText: "PartnerFunction_Text",
+      rejectionReasonCode: "SalesDocumentRjcnReason",
+      rejectionReasonText: "SalesDocumentRjcnReason_Text"
     },
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
@@ -730,6 +773,29 @@ sap.ui.define([], function () {
     // Update group for all edit-session PATCHes/creates (EditRequestService.js
     // + Details.fragment.xml/Items.fragment.xml $$updateGroupId bindings).
     editUpdateGroup: "vrEdit",
+
+    // Issue Batch 9-30-001 §3.1 (Notes write path): SalesOrderTextType is
+    // real and confirmed (design/metadata/so_C_SALESORDERMANAGE_2026-09-30.xml -
+    // Key SalesOrder+Language+LongTextID, property LongText), reached only
+    // via the header's own `_Text` navigation (never a top-level query).
+    textEntity: {
+      navigation: "_Text",
+      properties: {
+        salesOrder: "SalesOrder",
+        language: "Language",
+        longTextId: "LongTextID",
+        longText: "LongText"
+      }
+    },
+    // TODO-VERIFY(notes-long-text-id): no live backend access this session
+    // to read an existing order's own `_Text` rows and learn which
+    // LongTextID actually carries the CDC order notes (legacy KTEXT-family
+    // vs. a Z text ID, per Session Prompt Issue Batch 9-30-001 §2 Step-0) -
+    // never guessed. Left null on purpose: every notes read/write below
+    // degrades to a no-op (same BLOCKED-BY-SERVICE pattern as
+    // enrichmentAction/iohCreateAction) until a populated example is found
+    // and this constant is set to the real code. See OPEN_QUESTIONS.md.
+    notesLongTextId: null,
 
     showJurisdictionFilter: true,
     statusSource: "e008", // "standard" for temporary service, "e008" for swap-back
