@@ -162,7 +162,7 @@ sap.ui.define([
       // child-row read-only/indent treatment (Items.fragment.xml). Empty
       // until the sticky session opens (createMode) or an existing order's
       // items load (change mode) - see _computeAncillaryParents.
-      this.getView().setModel(new JSONModel({ childParents: {}, editableNdcItemNumber: "", editableNdcToken: 0 }), "itemsMeta");
+      this.getView().setModel(new JSONModel({ childParents: {}, editableNdcItemNumber: "", editableNdcValue: "", canAddItem: true }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
 
@@ -499,12 +499,11 @@ sap.ui.define([
         return;
       }
       var oItemsMeta = this.getView().getModel("itemsMeta");
-      var iEditableNdcToken = (oItemsMeta.getProperty("/editableNdcToken") || 0) + 1;
-      oItemsMeta.setProperty("/editableNdcToken", iEditableNdcToken);
       oItemsMeta.setProperty("/editableNdcItemNumber", "");
+      oItemsMeta.setProperty("/editableNdcValue", "");
+      oItemsMeta.setProperty("/canAddItem", false);
       var oNewRowData = {
         Product: "",
-        "@$ui5.ndcEditToken": iEditableNdcToken,
         // RequestedQuantity is Nullable="false" AND Edm.Decimal (design/so.xml)
         // - never leave it null even transiently, must be the STRING "0", not
         // the number 0, or the POST's own error response comes back malformed
@@ -606,6 +605,8 @@ sap.ui.define([
       if (oItem[oProps.baseUnit]) {
         oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
       }
+      this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", oItem[oProps.id]);
+      this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -695,6 +696,8 @@ sap.ui.define([
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
       var sValue = (oEvent.getParameter("value") || "").trim();
+      this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", sValue);
+      this.getView().getModel("itemsMeta").setProperty("/canAddItem", false);
       if (!oRowContext || !sValue) {
         this._clearNdcDerivedFields(oRowContext);
         this._setNdcValueState(oInput, true);
@@ -1166,6 +1169,22 @@ sap.ui.define([
       FundLogicService.clearAllocationCache();
     },
 
+    _resetItemsTableForCreate: function () {
+      var oItemsMeta = this.getView().getModel("itemsMeta");
+      oItemsMeta.setProperty("/childParents", {});
+      oItemsMeta.setProperty("/editableNdcItemNumber", "");
+      oItemsMeta.setProperty("/editableNdcValue", "");
+      oItemsMeta.setProperty("/canAddItem", true);
+
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return;
+      }
+      oTable.setBindingContext(this.getView().getBindingContext());
+      this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
+      this._rebindItemsGroup(this._sItemsUpdateGroup);
+    },
+
     // Re-derives the {"<parentItemNumber>": true} childParents map (itemsMeta
     // model) off the Items table's CURRENT contexts - called after every real-
     // list (re)bind/refresh, never cached/guessed from the SKIPANC marker (see
@@ -1477,6 +1496,9 @@ sap.ui.define([
         oFlags.setProperty("/" + sId + "/editing", bOn);
       });
       if (bOn) {
+        this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
+        this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
+        this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
         this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("createState").setProperty("/providerChosen", false);
@@ -2671,6 +2693,8 @@ sap.ui.define([
       this._destroyCreateContext();
       this._setCreateMode(false);
       this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
+      this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
+      this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
@@ -2711,6 +2735,7 @@ sap.ui.define([
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
+      this._resetItemsTableForCreate();
       this._bindDetailHeader();
       // All createMode-visible sections are expanded/loaded simultaneously —
       // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1

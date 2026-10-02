@@ -13,7 +13,7 @@
       <OverflowToolbar>
         <ToolbarSpacer />
         <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
-          enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" press=".onItemsAddRow" />
+          enabled="{= ${itemsMeta>/canAddItem} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" press=".onItemsAddRow" />
         <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
         <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
       </OverflowToolbar>
@@ -92,10 +92,10 @@
                §3.2: indented for an ancillary child row (HigherLevelItem set). -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
           <!-- The newest row keeps an editable NDC until another row is added.
-            An immutable private token covers its transient lifetime; the
-            item number preserves ownership after posting and list refreshes. -->
+            Its current value identifies an unnumbered row; the item number
+            preserves ownership after posting and list refreshes. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; (%{@$ui5.ndcEditToken} === ${itemsMeta>/editableNdcToken} || (!!%{SalesOrderItem} &amp;&amp; %{SalesOrderItem} === ${itemsMeta>/editableNdcItemNumber})) }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ((!!%{SalesOrderItem} &amp;&amp; %{SalesOrderItem} === ${itemsMeta>/editableNdcItemNumber}) || (!%{SalesOrderItem} &amp;&amp; %{Product} === ${itemsMeta>/editableNdcValue})) }"
             showValueHelp="true"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
