@@ -91,26 +91,12 @@
                selection (onItemNdcValueHelpRequest) - never typed in directly.
                §3.2: indented for an ancillary child row (HigherLevelItem set). -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
-          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. §3.2: an ancillary child row is always fully read-only.
-               Live-test fix (round 18): must NOT gate on
-               @$ui5.context.isTransient here (unlike the two OTHER, negated
-               uses of it above/below) - once ANY full-list refresh happens
-               after this row is persisted (onProdQtyChange,
-               onItemOptOutChange, _onItemCreateActivate's
-               created().then(...) all call _refreshItemsBinding ->
-               oBinding.refresh()), every row's context is recreated fresh
-               via GET, so isTransient() (never negated here) resolves to
-               undefined (not false) for rows never created via
-               ODataListBinding#create(); an expression binding that
-               resolves to undefined falls back to the control's property
-               DEFAULT - Input.editable defaults to true - flipping the
-               cell back to editable. !%{Product} alone (always a concrete
-               boolean, being negated) is enough: any already-numbered/
-               persisted row always has a Product, so this still locks
-               correctly and survives refreshes. -->
+          <!-- The newest row keeps an editable NDC until another row is added.
+            An immutable private token covers its transient lifetime; the
+            item number preserves ownership after posting and list refreshes. -->
           <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
-            showValueHelp="true" valueHelpOnly="false"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; (%{@$ui5.ndcEditToken} === ${itemsMeta>/editableNdcToken} || (!!%{SalesOrderItem} &amp;&amp; %{SalesOrderItem} === ${itemsMeta>/editableNdcItemNumber})) }"
+            showValueHelp="true"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
             suggest=".onItemNdcSuggest"
@@ -127,7 +113,7 @@
                gets a promise to await before refreshing the list for recalculated
                ancillary quantities); a two-way binding's own internal PATCH here would
                race that refresh exactly like the opt-out checkbox's did. -->
-          <Input value="{path: 'RequestedQuantity', mode: 'OneWay'}" visible="{itemsColumns>/qty}"
+          <Input value="{path: 'RequestedQuantity', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
@@ -167,7 +153,7 @@
                would pollute _Item's autoExpandSelect $select. Editable only on a posted
                createMode row (sticky session); change mode stays read-only until the
                sessionless-action ruling (OPEN_QUESTIONS DF-1025). -->
-          <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'OneWay'}" forceSelection="false" width="100%"
+          <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
             visible="{itemsColumns>/rejectionReason}"
             items="{rejectionReasons>/list}"
             editable="{= !!(${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (%{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"

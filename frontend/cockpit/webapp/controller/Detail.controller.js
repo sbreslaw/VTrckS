@@ -105,6 +105,7 @@ sap.ui.define([
       // bindElement path the "detail" route uses (design/prompts/CRUD Task 1
       // Prompt v3.md).
       this._oRouter.getRoute("create").attachPatternMatched(this._onCreateMatched, this);
+      this._oRouter.getRoute("master").attachPatternMatched(this._onMasterMatched, this);
       // Single source of truth for the panel stack: SectionConfig.js. The anchor
       // strip (sectionsNav model, below) and the sectionFlags model are both
       // derived from this same array, so a new section added there appears in
@@ -161,7 +162,7 @@ sap.ui.define([
       // child-row read-only/indent treatment (Items.fragment.xml). Empty
       // until the sticky session opens (createMode) or an existing order's
       // items load (change mode) - see _computeAncillaryParents.
-      this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
+      this.getView().setModel(new JSONModel({ childParents: {}, editableNdcItemNumber: "", editableNdcToken: 0 }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
 
@@ -409,6 +410,7 @@ sap.ui.define([
       if (oContext) {
         EditRequestService.cancel(oContext);
       }
+      Messaging.removeAllMessages();
       this._endEditSession(sSectionId);
     },
 
@@ -496,8 +498,13 @@ sap.ui.define([
       if (!oBinding) {
         return;
       }
+      var oItemsMeta = this.getView().getModel("itemsMeta");
+      var iEditableNdcToken = (oItemsMeta.getProperty("/editableNdcToken") || 0) + 1;
+      oItemsMeta.setProperty("/editableNdcToken", iEditableNdcToken);
+      oItemsMeta.setProperty("/editableNdcItemNumber", "");
       var oNewRowData = {
         Product: "",
+        "@$ui5.ndcEditToken": iEditableNdcToken,
         // RequestedQuantity is Nullable="false" AND Edm.Decimal (design/so.xml)
         // - never leave it null even transiently, must be the STRING "0", not
         // the number 0, or the POST's own error response comes back malformed
@@ -543,6 +550,7 @@ sap.ui.define([
         // list): keep the existing client-only SD-style placeholder number
         // (10, 20, 30...) so the row doesn't display blank until Save.
         oNewRowData.SalesOrderItem = this._computeNextItemNumber(oBinding);
+        this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", oNewRowData.SalesOrderItem);
         // Live-test fix (round 18): bAtEnd (2nd positional arg after
         // bSkipRefresh) true - append at the bottom, matching the
         // session-bound branch above.
@@ -572,10 +580,12 @@ sap.ui.define([
     // away for immediate feedback, ahead of the batch save that would
     // otherwise be the only place the backend defaults it from the material.
     onItemNdcValueHelpRequest: function (oEvent) {
+      var oInput = oEvent.getSource();
       var oBundle = this.getResourceBundle();
-      var oRowContext = oEvent.getSource().getBindingContext();
+      var oRowContext = oInput.getBindingContext();
       this._openProductValueHelpDialog(oBundle.getText("ndcCodePickerTitle"), function (oItem) {
         this._applyNdcPick(oRowContext, oItem);
+        this._setNdcValueState(oInput, true);
       }.bind(this));
     },
 
@@ -597,6 +607,15 @@ sap.ui.define([
         oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
       }
       this._checkItemRowComplete(oRowContext);
+    },
+
+    _clearNdcDerivedFields: function (oRowContext) {
+      if (!oRowContext) {
+        return;
+      }
+      oRowContext.setProperty(ServiceSchema.itemProperties.itemText, "");
+      oRowContext.setProperty(ServiceSchema.itemProperties.brand, "");
+      oRowContext.setProperty(ServiceSchema.itemProperties.unit, "");
     },
 
     // Issue Batch 9-30-001 §3.4: NDC typeahead - filters the row's own
@@ -675,8 +694,9 @@ sap.ui.define([
       var that = this;
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
-      var sValue = oEvent.getParameter("value");
+      var sValue = (oEvent.getParameter("value") || "").trim();
       if (!oRowContext || !sValue) {
+        this._clearNdcDerivedFields(oRowContext);
         this._setNdcValueState(oInput, true);
         return;
       }
@@ -687,13 +707,19 @@ sap.ui.define([
         { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") }
       );
       oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
+        if (oInput.getValue().trim() !== sValue) {
+          return;
+        }
         if (aContexts.length) {
           that._applyNdcPick(oRowContext, aContexts[0].getObject());
+          oInput.setValue(aContexts[0].getProperty(oProps.id));
           that._setNdcValueState(oInput, true);
         } else {
+          that._clearNdcDerivedFields(oRowContext);
           that._setNdcValueState(oInput, false);
         }
       }).catch(function () {
+        that._clearNdcDerivedFields(oRowContext);
         that._setNdcValueState(oInput, false);
       });
     },
@@ -880,6 +906,10 @@ sap.ui.define([
       var oBundle = this.getResourceBundle();
       oRowContext.created()
         .then(function () {
+          that.getView().getModel("itemsMeta").setProperty(
+            "/editableNdcItemNumber",
+            oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber)
+          );
           // Issue Batch 9-30-001 \u00a72: the create response itself always
           // reads the six ZZ*QTY fields back as 0 (backend read-path defect,
           // see FundLogicService.js) - restore this row's own last-written
@@ -949,6 +979,10 @@ sap.ui.define([
       this._applyCreatePriorityToRow(oRowContext);
       CreateOrderService.postItem(this._oCreateSession, oHeaderContext, oRowContext.getObject())
         .then(function (oNewItemContext) {
+          that.getView().getModel("itemsMeta").setProperty(
+            "/editableNdcItemNumber",
+            oNewItemContext.getProperty(ServiceSchema.itemProperties.itemNumber)
+          );
           oRowContext.delete().catch(function () {});
           if (oAllocationSnapshot) {
             FundLogicService.transferSnapshot(oNewItemContext, oAllocationSnapshot);
@@ -2636,6 +2670,7 @@ sap.ui.define([
       }
       this._destroyCreateContext();
       this._setCreateMode(false);
+      this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
@@ -2687,6 +2722,12 @@ sap.ui.define([
       }, this);
     },
 
+    _onMasterMatched: function () {
+      this._destroyCreateContext();
+      this._setCreateMode(false);
+      Messaging.removeAllMessages();
+    },
+
     // Cleans up a previous transient create context (e.g. the user leaves the
     // create route via the Close button/browser back instead of Save/Cancel) -
     // nothing was ever sent to the backend (its group is never submitted), so
@@ -2697,6 +2738,7 @@ sap.ui.define([
         if (oContext && oContext.isTransient && oContext.isTransient()) {
           CreateOrderService.cancel(oContext, this._oCreateSession);
         }
+        MessageExtractor.clearStaleMessages();
         this._oCreateListBinding = null;
         this._oCreateSession = null;
         this._bItemsSessionBound = false;
