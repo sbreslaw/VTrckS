@@ -147,7 +147,9 @@ sap.ui.define([
           filterValueKey: ServiceSchema.providerOrderService.soldToDetailsProperties.soldToParty,
           keyLabel: "providerPinHelpIdentificationNumber",
           descriptionLabel: "providerPinHelpSoldToParty",
-          showDescriptionInToken: false
+          showDescriptionInToken: false,
+          suggestionModelName: "providerPinSuggestions",
+          loadSuggestions: this._loadProviderPinRows.bind(this)
         },
         {
           controlId: "filterRequestId",
@@ -178,6 +180,9 @@ sap.ui.define([
       aConfigs.forEach(function (oConfig) {
         var oInput = this.byId(oConfig.controlId);
         oInput.data("suggestionConfig", oConfig);
+        if (oConfig.loadSuggestions) {
+          oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
+        }
         oInput.setShowSuggestion(true);
         oInput.setFilterSuggests(false);
         oInput.setStartSuggestion(1);
@@ -197,13 +202,14 @@ sap.ui.define([
       var oConfig = oInput.data("suggestionConfig");
       var oBinding = oInput.getBinding("suggestionRows");
       if (!oBinding) {
-        var sModelPrefix = oConfig.modelName ? oConfig.modelName + ">" : "";
+        var sSuggestionModelName = oConfig.suggestionModelName || oConfig.modelName;
+        var sModelPrefix = sSuggestionModelName ? sSuggestionModelName + ">" : "";
         var aSelect = [oConfig.key, oConfig.description, oConfig.filterValueKey].filter(function (sPath, iIndex, aPaths) {
           return sPath && aPaths.indexOf(sPath) === iIndex;
         });
         oInput.bindAggregation("suggestionRows", {
-          path: sModelPrefix + "/" + oConfig.entitySet,
-          parameters: { $select: aSelect.join(",") },
+          path: sModelPrefix + "/" + (oConfig.loadSuggestions ? "rows" : oConfig.entitySet),
+          parameters: oConfig.loadSuggestions ? undefined : { $select: aSelect.join(",") },
           templateShareable: false,
           template: new ColumnListItem({
             cells: [
@@ -216,6 +222,20 @@ sap.ui.define([
       }
 
       var sValue = (oEvent.getParameter("suggestValue") || "").trim();
+      if (oConfig.loadSuggestions) {
+        var iRequest = (oInput.data("suggestionRequest") || 0) + 1;
+        oInput.data("suggestionRequest", iRequest);
+        oConfig.loadSuggestions(sValue, {}).then(function (aRows) {
+          if (oInput.data("suggestionRequest") === iRequest) {
+            oInput.getModel(oConfig.suggestionModelName).setProperty("/rows", aRows);
+          }
+        }).catch(function () {
+          if (oInput.data("suggestionRequest") === iRequest) {
+            oInput.getModel(oConfig.suggestionModelName).setProperty("/rows", []);
+          }
+        });
+        return;
+      }
       oBinding.filter(sValue ? new Filter({
         filters: [
           new Filter(oConfig.key, FilterOperator.Contains, sValue),
@@ -229,7 +249,7 @@ sap.ui.define([
       var oInput = oEvent.getSource();
       var oConfig = oInput.data("suggestionConfig");
       var oRow = oEvent.getParameter("selectedRow");
-      var oContext = oRow && oRow.getBindingContext(oConfig.modelName);
+      var oContext = oRow && oRow.getBindingContext(oConfig.suggestionModelName || oConfig.modelName);
       var sKey = oContext && oContext.getProperty(oConfig.key);
       if (!sKey) {
         return;
@@ -356,7 +376,9 @@ sap.ui.define([
     },
 
     _openStandardEntityValueHelp: function (oInput, oConfig) {
+      var that = this;
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var oValueHelpModel = oConfig.loadRows ? new JSONModel({ rows: [] }) : null;
       var oBasicSearch = new SearchField({
         width: "100%",
         placeholder: oBundle.getText("valueHelpSearchPlaceholder")
@@ -389,7 +411,9 @@ sap.ui.define([
         threshold: 100,
         enableColumnReordering: false
       });
-      if (oConfig.modelName) {
+      if (oValueHelpModel) {
+        oTable.setModel(oValueHelpModel);
+      } else if (oConfig.modelName) {
         oTable.setModel(this.getOwnerComponent().getModel(oConfig.modelName));
       }
       oConfig.columns.forEach(function (oColumn) {
@@ -419,20 +443,20 @@ sap.ui.define([
             }
           });
           oInput.removeAllTokens();
-          oOkEvent.getParameter("tokens").forEach(function (oToken) {
-            var oClonedToken = oToken.clone();
+          oOkEvent.getParameter("tokens").forEach(function (oToken, iIndex) {
             var oExistingRange = oToken.data("range");
-            var sDisplayValue = oClonedToken.getKey() || oClonedToken.data("longKey");
-            oClonedToken.data("range", oExistingRange || {
+            if (oExistingRange) {
+              oInput.addToken(that._createConditionToken(oExistingRange, iIndex));
+              return;
+            }
+            var sDisplayValue = oToken.getKey() || oToken.data("longKey");
+            var oRange = {
               exclude: false,
               operation: RangeOperation.EQ,
               value1: mFilterValues[sDisplayValue] || sDisplayValue,
               displayValue: sDisplayValue
-            });
-            if (oConfig.showDescriptionInToken === false) {
-              oClonedToken.setText((oClonedToken.data("range") || {}).displayValue || sDisplayValue);
-            }
-            oInput.addToken(oClonedToken);
+            };
+            oInput.addToken(that._createConditionToken(oRange, iIndex));
           });
           oInput.setValue("");
           oDialog.close();
@@ -445,6 +469,27 @@ sap.ui.define([
         }
       });
       var fnBindRows = function () {
+        if (oConfig.loadRows) {
+          var mFieldValues = {};
+          aFieldControls.forEach(function (oFieldControl) {
+            mFieldValues[oFieldControl.definition.path] = oFieldControl.control.getValue();
+          });
+          oDialog.setBusy(true);
+          oConfig.loadRows(oBasicSearch.getValue(), mFieldValues)
+            .then(function (aRows) {
+              oValueHelpModel.setProperty("/rows", aRows);
+              oTable.bindRows("/rows");
+              oDialog.update();
+            })
+            .catch(function () {
+              oValueHelpModel.setProperty("/rows", []);
+              MessageToast.show(oBundle.getText("providerPinHelpLoadError"));
+            })
+            .finally(function () {
+              oDialog.setBusy(false);
+            });
+          return;
+        }
         oTable.bindRows({
           path: "/" + oConfig.entitySet,
           parameters: { $select: oConfig.select.join(",") },
@@ -486,17 +531,128 @@ sap.ui.define([
       fnBindRows();
     },
 
+    _loadProviderPinRows: function (sBasicSearch, mFieldValues, sAdditionalFilter) {
+      var oProps = ServiceSchema.providerOrderService.soldToDetailsProperties;
+      var sSoldToParty = oProps.soldToParty;
+      var sIdentificationNumber = oProps.identificationNumber;
+      var aFilters = [];
+      var fnQuote = function (sValue) {
+        return "'" + String(sValue).replace(/'/g, "''") + "'";
+      };
+      var fnContains = function (sProperty, sValue) {
+        return "contains(" + sProperty + "," + fnQuote(sValue) + ")";
+      };
+      if (sBasicSearch) {
+        aFilters.push("(" + fnContains(sIdentificationNumber, sBasicSearch) + " or " +
+          fnContains(sSoldToParty, sBasicSearch) + ")");
+      }
+      if (sAdditionalFilter) {
+        aFilters.push("(" + sAdditionalFilter + ")");
+      }
+      [sIdentificationNumber, sSoldToParty].forEach(function (sProperty) {
+        if (mFieldValues[sProperty]) {
+          aFilters.push(fnContains(sProperty, mFieldValues[sProperty]));
+        }
+      });
+      var sApply = (aFilters.length ? "filter(" + aFilters.join(" and ") + ")/" : "") +
+        "groupby((" + sSoldToParty + "," + sIdentificationNumber + "))";
+      var oDataSource = this.getOwnerComponent().getManifestObject()
+        .getEntry("/sap.app/dataSources/providerOrderService");
+      var oQuery = new URLSearchParams();
+      oQuery.set("$apply", sApply);
+      oQuery.set("$orderby", sIdentificationNumber);
+      oQuery.set("$top", "200");
+      var sClient = new URLSearchParams(window.location.search).get("sap-client");
+      if (sClient) {
+        oQuery.set("sap-client", sClient);
+      }
+      return fetch(oDataSource.uri + ServiceSchema.providerOrderService.entitySets.soldToDetails + "?" + oQuery.toString(), {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      }).then(function (oResponse) {
+        if (!oResponse.ok) {
+          throw new Error("Provider PIN request failed with HTTP " + oResponse.status);
+        }
+        return oResponse.json();
+      }).then(function (oData) {
+        return oData.value || [];
+      });
+    },
+
+    _providerPinConditionExpression: function (oCondition) {
+      var sProperty = ServiceSchema.providerOrderService.soldToDetailsProperties.identificationNumber;
+      var fnQuote = function (sValue) {
+        return "'" + String(sValue == null ? "" : sValue).replace(/'/g, "''") + "'";
+      };
+      var sValue1 = fnQuote(oCondition.value1);
+      var sValue2 = fnQuote(oCondition.value2);
+      return {
+        EQ: sProperty + " eq " + sValue1,
+        Empty: sProperty + " eq ''",
+        Contains: "contains(" + sProperty + "," + sValue1 + ")",
+        BT: "(" + sProperty + " ge " + sValue1 + " and " + sProperty + " le " + sValue2 + ")",
+        StartsWith: "startswith(" + sProperty + "," + sValue1 + ")",
+        EndsWith: "endswith(" + sProperty + "," + sValue1 + ")",
+        LT: sProperty + " lt " + sValue1,
+        LE: sProperty + " le " + sValue1,
+        GT: sProperty + " gt " + sValue1,
+        GE: sProperty + " ge " + sValue1
+      }[oCondition.operation] || sProperty + " eq " + sValue1;
+    },
+
+    _resolveProviderPinFilters: function () {
+      var aConditions = this._getInputConditions("filterProviderPin");
+      var sProviderIdPath = ServiceSchema.headerProperties.providerId;
+      var oProps = ServiceSchema.providerOrderService.soldToDetailsProperties;
+      var aIncludeFilters = [];
+      var aExcludeFilters = [];
+      var aPending = aConditions.map(function (oCondition) {
+        if (oCondition.displayValue) {
+          var oResolvedFilter = new Filter(sProviderIdPath,
+            oCondition.exclude ? FilterOperator.NE : FilterOperator.EQ, oCondition.value1);
+          (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oResolvedFilter);
+          return Promise.resolve();
+        }
+        return this._loadProviderPinRows("", {}, this._providerPinConditionExpression(oCondition)).then(function (aRows) {
+          var aProviderIds = aRows.map(function (oRow) {
+            return oRow[oProps.soldToParty];
+          }).filter(function (sProviderId, iIndex, aIds) {
+            return sProviderId && aIds.indexOf(sProviderId) === iIndex;
+          });
+          if (!aProviderIds.length && !oCondition.exclude) {
+            aIncludeFilters.push(new Filter(sProviderIdPath, FilterOperator.EQ, ""));
+            return;
+          }
+          aProviderIds.forEach(function (sProviderId) {
+            var oFilter = new Filter(sProviderIdPath,
+              oCondition.exclude ? FilterOperator.NE : FilterOperator.EQ, sProviderId);
+            (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oFilter);
+          });
+        });
+      }, this);
+      return Promise.all(aPending).then(function () {
+        var aFilters = [];
+        if (aIncludeFilters.length) {
+          aFilters.push(new Filter({ filters: aIncludeFilters, and: false }));
+        }
+        if (aExcludeFilters.length) {
+          aFilters.push(new Filter({ filters: aExcludeFilters, and: true }));
+        }
+        return aFilters;
+      });
+    },
+
     onProviderPinValueHelpRequest: function () {
       var oProps = ServiceSchema.providerOrderService.soldToDetailsProperties;
       this._openStandardEntityValueHelp(this.byId("filterProviderPin"), {
         title: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("filterProviderPin"),
         modelName: "po",
         entitySet: ServiceSchema.providerOrderService.entitySets.soldToDetails,
+        loadRows: this._loadProviderPinRows.bind(this),
         key: oProps.identificationNumber,
         descriptionKey: oProps.soldToParty,
         filterValueKey: oProps.soldToParty,
         showDescriptionInToken: false,
-        supportRanges: false,
         select: [oProps.identificationNumber, oProps.soldToParty],
         searchPaths: [oProps.identificationNumber, oProps.soldToParty],
         fields: [
@@ -711,10 +867,15 @@ sap.ui.define([
     },
 
     onSearch: function () {
-      var aFilters = [];
-      var oView = this.getView();
+      var iSearchRequest = (this._iSearchRequest || 0) + 1;
+      this._iSearchRequest = iSearchRequest;
+      this._oViewModel.setProperty("/masterBusy", true);
+      this._resolveProviderPinFilters().then(function (aFilters) {
+        if (this._iSearchRequest !== iSearchRequest) {
+          return;
+        }
+        var oView = this.getView();
 
-      this._pushConditionFilters(aFilters, "filterProviderPin");
       this._pushConditionFilters(aFilters, "filterRequestId");
       this._pushConditionFilters(aFilters, "filterExisId");
       this._pushConditionFilters(aFilters, "filterProvider");
@@ -784,7 +945,17 @@ sap.ui.define([
         oBinding.filter(aFilters);
       }
 
-      this._oViewModel.setProperty("/masterHasSearch", true);
+        this._oViewModel.setProperty("/masterHasSearch", true);
+      }.bind(this)).catch(function () {
+        if (this._iSearchRequest === iSearchRequest) {
+          MessageToast.show(this.getOwnerComponent().getModel("i18n").getResourceBundle()
+            .getText("providerPinHelpLoadError"));
+        }
+      }.bind(this)).finally(function () {
+        if (this._iSearchRequest === iSearchRequest) {
+          this._oViewModel.setProperty("/masterBusy", false);
+        }
+      }.bind(this));
     },
 
     onFilterBarClear: function () {
