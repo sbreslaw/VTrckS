@@ -63,9 +63,9 @@ sap.ui.define([], function () {
       // so.xml ~line 1250 - PartnerFunction/PartnerFunction_Text/
       // SDDocumentPartnerType).
       partnerFunction: "PartnerFunction",
-      // 3.9: HeaderPartnerType (so.xml ~line 1065), reached in this app only
-      // via the header's _Partner navigation (never queried top-level) -
-      // listed here for completeness/grep-isolation, not used as a bind path.
+      // 3.9: HeaderPartnerType (so.xml ~line 1065), reached through the
+      // header's _Partner navigation for detail editing and queried directly
+      // by composite key for master-list AP contact enrichment.
       headerPartner: "HeaderPartner",
       // Client requirement (2026-10-01): real top-level fixed-values entity
       // sets (OverallDeliveryStatusType/OverallDeliveryBlockStatusType,
@@ -638,7 +638,10 @@ sap.ui.define([], function () {
       // mirror used for RO rendering of already-created rows.
       customer: "Customer",
       partner: "Partner",
+      contactPerson: "ContactPerson",
       fullName: "FullName",
+      phone: "InternationalPhoneNumber",
+      email: "EmailAddress",
       address: "FormattedPostalAddressDesc",
       // Dynamic per-row capability structs (so.xml ~1065) - Delete/Update
       // enablement for each HeaderPartner row must read these, not a static

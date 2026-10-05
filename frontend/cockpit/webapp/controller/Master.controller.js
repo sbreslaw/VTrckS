@@ -69,6 +69,8 @@ sap.ui.define([
       // into the FlexibleColumnLayout's aggregation, so model propagation via
       // this.getView().getModel("view") has not happened yet and returns undefined.
       this._oViewModel = this.getOwnerComponent().getModel("view");
+      this.getView().setModel(new JSONModel({ byOrder: {} }), "masterContacts");
+      this._mMasterContactRequests = {};
       this._aColumnDefs = this._getColumnDefs();
       this._applyFilterAvailability();
       this._populateStatusCodes();
@@ -986,7 +988,50 @@ sap.ui.define([
       if (oBinding) {
         this._oViewModel.setProperty("/masterCount", oBinding.getCount());
       }
+      this._loadVisibleMasterContacts();
       this._persistVisibleRowCount();
+    },
+
+    _loadVisibleMasterContacts: function () {
+      if (!this._oViewModel.getProperty("/masterHasSearch")) {
+        return;
+      }
+      var oTable = this.byId("requestsTable");
+      var oContactModel = this.getView().getModel("masterContacts");
+      var oODataModel = this.getView().getModel();
+      var oProps = ServiceSchema.headerPartnerProperties;
+      var aSelect = [ServiceSchema.keys.orderId, oProps.partnerFunction, oProps.fullName,
+        oProps.contactPerson, oProps.phone, oProps.email].join(",");
+      oTable.getRows().forEach(function (oRow) {
+        var oContext = oRow.getBindingContext();
+        var sOrderId = oContext && oContext.getProperty(ServiceSchema.keys.orderId);
+        if (!sOrderId || this._mMasterContactRequests[sOrderId]) {
+          return;
+        }
+        this._mMasterContactRequests[sOrderId] = true;
+        var sEscapedOrderId = String(sOrderId).replace(/'/g, "''");
+        var sPath = "/" + ServiceSchema.entitySets.headerPartner +
+          "(SalesOrder='" + sEscapedOrderId + "',PartnerFunction='AP')";
+        var oContactBinding = oODataModel.bindContext(sPath, undefined, { $select: aSelect });
+        var fnSetContact = function (oContact) {
+          var mContacts = Object.assign({}, oContactModel.getProperty("/byOrder"));
+          mContacts[sOrderId] = oContact;
+          oContactModel.setProperty("/byOrder", mContacts);
+        };
+        oContactBinding.requestObject().then(function (oContact) {
+          var sContactPerson = oContact[oProps.contactPerson];
+          var sName = oContact[oProps.fullName] || (sContactPerson && sContactPerson !== "0" ? sContactPerson : "");
+          var aDetails = [oContact[oProps.email], oContact[oProps.phone]].filter(Boolean);
+          fnSetContact({
+            display: sName || "",
+            tooltip: aDetails.length ? [sName].concat(aDetails).filter(Boolean).join(" · ") : (sName || "")
+          });
+        }).catch(function () {
+          fnSetContact({ display: "", tooltip: "" });
+        }).finally(function () {
+          oContactBinding.destroy();
+        });
+      }, this);
     },
 
     // CRUD Task 1 v3 (In-Place Create): the Create dialog is removed — creation
@@ -1353,26 +1398,27 @@ sap.ui.define([
           key: "contact", i18nKey: "colContact", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
-            // RUNTIME-BLOCKED-BY-SERVICE: expanding _SoldToPartyContactInfo on
-            // the master LIST (multiple header rows at once) causes a backend
-            // 500 ASSERTION_FAILED dump in the custom provider
-            // CL_SD_S4H_STD_PARTNER_CONTACT=CM002 (confirmed live 2026-08-03 via
-            // ST22 short dump, see NOTES.md) — independent of which fields are
-            // selected. Do not rebind without re-verifying against the live
-            // backend first.
-            // return new ObjectIdentifier({
-            //   title: {
-            //     path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
-            //     formatter: formatter.masterContact
-            //   },
-            //   text: { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.phone }
-            // });
-
-            // return new Text({ text: { 
-            //   path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
-            //   formatter: formatter.masterContact
-            // } });
-            return new Text({ text: formatter.masterContact(), wrapping: false });
+            return new Text({
+              wrapping: false,
+              text: {
+                parts: [
+                  { path: ServiceSchema.keys.orderId },
+                  { path: "masterContacts>/byOrder" }
+                ],
+                formatter: function (sOrderId, mContacts) {
+                  return (mContacts && mContacts[sOrderId] && mContacts[sOrderId].display) || "";
+                }
+              },
+              tooltip: {
+                parts: [
+                  { path: ServiceSchema.keys.orderId },
+                  { path: "masterContacts>/byOrder" }
+                ],
+                formatter: function (sOrderId, mContacts) {
+                  return (mContacts && mContacts[sOrderId] && mContacts[sOrderId].tooltip) || "";
+                }
+              }
+            });
           }
         },
         {

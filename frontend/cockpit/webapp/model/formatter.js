@@ -201,11 +201,6 @@ sap.ui.define([
       return sValue || EM_DASH;
     },
 
-    masterContact: function (sFullName) {
-      return '*****';
-      // return orDash(sFullName);
-    },
-
     masterCreatedAt: function (oValue) {
       if (!oValue) {
         return "";
