@@ -70,6 +70,9 @@ sap.ui.define([
       oDialog.setModel(that._oModel, "split");
       that._recalcTotal();
       oDialog.open();
+      return new Promise(function (resolve) {
+        oDialog.attachEventOnce("afterClose", resolve);
+      });
     });
   };
 
@@ -94,7 +97,7 @@ sap.ui.define([
   };
 
   FundSplitDialog.prototype.onDonePress = function () {
-    FundLogicService.commitSplit(this._oRowContext, this._oModel.getProperty("/rows") || []);
+    FundLogicService.commitSplit(this._oRowContext, this._oModel.getProperty("/rows") || []).catch(function () {});
     this._oDialog.close();
   };
 

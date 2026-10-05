@@ -416,6 +416,24 @@ sap.ui.define([
       this._endEditSession(sSectionId);
     },
 
+    onDetailStatusChange: function (oEvent) {
+      var oSelect = oEvent.getSource();
+      var oSelectedItem = oSelect.getSelectedItem();
+      var oContext = oSelect.getBindingContext();
+      if (!oContext || !oSelectedItem) {
+        return;
+      }
+      var oStatusContext = oSelectedItem.getBindingContext("enums");
+      var sStatus = oStatusContext && oStatusContext.getProperty("text");
+      if (!sStatus) {
+        return;
+      }
+      var pUpdate = oContext.setProperty(ServiceSchema.headerProperties.userStatus, sStatus);
+      if (pUpdate && pUpdate.catch) {
+        pUpdate.catch(function () {});
+      }
+    },
+
     // Sections whose display Text reads a code's expanded to-one nav-property
     // text (e.g. Order Reason code -> _SDDocumentReason/SDDocumentReason_Text):
     // changing the code points that nav at a *different* entity, and
@@ -839,9 +857,12 @@ sap.ui.define([
       // event shouldn't be reachable otherwise - guarded anyway so the dialog
       // can never auto-open from a display-mode row.
       if (FundLogicService.isSplitFund(sKey) && this.getView().getModel("sectionFlags").getProperty("/items/editing")) {
-        this._getFundSplitDialog().open(oRowContext, "edit");
+        this._getFundSplitDialog().open(oRowContext, "edit").then(function () {
+          this._checkItemRowComplete(oRowContext);
+        }.bind(this));
+      } else {
+        this._checkItemRowComplete(oRowContext);
       }
-      this._checkItemRowComplete(oRowContext);
       Promise.all(aPending).catch(function (oError) {
         this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
       }.bind(this));
@@ -1617,7 +1638,8 @@ sap.ui.define([
         });
       }
       return new JSONModel({
-        STATUS: resolve(Enums.STATUS)
+        STATUS: resolve(Enums.STATUS),
+        EDIT_STATUS: resolve(Enums.EDIT_STATUS)
       });
     },
 

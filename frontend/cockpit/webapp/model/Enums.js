@@ -35,6 +35,13 @@ sap.ui.define([], function () {
     { key: "1E", i18nKey: "enumStatus1E" },
     { key: "1F", i18nKey: "enumStatus1F" }
   ];
+  var EDIT_STATUS = [
+    { key: "1A", i18nKey: "enumStatus1A" },
+    { key: "1B", i18nKey: "enumStatus1B" },
+    { key: "1D", i18nKey: "enumStatus1D" },
+    { key: "1E", i18nKey: "enumStatus1E" },
+    { key: "1F", i18nKey: "enumStatus1F" }
+  ];
 
   // Client requirement (2026-08-31, VBAP-MVGR2/MaterialGroup2 - Items.fragment.xml
   // Fund Type column). Codes confirmed by the client (2026-08-31) - real
@@ -68,6 +75,7 @@ sap.ui.define([], function () {
     ORDER_REASON: ORDER_REASON,
     INTENTION: INTENTION,
     STATUS: STATUS,
+    EDIT_STATUS: EDIT_STATUS,
     FUND_TYPE: FUND_TYPE,
     FUND_TYPE_BY_INTENTION: FUND_TYPE_BY_INTENTION,
     INTENTION_DEFAULT: "PED_AND_ADULT",

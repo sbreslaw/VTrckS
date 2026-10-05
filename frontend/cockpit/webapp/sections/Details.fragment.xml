@@ -358,12 +358,21 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}"/>
+								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Select
+									selectedKey="{path: 'UserStatusDerived', formatter: '.formatter.masterStatusCode'}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/details/editing} }"
+									width="100%"
+									forceSelection="false"
+									change=".onDetailStatusChange"
+									items="{enums>/EDIT_STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
 								<Select
 									selectedKey="{createEnrich>/status}"
 									visible="{sectionFlags>/createMode}"
 									width="100%"
-									enabled="{createState>/providerChosen}"
 									tooltip="{i18n>createEnrichmentUnavailable}"
 									items="{enums>/STATUS}">
 									<core:Item key="{enums>key}" text="{enums>text}" />
