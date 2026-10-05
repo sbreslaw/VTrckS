@@ -871,7 +871,53 @@ sap.ui.define([
     },
 
     onMasterExportAs: function () {
-      this._exportMasterRows("ProviderOrders_" + new Date().toISOString().slice(0, 10) + ".xlsx");
+      var that = this;
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var sDefaultName = "ProviderOrders_" + new Date().toISOString().slice(0, 10) + ".xlsx";
+      var oDialog;
+      var oInput = new Input({
+        value: sDefaultName,
+        placeholder: oBundle.getText("masterExportFileName"),
+        liveChange: function () {
+          oInput.setValueState("None");
+        },
+        submit: function () {
+          exportWithName();
+        }
+      });
+      function exportWithName() {
+        var sFileName = oInput.getValue().trim();
+        if (!sFileName) {
+          oInput.setValueState("Error");
+          oInput.setValueStateText(oBundle.getText("masterExportFileNameRequired"));
+          return;
+        }
+        if (!/\.xlsx$/i.test(sFileName)) {
+          sFileName += ".xlsx";
+        }
+        oDialog.close();
+        that._exportMasterRows(sFileName);
+      }
+      oDialog = new Dialog({
+        title: oBundle.getText("masterExportAsTitle"),
+        contentWidth: "24rem",
+        content: [oInput],
+        beginButton: new Button({
+          text: oBundle.getText("masterExport"),
+          press: exportWithName
+        }),
+        endButton: new Button({
+          text: oBundle.getText("cancel"),
+          press: function () { oDialog.close(); }
+        }),
+        afterOpen: function () {
+          oInput.focus();
+          oInput.selectText(0, sDefaultName.length - ".xlsx".length);
+        },
+        afterClose: function () { oDialog.destroy(); }
+      }).addStyleClass("sapUiContentPadding");
+      this.getView().addDependent(oDialog);
+      oDialog.open();
     },
 
     _exportMasterRows: function (sFileName) {

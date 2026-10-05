@@ -183,9 +183,7 @@
               <MenuButton
                 icon="sap-icon://excel-attachment"
                 type="Transparent"
-                buttonMode="Split"
-                tooltip="{i18n>masterExport}"
-                defaultAction=".onMasterExport">
+                tooltip="{i18n>masterExport}">
                 <menu>
                   <Menu>
                     <items>
