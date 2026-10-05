@@ -257,11 +257,26 @@ sap.ui.define([
 
     _scheduleMasterTableFit: function () {
       clearTimeout(this._iMasterTableFitTimer);
+      clearTimeout(this._iFilterBarActionTimer);
       this._iMasterTableFitTimer = setTimeout(function () {
+        if (!this._isMasterPageVisible()) {
+          return;
+        }
         this._syncFilterBarActions();
         this._fitMasterTableToViewport();
       }.bind(this), 0);
-      this._iFilterBarActionTimer = setTimeout(this._syncFilterBarActions.bind(this), 100);
+      this._iFilterBarActionTimer = setTimeout(function () {
+        if (this._isMasterPageVisible()) {
+          this._syncFilterBarActions();
+        }
+      }.bind(this), 100);
+    },
+
+    _isMasterPageVisible: function () {
+      var oPageDomRef = this.byId("masterPage").getDomRef();
+      var oPageRect = oPageDomRef && oPageDomRef.getBoundingClientRect();
+      return !!oPageRect && !!oPageRect.width && !!oPageRect.height
+        && oPageRect.right > 0 && oPageRect.left < window.innerWidth;
     },
 
     _fitMasterTableToViewport: function () {
@@ -949,6 +964,7 @@ sap.ui.define([
 
     _onRouteMatched: function () {
       this._oViewModel.setProperty("/masterBusy", false);
+      this._scheduleMasterTableFit();
     },
 
     _pushIfValue: function (aFilters, sPath, sValue, sOperator, sValueTo) {
