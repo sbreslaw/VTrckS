@@ -87,7 +87,10 @@ sap.ui.define([
             template: new MessageItem({
               type: "{message>type}",
               title: "{message>message}",
-              subtitle: "{message>additionalText}",
+              subtitle: {
+                parts: ["message>code", "message>additionalText", "message>technicalDetails"],
+                formatter: formatter.messageSubtitle
+              },
               description: "{message>description}"
             })
           }

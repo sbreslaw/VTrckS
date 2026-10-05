@@ -276,6 +276,16 @@ sap.ui.define([
       return bHasWarning ? "Critical" : "Neutral";
     },
 
+    messageSubtitle: function (sCode, sAdditionalText, oTechnicalDetails) {
+      var sMessageCode = sCode || (oTechnicalDetails && oTechnicalDetails.code) || "";
+      var sHttpStatus = oTechnicalDetails && oTechnicalDetails.httpStatus;
+      var sTechnicalId = sMessageCode || (sHttpStatus ? ("HTTP " + sHttpStatus) : "");
+      if (sTechnicalId && sAdditionalText && sAdditionalText !== sTechnicalId) {
+        return sTechnicalId + " - " + sAdditionalText;
+      }
+      return sTechnicalId || sAdditionalText || "";
+    },
+
     detailTitle: function (sOrderId, sContact, sPrefix, sFallback) {
       if (!sOrderId) {
         return sFallback;

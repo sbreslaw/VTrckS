@@ -261,7 +261,6 @@ sap.ui.define([
             type: "String"
           };
         });
-
       var aRows = aContexts.map(function (oCtx) {
         return {
           optOut: oCtx.getProperty(ServiceSchema.itemProperties.optOutAncillary),
@@ -373,7 +372,10 @@ sap.ui.define([
             template: new MessageItem({
               type: "{message>type}",
               title: "{message>message}",
-              subtitle: "{message>additionalText}",
+              subtitle: {
+                parts: ["message>code", "message>additionalText", "message>technicalDetails"],
+                formatter: formatter.messageSubtitle
+              },
               description: "{message>description}"
             })
           }
@@ -619,6 +621,27 @@ sap.ui.define([
       oRowContext.setProperty(ServiceSchema.itemProperties.unit, "");
     },
 
+    _ownsNdcAddGate: function (oRowContext) {
+      if (!oRowContext) {
+        return false;
+      }
+      var oItemsMeta = this.getView().getModel("itemsMeta");
+      var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber) || "";
+      var sNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material) || "";
+      var sEditableItemNumber = oItemsMeta.getProperty("/editableNdcItemNumber") || "";
+      var sEditableNdc = oItemsMeta.getProperty("/editableNdcValue") || "";
+      return sEditableItemNumber
+        ? sItemNumber === sEditableItemNumber
+        : !sItemNumber && sNdc === sEditableNdc;
+    },
+
+    _releaseNdcAddGate: function () {
+      var oItemsMeta = this.getView().getModel("itemsMeta");
+      oItemsMeta.setProperty("/editableNdcItemNumber", "");
+      oItemsMeta.setProperty("/editableNdcValue", "");
+      oItemsMeta.setProperty("/canAddItem", true);
+    },
+
     // Issue Batch 9-30-001 §3.4: NDC typeahead - filters the row's own
     // templated Input's "suggestionItems" aggregation binding (bound against
     // /Product, Items.fragment.xml), Contains on id/text, debounced per-row
@@ -744,6 +767,7 @@ sap.ui.define([
       var that = this;
       var oRowContext = oEvent.getSource().getBindingContext();
       var sQty = oEvent.getParameter('value');
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       // ZZVFCQTY/ZZ317QTY/etc. are Edm.Int32 (design/so.xml) - RequestedQuantity
       // is Edm.Decimal, so this Input's own "value" here is that type's
       // formatted decimal string (e.g. "67.000"); sending that verbatim
@@ -759,13 +783,16 @@ sap.ui.define([
       // must send the raw decimal STRING (sQty), never the rounded iValue
       // integer, or the deep-create POST fails the same malformed-XML way
       // the Int32 comment above warns about.
-      var aPending = [oRowContext.setProperty(ServiceSchema.itemProperties.quantity, sQty)];
+      var aPending = [];
       // A2/A4: which quantity mirror gets the value now follows the row's own
       // fundType selection (see onFundTypeChange) instead of always ZZSTATEQTY.
       var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
       if (oFundType && oFundType.targetField) {
         aPending.push(oRowContext.setProperty(oFundType.targetField, iValue));
       }
+      // Quantity is the field that can complete and activate an inactive row,
+      // so write it only after its allocation mirror is already staged.
+      aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.quantity, sQty));
       // Issue Batch 9-30-001 §2: snapshot the six ZZ*QTY fields right after
       // writing one of them - see FundLogicService.js's own cache comment.
       FundLogicService.cacheAllocation(oRowContext);
@@ -775,11 +802,11 @@ sap.ui.define([
       // and any already-inserted ancillary child rows' quantities as a side
       // effect of this PATCH - only a real, already-posted row (not still a
       // local scratch row) can have such children yet.
-      if (oRowContext.isTransient && !oRowContext.isTransient()) {
-        Promise.all(aPending).then(function () {
-          return that._refreshItemsBinding();
-        });
-      }
+      Promise.all(aPending).then(function () {
+        return bPersisted ? that._refreshItemsBinding() : undefined;
+      }).catch(function (oError) {
+        that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      });
     },
 
     // Items fundType (MaterialGroup2) change - mirrors the row's current
@@ -790,13 +817,18 @@ sap.ui.define([
       var oSelectedItem = oEvent.getParameter("selectedItem");
       var sKey = oSelectedItem ? oSelectedItem.getKey() : oEvent.getSource().getSelectedKey();
       var oRowContext = oEvent.getSource().getBindingContext();
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       var iQty = Math.round(parseFloat(oRowContext.getProperty(ServiceSchema.itemProperties.quantity)));
       var iValue = isNaN(iQty) ? 0 : iQty;
+      var aPending = [];
       this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
         if (oEntry.targetField) {
-          oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0);
+          aPending.push(oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0));
         }
       });
+      // Fund type can complete and activate an inactive row. Its mirror fields
+      // must be staged before this final business-property write.
+      aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.fundType, sKey));
       // Issue Batch 9-30-001 §2: same snapshot as onProdQtyChange above.
       FundLogicService.cacheAllocation(oRowContext);
       // Fund Split dialog session prompt, Trigger 1: selecting SPLIT opens the
@@ -810,6 +842,23 @@ sap.ui.define([
         this._getFundSplitDialog().open(oRowContext, "edit");
       }
       this._checkItemRowComplete(oRowContext);
+      Promise.all(aPending).catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
+    },
+
+    _handleItemFieldUpdateError: function (oError, oRowContext, bPersisted) {
+      // A transient row's created() rejection is already surfaced by
+      // _onItemCreateActivate. Only independently PATCHed persisted rows need
+      // extraction here; both paths still consume the property promises.
+      if (!bPersisted) {
+        return;
+      }
+      var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), this.getResourceBundle());
+      aSectionIds.forEach(function (sId) {
+        this._oSectionFactory.expandSection(sId);
+      }, this);
+      this._openMessagePopover();
     },
 
     // Fund Split dialog session prompt, Trigger 2 (item Action menu): mode is
@@ -841,16 +890,25 @@ sap.ui.define([
     onOrderIntentionChange: function (oEvent) {
       var sIntention = oEvent.getParameter("selectedItem").getKey();
       var oRowContext = oEvent.getSource().getBindingContext();
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
+      var aPending = [];
       if (oFundType && !formatter.fundTypeItemEnabled(sIntention, oFundType.pediatricOnly, oFundType.disabled)) {
-        oRowContext.setProperty(ServiceSchema.itemProperties.fundType, "");
         this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
           if (oEntry.targetField) {
-            oRowContext.setProperty(oEntry.targetField, 0);
+            aPending.push(oRowContext.setProperty(oEntry.targetField, 0));
           }
         });
+        aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.fundType, ""));
+        FundLogicService.cacheAllocation(oRowContext);
       }
+      // Intention can complete and activate an inactive row, so dependent
+      // fund cleanup must be staged before this final write.
+      aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.orderIntention, sIntention));
       this._checkItemRowComplete(oRowContext);
+      Promise.all(aPending).catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
     },
 
     // A row only "completes" (and gets posted for real) once NDC + quantity +
@@ -1394,6 +1452,7 @@ sap.ui.define([
           // refresh, then delete the row itself - whatever ancillary rows
           // still remain are the backend's own to reconcile when the parent
           // line goes, not ours to delete client-side.
+          var bReleasesNdcAddGate = that._ownsNdcAddGate(oRowContext);
           var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
           var bHasChildren = that._getAncillaryChildContexts(sItemNumber).length > 0;
           var pChain = bHasChildren
@@ -1416,6 +1475,9 @@ sap.ui.define([
             : oRowContext.delete();
           pChain
             .then(function () {
+              if (bReleasesNdcAddGate) {
+                that._releaseNdcAddGate();
+              }
               MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
             })
             .catch(function (oError) {
@@ -2553,33 +2615,23 @@ sap.ui.define([
       this.getView().setBusy(true);
       var sNewId;
 
-      // Session Prompt (Detail View Adjustments) 3.1: harvest the createMode
-      // Priority Select's value onto every STILL-TRANSIENT scratch item
-      // context - CreateOrderService.js's item deep-create step copies ALL
-      // own properties of each scratch context (not a fixed whitelist), so
-      // this needs no other change there to actually replay. An already-
-      // posted (session-bound) row must NOT be re-patched here - confirmed
-      // live this field goes backend read-only the instant a row posts, any
-      // later PATCH 422s ("Read-only fields must not be changed"); those rows
-      // already got it stamped once, pre-POST, by _applyCreatePriorityToRow,
-      // and the Priority Select itself is locked from that point on
-      // (createState>/priorityLocked, set in _bindItemsTableToSession).
-      var sCreatePriority = this.getView().getModel("priorityState").getProperty("/value");
-      if (sCreatePriority && oItemsBinding) {
-        oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
-          if (oItemContext.isTransient && oItemContext.isTransient()) {
-            oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority).catch(function () {});
-          }
-        });
-      }
-
-      // "Total Split Qty ... does not match the Order Qty" (SaveChanges) is a
-      // BACKEND-ONLY defect (round 21) - reproduced identically in the
-      // standard SAP "Manage Sales Order V2" Fiori app with ZZVFCQTY never
-      // touched by any client at all, so no client-side reconciliation before
-      // Save can fix it; removed after confirming the backend silently
-      // discards any client PATCH to ZZxxxQTY regardless of timing.
-      CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession)
+      Promise.resolve().then(function () {
+        // Harvest create-mode Priority onto every still-transient item. This
+        // promise boundary also routes synchronous setup failures through the
+        // same cleanup path as rejected backend requests.
+        var sCreatePriority = that.getView().getModel("priorityState").getProperty("/value");
+        if (sCreatePriority && oItemsBinding) {
+          oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
+            if (oItemContext.isTransient && oItemContext.isTransient()) {
+              var pSetPriority = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
+              if (pSetPriority && pSetPriority.catch) {
+                pSetPriority.catch(function () {});
+              }
+            }
+          });
+        }
+        return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession);
+      })
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
         // CreateOrderService.save()). Enrichment/IoH failing from here on is a
@@ -2691,6 +2743,7 @@ sap.ui.define([
         return;
       }
       this._destroyCreateContext();
+      this._resetCreateSaveState();
       this._setCreateMode(false);
       this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
       this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
@@ -2721,6 +2774,7 @@ sap.ui.define([
     // "detail" route uses. No backend contact happens until Save.
     _onCreateMatched: function () {
       this._destroyCreateContext();
+      this._resetCreateSaveState();
       // A prior "detail" route visit leaves an active bindElement() on the
       // view - an element binding always wins over the plain
       // setBindingContext() below (UI5 propagation rules), so without this
@@ -2749,8 +2803,17 @@ sap.ui.define([
 
     _onMasterMatched: function () {
       this._destroyCreateContext();
+      this._resetCreateSaveState();
       this._setCreateMode(false);
       Messaging.removeAllMessages();
+    },
+
+    _resetCreateSaveState: function () {
+      this.getView().setBusy(false);
+      var oSaveButton = this.byId("createSaveBtn");
+      if (oSaveButton) {
+        oSaveButton.setEnabled(true);
+      }
     },
 
     // Cleans up a previous transient create context (e.g. the user leaves the
