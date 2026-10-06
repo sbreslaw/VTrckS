@@ -17,6 +17,15 @@ sap.ui.define([
   "sap/m/Label",
   "sap/m/SelectDialog",
   "sap/m/StandardListItem",
+  "sap/m/SearchField",
+  "sap/m/RadioButton",
+  "sap/m/Token",
+  "sap/ui/table/Table",
+  "sap/ui/table/Column",
+  "sap/ui/table/rowmodes/Auto",
+  "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
+  "sap/ui/comp/filterbar/FilterBar",
+  "sap/ui/comp/filterbar/FilterGroupItem",
   "sap/ui/core/Item",
   "sap/ui/core/ListItem",
   "sap/ui/core/Fragment",
@@ -40,7 +49,8 @@ sap.ui.define([
   "cdc/vaccreq/controller/FundSplitDialog"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
-  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, CoreListItem, Fragment,
+  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
+  RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
   Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, FundLogicService, FundSplitDialog
 ) {
@@ -1999,6 +2009,189 @@ sap.ui.define([
       oDialog.open();
     },
 
+    _openProviderValueHelpDialog: function (fnApply) {
+      var oBundle = this.getResourceBundle();
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oArea = ServiceSchema.salesArea;
+      var aFields = [
+        { path: oProps.customer, labelKey: "providerHelpId" },
+        { path: oProps.customerName, labelKey: "providerHelpName" },
+        { path: oProps.postalCode, labelKey: "providerHelpPostalCode" },
+        { path: oProps.cityName, labelKey: "providerHelpCity" },
+        { path: oProps.countryText, labelKey: "providerHelpCountry" }
+      ];
+      var oBasicSearch = new SearchField({
+        width: "100%",
+        placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+      });
+      var aFieldControls = aFields.map(function (oField) {
+        return { definition: oField, control: new Input() };
+      });
+      var oSelectionModel = new JSONModel({ key: "" });
+      var oSelectedProvider = null;
+      var fnProviderKey = function (oRow) {
+        return [oRow[oProps.customer], oRow[oProps.salesOrganization],
+          oRow[oProps.distributionChannel], oRow[oProps.division]].join("|");
+      };
+      var fnGetFilters = function () {
+        var aFilters = [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)];
+        var sSearchValue = oBasicSearch.getValue();
+        if (sSearchValue) {
+          aFilters.push(new Filter({
+            filters: aFields.map(function (oField) {
+              return new Filter(oField.path, FilterOperator.Contains, sSearchValue);
+            }),
+            and: false
+          }));
+        }
+        aFieldControls.forEach(function (oFieldControl) {
+          var sValue = oFieldControl.control.getValue();
+          if (sValue) {
+            aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
+          }
+        });
+        return aFilters;
+      };
+      var oTable = new GridTable({
+        selectionMode: "None",
+        rowMode: new AutoRowMode({ minRowCount: 8 }),
+        threshold: 100,
+        enableColumnReordering: false
+      });
+      oTable.setModel(oSelectionModel, "providerSelection");
+      oTable.addColumn(new GridColumn({
+        label: new Text(),
+        width: "3rem",
+        hAlign: "Center",
+        template: new RadioButton({
+          groupName: "providerSelection",
+          selected: {
+            parts: [
+              { path: "providerSelection>/key", targetType: "any" },
+              { path: oProps.customer, targetType: "any" },
+              { path: oProps.salesOrganization, targetType: "any" },
+              { path: oProps.distributionChannel, targetType: "any" },
+              { path: oProps.division, targetType: "any" }
+            ],
+            formatter: function (sSelectedKey, sCustomer, sOrganization, sChannel, sDivision) {
+              return sSelectedKey === [sCustomer, sOrganization, sChannel, sDivision].join("|");
+            }
+          },
+          select: function (oEvent) {
+            if (!oEvent.getParameter("selected")) {
+              return;
+            }
+            var oContext = oEvent.getSource().getBindingContext();
+            oSelectedProvider = oContext && oContext.getObject();
+            if (oSelectedProvider) {
+              oSelectionModel.setProperty("/key", fnProviderKey(oSelectedProvider));
+              oDialog.setTokens([]);
+              oDialog.setTokens([new Token({
+                key: oSelectedProvider[oProps.customer],
+                text: oSelectedProvider[oProps.customerName] + " (" + oSelectedProvider[oProps.customer] + ")"
+              })]);
+            }
+          }
+        })
+      }));
+      [
+        { path: oProps.customer, labelKey: "providerHelpId", width: "9rem" },
+        { path: oProps.customerName, labelKey: "providerHelpName", width: "22rem" },
+        { path: oProps.postalCode, labelKey: "providerHelpPostalCode", width: "10rem" },
+        { path: oProps.cityName, labelKey: "providerHelpCity", width: "12rem" },
+        { path: oProps.countryText, labelKey: "providerHelpCountry", width: "12rem" }
+      ].forEach(function (oColumn) {
+        oTable.addColumn(new GridColumn({
+          label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+          template: new Text({ text: "{" + oColumn.path + "}" }),
+          width: oColumn.width
+        }));
+      });
+      var oDialog = new ValueHelpDialog({
+        title: oBundle.getText("providerId"),
+        key: oProps.customer,
+        descriptionKey: oProps.customerName,
+        contentWidth: "66rem",
+        contentHeight: "47rem",
+        draggable: true,
+        resizable: true,
+        supportMultiselect: true,
+        supportRanges: false,
+        supportRangesOnly: false,
+        ok: function () {
+          if (!oSelectedProvider) {
+            return;
+          }
+          var oRow = oSelectedProvider;
+          fnApply({
+            id: oRow[oProps.customer],
+            fullName: oRow[oProps.customerName],
+            address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+              .filter(function (sPart) { return !!sPart; })
+              .join(", "),
+            salesOrganization: oRow[oProps.salesOrganization],
+            distributionChannel: oRow[oProps.distributionChannel],
+            division: oRow[oProps.division]
+          });
+          oDialog.close();
+        },
+        cancel: function () {
+          oDialog.close();
+        },
+        tokenRemove: function () {
+          oSelectedProvider = null;
+          oSelectionModel.setProperty("/key", "");
+          oDialog.setTokens([]);
+        },
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      });
+      var fnBindRows = function () {
+        oSelectedProvider = null;
+        oSelectionModel.setProperty("/key", "");
+        oDialog.setTokens([]);
+        oTable.bindRows({
+          path: "/" + ServiceSchema.entitySets.customerSalesArea,
+          parameters: {
+            $select: [oProps.customer, oProps.customerName, oProps.postalCode, oProps.cityName,
+              oProps.countryText, oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
+          },
+          filters: fnGetFilters(),
+          events: {
+            dataRequested: function () { oDialog.setBusy(true); },
+            dataReceived: function () {
+              oDialog.setBusy(false);
+              oDialog.update();
+            }
+          }
+        });
+      };
+      var oFilterBar = new FilterBar({
+        advancedMode: true,
+        filterBarExpanded: true,
+        showGoOnFB: true,
+        search: fnBindRows
+      });
+      oFilterBar.setBasicSearch(oBasicSearch);
+      oBasicSearch.attachSearch(fnBindRows);
+      aFieldControls.forEach(function (oFieldControl) {
+        oFilterBar.addFilterGroupItem(new FilterGroupItem({
+          groupName: "providerValueHelp",
+          name: oFieldControl.definition.path,
+          label: oBundle.getText(oFieldControl.definition.labelKey),
+          visibleInFilterBar: true,
+          control: oFieldControl.control
+        }));
+      });
+      oDialog.setFilterBar(oFilterBar);
+      oDialog.setTable(oTable);
+      oTable.setSelectionMode("None");
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+      fnBindRows();
+    },
+
     // Session Prompt (Detail View Adjustments) 3.5: Contact VH REWIRED off the
     // old `/StandardPartnerContactInfo` source (superseded - it 501'd on any
     // standalone query anyway) onto the new custom service's
@@ -2170,12 +2363,11 @@ sap.ui.define([
     // createMode field/row-action per the phased-entry UX.
     onProviderValueHelpRequest: function () {
       var that = this;
-      var oBundle = this.getResourceBundle();
-      // _openShipToPartyValueHelpDialog's fnApply gets a normalized
+      // _openProviderValueHelpDialog's fnApply gets a normalized
       // {id, fullName, address, salesOrganization, distributionChannel,
       // division} shape (composed from CustomerSalesArea's fields), not a raw
       // ServiceSchema property-name lookup.
-      this._openShipToPartyValueHelpDialog(oBundle.getText("providerPickerTitle"), function (oItem) {
+      this._openProviderValueHelpDialog(function (oItem) {
         that._applyProviderPick(oItem);
       });
     },
