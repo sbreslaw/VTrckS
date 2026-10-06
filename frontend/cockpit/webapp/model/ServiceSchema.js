@@ -690,9 +690,8 @@ sap.ui.define([], function () {
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
     // custom service (zui_providerorder_srv, manifest.json model "po") -
-    // ProviderContact and SoldToDetails are read from this service. ZZ_IoH
-    // stays ON HOLD (do not wire - see 3.8/NOTES.md) and ProductUOM is
-    // unused/unwired (noted only, see OPEN_QUESTIONS.md).
+    // ProviderContact, ProviderIOH, and SoldToDetails are read from this
+    // service. ProductUOM remains unused/unwired.
     providerOrderService: {
       // TODO-VERIFY: URL follows the standard OData v4 SEGW/RAP binding-name
       // convention (design/zui_providerorder_meta.xml service definition name
@@ -705,7 +704,17 @@ sap.ui.define([], function () {
       // relying on this in a live test.
       entitySets: {
         providerContact: "ProviderContact",
+        providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails"
+      },
+      providerIohProperties: {
+        soldToParty: "SoldToParty",
+        material: "Material",
+        batch: "Batch",
+        quantity: "Quantity",
+        unit: "Unit",
+        expirationDate: "ExpirationDate",
+        brand: "Brand"
       },
       soldToDetailsProperties: {
         soldToParty: "SoldToParty",

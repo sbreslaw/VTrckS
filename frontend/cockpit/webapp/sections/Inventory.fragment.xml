@@ -1,44 +1,55 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <!-- CRUD Task 1 v3 (In-Place Create, design/prompts/CRUD Task 1 Prompt v3.md,
-       ADDENDUM-001): IoH is a decoupled activity (CR-002) - the backend BO/
-       companion service (design/prompts/e008_ext_build.md, ZUI_VR_EXT) is not
-       activated on-system yet, so this is a local-only editable table (ioh
-       model, JSONModel {rows:[]}) that CreateOrderService.js#submitIoH skips
-       (BLOCKED-BY-SERVICE, {skipped:true}) on Save today. Not shown outside
-       createMode - the existing MessageStrip covers every other case. v5 UX
-       phasing: every control here is locked until a Provider is picked
-       (createState>/providerChosen) - this section only ever renders inside
-       createMode, so no need to guard against the non-createMode case. -->
-  <VBox visible="{sectionFlags>/createMode}">
+    <!-- Edit List loads provider inventory from po>/ProviderIOH. The service
+      requires a SoldToParty filter, so loading is owned by
+      Detail.controller.js#_loadProviderInventory rather than a direct XML
+      list binding. Quantity is the only editable field. -->
+  <VBox>
     <items>
-      <MessageStrip text="{i18n>inventoryCreateNote}" type="Information" showIcon="true" class="sapUiTinyMarginBottom" />
-      <Table id="iohTable" items="{ioh>/rows}" noDataText="{i18n>inventoryNoRows}">
+      <Table id="iohTable" items="{ioh>/rows}" busy="{ioh>/busy}"
+        noDataText="{= ${ioh>/error} ? ${i18n>inventoryLoadError} : ${i18n>inventoryNoRows} }">
         <headerToolbar>
           <OverflowToolbar>
+            <Button text="{i18n>iohInsert}" type="Transparent" visible="{sectionFlags>/createMode}"
+              enabled="{ioh>/editable}" press=".onInventoryInsertRow" />
             <ToolbarSpacer />
-            <Button text="{i18n>iohAddRow}" icon="sap-icon://add" enabled="{createState>/providerChosen}" press=".onIohAddRow" />
+            <Label text="{i18n>iohFilter}" labelFor="iohFilter" />
+            <SearchField id="iohFilter" width="15rem" liveChange=".onInventoryFilter" />
           </OverflowToolbar>
         </headerToolbar>
         <columns>
-          <Column><Text text="{i18n>iohNdc}" /></Column>
-          <Column><Text text="{i18n>iohLot}" /></Column>
-          <Column><Text text="{i18n>iohQty}" /></Column>
+          <Column width="5rem" visible="{sectionFlags>/createMode}"><Text text="{i18n>iohActions}" /></Column>
+          <Column><Text text="{i18n>iohBrand}" /></Column>
+          <Column><Text text="{i18n>iohNdcCode}" /></Column>
+          <Column><Text text="{i18n>iohLotNumber}" /></Column>
+          <Column hAlign="End"><Text text="{i18n>iohQuantity}" /></Column>
           <Column><Text text="{i18n>iohExpiration}" /></Column>
-          <Column width="3rem" />
         </columns>
         <items>
           <ColumnListItem>
             <cells>
-              <Input value="{ioh>ndc}" enabled="{createState>/providerChosen}" />
-              <Input value="{ioh>lot}" enabled="{createState>/providerChosen}" />
-              <Input value="{ioh>quantity}" type="Number" enabled="{createState>/providerChosen}" />
-              <DatePicker value="{ioh>expirationDate}" enabled="{createState>/providerChosen}" />
-              <Button icon="sap-icon://delete" type="Transparent" enabled="{createState>/providerChosen}" press=".onIohDeleteRow" tooltip="{i18n>iohDeleteRow}" />
+              <Button icon="sap-icon://delete" type="Transparent" visible="{sectionFlags>/createMode}" enabled="{ioh>/editable}"
+                tooltip="{i18n>iohDeleteRow}" press=".onInventoryDeleteRow" />
+              <Text text="{ioh>brand}" />
+              <VBox>
+                <Text text="{ioh>ndc}" visible="{= !${ioh>isNew} }" />
+                <Input value="{ioh>ndc}" visible="{ioh>isNew}" showValueHelp="true"
+                  editable="{ioh>/editable}" valueHelpRequest=".onInventoryNdcValueHelpRequest" />
+              </VBox>
+              <VBox>
+                <Text text="{ioh>lot}" visible="{= !${ioh>isNew} }" />
+                <Input value="{ioh>lot}" visible="{ioh>isNew}" editable="{ioh>/editable}" />
+              </VBox>
+              <Input value="{ioh>quantity}" type="Number" textAlign="End"
+                editable="{= ${sectionFlags>/createMode} &amp;&amp; ${ioh>/editable} }" />
+              <VBox>
+                <Text text="{ioh>expirationDate}" visible="{= !${ioh>isNew} }" />
+                <DatePicker value="{ioh>expirationDate}" valueFormat="MM/dd/yyyy" displayFormat="MM/dd/yyyy"
+                  visible="{ioh>isNew}" editable="{ioh>/editable}" />
+              </VBox>
             </cells>
           </ColumnListItem>
         </items>
       </Table>
     </items>
   </VBox>
-  <MessageStrip text="{i18n>inventoryPendingStandardService}" type="Information" showIcon="true" visible="{= !${sectionFlags>/createMode} }" />
 </core:FragmentDefinition>

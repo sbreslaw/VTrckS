@@ -19,7 +19,9 @@ sap.ui.define([
   // optional array on a SectionConfig-style entry) renders additional
   // disabled, tooltip-only buttons in a section's header toolbar (e.g.
   // Shipping's "Alternative Shipping Address" parity button) without a new
-  // per-button code path.
+  // per-button code path. `oMeta.headerAction` adds an enabled command beside
+  // the title, before the spacer, for section-specific workflows such as
+  // Inventory's Edit List loader.
   function SectionFactory(oView, aMeta, fnOnContentLoaded, sFlagsModel) {
     this._oView = oView;
     this._aMeta = aMeta || [];
@@ -44,9 +46,17 @@ sap.ui.define([
     var sFlags = this._sFlagsModel;
     this._aMeta.forEach(function (oMeta, iIndex) {
       var aToolbarContent = [
-        new Title(this._oView.createId(oMeta.id + "-title"), { text: oBundle.getText(oMeta.titleKey), level: "H4" }),
-        new ToolbarSpacer()
+          new Title(this._oView.createId(oMeta.id + "-title"), { text: oBundle.getText(oMeta.titleKey), level: "H4" })
       ];
+
+        if (oMeta.headerAction) {
+          aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-" + oMeta.headerAction.id + "-btn"), {
+            text: oBundle.getText(oMeta.headerAction.titleKey),
+            visible: oMeta.headerAction.createOnly ? "{" + sFlags + ">/createMode}" : true,
+            press: function () { oController[oMeta.headerAction.press](); }
+          }));
+        }
+        aToolbarContent.push(new ToolbarSpacer());
 
       // Non-editable sections (histories, totals, designed-empty placeholders)
       // get no Edit button at all (Phase 2 Prompt v2, item D).

@@ -25,7 +25,15 @@ sap.ui.define([], function () {
   var aSectionConfig = [
     { id: "details", titleKey: "sectionDetails", fragment: "cdc.vaccreq.sections.Details", expanded: true, editable: true, editLive: true, createVisible: true },
     { id: "items", titleKey: "sectionItems", fragment: "cdc.vaccreq.sections.Items", expanded: true, editable: true, editLive: true, createVisible: true },
-    { id: "inventory", titleKey: "sectionInventory", fragment: "cdc.vaccreq.sections.Inventory", expanded: false, editable: true, createVisible: true },
+    {
+      id: "inventory",
+      titleKey: "sectionInventory",
+      fragment: "cdc.vaccreq.sections.Inventory",
+      expanded: false,
+      editable: false,
+      createVisible: true,
+      headerAction: { id: "editList", titleKey: "sectionEditList", press: "onInventoryEditListPress", createOnly: true }
+    },
     { id: "shipping", titleKey: "sectionShipping", fragment: "cdc.vaccreq.sections.Shipping", expanded: false, editable: true, editLive: true, createVisible: true },
     { id: "shippingTransactions", titleKey: "sectionShippingTransactions", fragment: "cdc.vaccreq.sections.ShippingTransactions", expanded: false, editable: false },
     { id: "transactionHistory", titleKey: "sectionTransactionHistory", fragment: "cdc.vaccreq.sections.TransactionHistory", expanded: false, editable: false },

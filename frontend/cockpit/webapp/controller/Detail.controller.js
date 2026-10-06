@@ -116,10 +116,9 @@ sap.ui.define([
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
-      // CRUD Task 1 v3: IoH has no backend context pre-save (CR-002, local rows
-      // only until step ③) — a plain local JSON model, reset each time createMode
-      // is entered (_setCreateMode).
-      this.getView().setModel(new JSONModel({ rows: [] }), "ioh");
+      // Provider inventory is loaded from po>/ProviderIOH after a Provider is
+      // selected and kept local for a responsive read-only table.
+      this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false }), "ioh");
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -1582,7 +1581,7 @@ sap.ui.define([
         this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
         this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
         this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
-        this.getView().getModel("ioh").setProperty("/rows", []);
+        this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("createState").setProperty("/providerChosen", false);
         this.getView().getModel("createState").setProperty("/priorityLocked", false);
@@ -2006,7 +2005,183 @@ sap.ui.define([
       oEnrichModel.setProperty("/providerAddress", oItem.address);
       this.getView().getModel("createState").setProperty("/providerChosen", true);
       this._prefillMainContact(oItem.id);
+      this._iProviderIohRequest = (this._iProviderIohRequest || 0) + 1;
+      this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
       this._setProviderValueState(true);
+    },
+
+    onInventoryEditListPress: function () {
+      var oContext = this.getView().getBindingContext();
+      var sProviderId = oContext && oContext.getProperty(ServiceSchema.headerProperties.providerId);
+      if (!sProviderId) {
+        MessageToast.show(this.getResourceBundle().getText("inventoryProviderRequired"));
+        return;
+      }
+      this._oSectionFactory.expandSection("inventory");
+      this._loadProviderInventory(sProviderId);
+    },
+
+    _loadProviderInventory: function (sProviderId) {
+      var oIohModel = this.getView().getModel("ioh");
+      var oProps = ServiceSchema.providerOrderService.providerIohProperties;
+      var iRequest = (this._iProviderIohRequest || 0) + 1;
+      this._iProviderIohRequest = iRequest;
+      oIohModel.setData({ rows: [], busy: true, error: false, editable: false });
+
+      var oListBinding = this.getView().getModel("po").bindList(
+        "/" + ServiceSchema.providerOrderService.entitySets.providerIoh,
+        undefined,
+        undefined,
+        [new Filter(oProps.soldToParty, FilterOperator.EQ, sProviderId)],
+        {
+          $select: [oProps.soldToParty, oProps.material, oProps.batch,
+            oProps.quantity, oProps.expirationDate, oProps.brand].join(",")
+        }
+      );
+
+      oListBinding.requestContexts(0, 500).then(function (aContexts) {
+        if (this._iProviderIohRequest !== iRequest) {
+          return;
+        }
+        var aRows = aContexts.map(function (oContext) {
+            var oRow = oContext.getObject();
+            return {
+              brand: oRow[oProps.brand],
+              ndc: oRow[oProps.material],
+              lot: oRow[oProps.batch],
+              quantity: oRow[oProps.quantity],
+              expirationDate: formatter.iohExpirationDate(oRow[oProps.expirationDate]),
+              isNew: false
+            };
+          });
+        oIohModel.setData({
+          rows: aRows,
+          busy: false,
+          error: false,
+          editable: !!this.getView().getModel("sectionFlags").getProperty("/createMode")
+        });
+      }.bind(this)).catch(function () {
+        if (this._iProviderIohRequest === iRequest) {
+          oIohModel.setData({ rows: [], busy: false, error: true, editable: false });
+        }
+      }.bind(this)).finally(function () {
+        oListBinding.destroy();
+      });
+    },
+
+    onInventoryInsertRow: function () {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
+      var oIohModel = this.getView().getModel("ioh");
+      var aRows = oIohModel.getProperty("/rows").slice();
+      var oFilter = this._byIdInSection("inventory", "iohFilter");
+      if (oFilter) {
+        oFilter.setValue("");
+      }
+      var oTable = this._byIdInSection("inventory", "iohTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (oBinding) {
+        oBinding.filter([]);
+      }
+      aRows.push({ brand: "", ndc: "", lot: "", quantity: 0, expirationDate: "", isNew: true });
+      oIohModel.setProperty("/rows", aRows);
+    },
+
+    onInventoryDeleteRow: function (oEvent) {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
+      var oRowContext = oEvent.getSource().getBindingContext("ioh");
+      if (!oRowContext) {
+        return;
+      }
+      var oIohModel = this.getView().getModel("ioh");
+      var iIndex = Number(oRowContext.getPath().split("/").pop());
+      var aRows = oIohModel.getProperty("/rows").slice();
+      aRows.splice(iIndex, 1);
+      oIohModel.setProperty("/rows", aRows);
+    },
+
+    onInventoryNdcValueHelpRequest: function (oEvent) {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
+      var oRowContext = oEvent.getSource().getBindingContext("ioh");
+      var oProps = ServiceSchema.productProperties;
+      if (!oRowContext) {
+        return;
+      }
+      var iCurrentIndex = Number(oRowContext.getPath().split("/").pop());
+      var aExistingNdcs = this.getView().getModel("ioh").getProperty("/rows").filter(function (oRow, iIndex) {
+        return iIndex !== iCurrentIndex && !!oRow.ndc;
+      }).map(function (oRow) {
+        return oRow.ndc;
+      }).filter(function (sNdc, iIndex, aNdcs) {
+        return aNdcs.indexOf(sNdc) === iIndex;
+      });
+      var aExclusionFilters = aExistingNdcs.map(function (sNdc) {
+        return new Filter(oProps.id, FilterOperator.NE, sNdc);
+      });
+      var oDialog = new SelectDialog({
+        title: this.getResourceBundle().getText("inventoryNdcPickerTitle"),
+        growing: true,
+        items: {
+          path: "/" + ServiceSchema.entitySets.product,
+          parameters: {
+            $select: [oProps.id, oProps.text, oProps.industryStandardName].join(",")
+          },
+          filters: aExclusionFilters,
+          template: new StandardListItem({
+            title: "{" + oProps.id + "}",
+            description: "{" + oProps.text + "}"
+          }),
+          templateShareable: false
+        },
+        search: function (oSearchEvent) {
+          var sValue = oSearchEvent.getParameter("value");
+          var aFilters = aExclusionFilters.slice();
+          if (sValue) {
+            aFilters.push(new Filter({
+              filters: [
+                new Filter(oProps.id, FilterOperator.Contains, sValue),
+                new Filter(oProps.text, FilterOperator.Contains, sValue)
+              ],
+              and: false
+            }));
+          }
+          oSearchEvent.getSource().getBinding("items").filter(aFilters);
+        },
+        confirm: function (oConfirmEvent) {
+          var oSelectedItem = oConfirmEvent.getParameter("selectedItem");
+          if (oSelectedItem) {
+            var oProduct = oSelectedItem.getBindingContext().getObject();
+            oRowContext.setProperty("ndc", oProduct[oProps.id]);
+            oRowContext.setProperty("brand", oProduct[oProps.industryStandardName] || "");
+          }
+          oDialog.destroy();
+        },
+        cancel: function () {
+          oDialog.destroy();
+        }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    onInventoryFilter: function (oEvent) {
+      var sValue = oEvent.getParameter("newValue");
+      var oTable = this._byIdInSection("inventory", "iohTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (!oBinding) {
+        return;
+      }
+      oBinding.filter(sValue ? new Filter({
+        filters: ["brand", "ndc", "lot", "quantity", "expirationDate"].map(function (sPath) {
+          return new Filter(sPath, FilterOperator.Contains, sValue);
+        }),
+        and: false
+      }) : []);
     },
 
     // Issue Batch 9-30-001 §3.3: Provider typeahead - filters the Input's own
@@ -2585,22 +2760,6 @@ sap.ui.define([
       });
     },
 
-    onIohAddRow: function () {
-      var oModel = this.getView().getModel("ioh");
-      var aRows = oModel.getProperty("/rows");
-      aRows.push({ ndc: "", lot: "", quantity: null, expirationDate: null });
-      oModel.setProperty("/rows", aRows);
-    },
-
-    onIohDeleteRow: function (oEvent) {
-      var oModel = this.getView().getModel("ioh");
-      var oRowContext = oEvent.getSource().getBindingContext("ioh");
-      var iIndex = Number(oRowContext.getPath().split("/").pop());
-      var aRows = oModel.getProperty("/rows");
-      aRows.splice(iIndex, 1);
-      oModel.setProperty("/rows", aRows);
-    },
-
     // v5: Cancel is always the scratch-context case — nothing was ever sent
     // to the backend (its group is never submitted), so this is a plain local
     // delete + navigate-back (CreateOrderService.cancel/_destroyCreateContext).
@@ -2631,9 +2790,9 @@ sap.ui.define([
     // v5: Save replays the scratch context for real (CreateOrderService.js#save,
     // steps ①-④) — the order does not exist until that resolves, so any
     // rejection from it means nothing was created; stay in createMode to
-    // retry. Enrichment/IoH failing AFTER that (the order already exists) is
-    // the actual partial-failure case: exit createMode into the saved order
-    // for completion via Change Mode.
+    // retry. Enrichment failing AFTER that (the order already exists) is the
+    // actual partial-failure case: exit createMode into the saved order for
+    // completion via Change Mode.
     onCreateSavePress: function () {
       var that = this;
       var oBundle = this.getResourceBundle();
@@ -2688,7 +2847,7 @@ sap.ui.define([
       })
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
-        // CreateOrderService.save()). Enrichment/IoH failing from here on is a
+        // CreateOrderService.save()). Enrichment failing from here on is a
         // partial-failure: the order stays created.
         .then(function (oResult) {
           var oNewContext = oResult.context;
@@ -2700,12 +2859,6 @@ sap.ui.define([
             status: oEnrich.status,
             shipToPartyId: oEnrich.shipToPartyId
           }).catch(function (oError) {
-            oError.orderCreatedId = sNewId;
-            throw oError;
-          });
-        })
-        .then(function () {
-          return CreateOrderService.submitIoH(sNewId, that.getView().getModel("ioh").getProperty("/rows")).catch(function (oError) {
             oError.orderCreatedId = sNewId;
             throw oError;
           });
@@ -2726,7 +2879,7 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           if (oError && oError.orderCreatedId) {
-            // Enrichment/IoH failed but the order + its edits ARE committed —
+            // Enrichment failed but the order + its edits ARE committed —
             // exit createMode into the saved order; user completes the rest
             // via Change Mode (no compensating deletes). Message Accuracy &
             // Hygiene task: a tracked Messaging note, not a MessageToast, so

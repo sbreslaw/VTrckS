@@ -7,6 +7,8 @@ sap.ui.define([
   var EM_DASH = "\u2014";
 
   var oDateFormat = DateFormat.getDateInstance();
+  var oIohSourceDateFormat = DateFormat.getDateInstance({ pattern: "yyyy-MM-dd", UTC: true });
+  var oIohDisplayDateFormat = DateFormat.getDateInstance({ pattern: "MM/dd/yyyy", UTC: true });
 
   function orDash(vValue) {
     if (vValue === null || vValue === undefined || vValue === "") {
@@ -222,6 +224,14 @@ sap.ui.define([
         return oDateFormat.format(new Date());
       }
       return oValue;
+    },
+
+    iohExpirationDate: function (vValue) {
+      if (!vValue) {
+        return "";
+      }
+      var oDate = vValue instanceof Date ? vValue : oIohSourceDateFormat.parse(vValue);
+      return oDate ? oIohDisplayDateFormat.format(oDate) : vValue;
     },
 
     // Employee Responsible name is not exposed by this service (only the personnel
