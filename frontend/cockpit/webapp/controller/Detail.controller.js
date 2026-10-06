@@ -2202,30 +2202,43 @@ sap.ui.define([
       var iRequest = (this._iSalesOfficeDefaultRequest || 0) + 1;
       this._iSalesOfficeDefaultRequest = iRequest;
       oContext.setProperty(ServiceSchema.headerProperties.salesOffice, "");
-      var oBinding = this.getView().getModel("po").bindList(
-        "/" + oSchema.entitySets.customerSalesArea,
-        undefined,
-        undefined,
-        [
-          new Filter(oProps.customer, FilterOperator.EQ, oProvider.id),
-          new Filter(oProps.salesOrganization, FilterOperator.EQ, oProvider.salesOrganization),
-          new Filter(oProps.distributionChannel, FilterOperator.EQ, oProvider.distributionChannel),
-          new Filter(oProps.division, FilterOperator.EQ, oProvider.division),
-          new Filter(oProps.isActiveEntity, FilterOperator.EQ, true)
-        ],
-        { $select: oProps.salesOffice }
-      );
-      oBinding.requestContexts(0, 1).then(function (aContexts) {
-        if (this._iSalesOfficeDefaultRequest === iRequest) {
-          oContext.setProperty(
-            ServiceSchema.headerProperties.salesOffice,
-            aContexts.length ? aContexts[0].getProperty(oProps.salesOffice) : ""
-          );
+      var oProviderModel = this.getView().getModel("po");
+      if (!oProviderModel) {
+        return;
+      }
+      oProviderModel.getMetaModel().requestObject(
+        "/" + oSchema.entitySets.customerSalesArea + "/" + oProps.salesOffice
+      ).then(function (oSalesOfficeProperty) {
+        if (!oSalesOfficeProperty || this._iSalesOfficeDefaultRequest !== iRequest) {
+          return;
         }
+        var oBinding = oProviderModel.bindList(
+          "/" + oSchema.entitySets.customerSalesArea,
+          undefined,
+          undefined,
+          [
+            new Filter(oProps.customer, FilterOperator.EQ, oProvider.id),
+            new Filter(oProps.salesOrganization, FilterOperator.EQ, oProvider.salesOrganization),
+            new Filter(oProps.distributionChannel, FilterOperator.EQ, oProvider.distributionChannel),
+            new Filter(oProps.division, FilterOperator.EQ, oProvider.division),
+            new Filter(oProps.isActiveEntity, FilterOperator.EQ, true)
+          ],
+          { $select: oProps.salesOffice }
+        );
+        oBinding.requestContexts(0, 1).then(function (aContexts) {
+          if (this._iSalesOfficeDefaultRequest === iRequest) {
+            oContext.setProperty(
+              ServiceSchema.headerProperties.salesOffice,
+              aContexts.length ? aContexts[0].getProperty(oProps.salesOffice) : ""
+            );
+          }
+        }.bind(this)).catch(function () {
+          // A missing provider sales-area default leaves Sales Office blank and selectable.
+        }).finally(function () {
+          oBinding.destroy();
+        });
       }.bind(this)).catch(function () {
-        // A missing provider sales-area default leaves Sales Office blank and selectable.
-      }).finally(function () {
-        oBinding.destroy();
+        // A stale or misconfigured provider-order model must not query the main service schema.
       });
     },
 
