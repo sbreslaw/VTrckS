@@ -2433,7 +2433,10 @@ sap.ui.define([
             new Filter(oProps.division, FilterOperator.EQ, oProvider.division),
             new Filter(oProps.isActiveEntity, FilterOperator.EQ, true)
           ],
-          { $select: oProps.salesOffice }
+          {
+            $select: oProps.salesOffice,
+            $$groupId: "$direct"
+          }
         );
         oBinding.requestContexts(0, 1).then(function (aContexts) {
           if (this._iSalesOfficeDefaultRequest === iRequest) {
