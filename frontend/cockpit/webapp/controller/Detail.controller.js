@@ -491,6 +491,12 @@ sap.ui.define([
       if (oContext) {
         EditRequestService.cancel(oContext);
       }
+      if (sSectionId === "details") {
+        var oEnrichModel = this.getView().getModel("createEnrich");
+        oEnrichModel.setProperty("/notes", oEnrichModel.getProperty("/notesOriginal") || "");
+        this._bNotesNeedsCreate = false;
+        this._destroyNotesWriteBinding();
+      }
       Messaging.removeAllMessages();
       this._endEditSession(sSectionId);
     },
@@ -534,13 +540,26 @@ sap.ui.define([
       // "vrEdit" group EditRequestService.save is about to submitBatch, so it
       // rides along in the very same request as the header PATCH below.
       var oPriorityModel = this.getView().getModel("priorityState");
-      var oPropagatePromise = Promise.resolve();
-      if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
-        oPropagatePromise = this._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
-      }
-      oPropagatePromise.then(function () {
+      var oStagePromise = sSectionId === "details"
+        ? this._stageHeaderNotes(oContext)
+        : Promise.resolve();
+      oStagePromise.then(function () {
+        if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
+          return that._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
+        }
+      }).then(function () {
         return EditRequestService.save(oContext);
       }).then(function () {
+        if (sSectionId === "details" && that._bNotesNeedsCreate) {
+          return CreateOrderService.saveNotes(oContext, that.getView().getModel("createEnrich").getProperty("/notes"));
+        }
+      }).then(function () {
+        if (sSectionId === "details") {
+          var oEnrichModel = that.getView().getModel("createEnrich");
+          oEnrichModel.setProperty("/notesOriginal", oEnrichModel.getProperty("/notes") || "");
+          that._bNotesNeedsCreate = false;
+          that._destroyNotesWriteBinding();
+        }
         MessageToast.show(oBundle.getText("editSaveSuccess"));
         if (that._aSectionsNeedingFullReload.indexOf(sSectionId) !== -1) {
           that._reloadHeaderContext(oContext.getPath());
@@ -1849,9 +1868,8 @@ sap.ui.define([
         status: "",
         shipToPartyId: "",
         shipToPartyName: "",
-        // Issue Batch 9-30-001 \u00a73.1: local-only createMode Notes buffer -
-        // no backend write path yet, see Details.fragment.xml's own comment.
-        notes: ""
+        notes: "",
+        notesOriginal: ""
       };
     },
 
@@ -2652,7 +2670,9 @@ sap.ui.define([
     // columns exist, but the relative `items` binding simply yields zero rows
     // until a real context exists, giving the designed empty state for free.
     _onSectionContentLoaded: function (sSectionId) {
-      if (sSectionId === "items") {
+      if (sSectionId === "details" && !this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        this._loadHeaderNotes(this.getView().getBindingContext());
+      } else if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
         // 3.3: the Items panel's own contexts are the most convenient point
         // to (re)confirm the header Tax Amount sum once real item data is
@@ -2662,6 +2682,83 @@ sap.ui.define([
       } else if (sSectionId === "priceTotals") {
         var oTable = this._byIdInSection("priceTotals", "priceTotalsTable");
         PricingColumns.bindTable(oTable, this.getResourceBundle(), ServiceSchema.pricingElements.headerNavigation);
+      }
+    },
+
+    _loadHeaderNotes: function (oHeaderContext) {
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      var oText = ServiceSchema.textEntity;
+      var oProps = oText.properties;
+      var iRequest = (this._iNotesRequest || 0) + 1;
+      this._iNotesRequest = iRequest;
+      this._bNotesNeedsCreate = false;
+      oEnrichModel.setProperty("/notes", "");
+      oEnrichModel.setProperty("/notesOriginal", "");
+      if (!oHeaderContext || oHeaderContext.isTransient && oHeaderContext.isTransient()) {
+        return Promise.resolve();
+      }
+      var oBinding = oHeaderContext.getModel().bindList(
+        oText.navigation,
+        oHeaderContext,
+        undefined,
+        [new Filter(oProps.longTextId, FilterOperator.EQ, oText.notesLongTextId)],
+        { $select: [oProps.language, oProps.longTextId, oProps.longText].join(",") }
+      );
+      return oBinding.requestContexts(0, 20).then(function (aContexts) {
+        if (this._iNotesRequest !== iRequest) {
+          return;
+        }
+        var oNotesContext = aContexts.filter(function (oContext) {
+          var sLanguage = oContext.getProperty(oProps.language);
+          return sLanguage === oText.defaultLanguage || sLanguage === "EN";
+        })[0] || aContexts[0];
+        var sNotes = oNotesContext ? oNotesContext.getProperty(oProps.longText) : "";
+        oEnrichModel.setProperty("/notes", sNotes || "");
+        oEnrichModel.setProperty("/notesOriginal", sNotes || "");
+      }.bind(this)).finally(function () {
+        oBinding.destroy();
+      });
+    },
+
+    _stageHeaderNotes: function (oHeaderContext) {
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      var sNotes = oEnrichModel.getProperty("/notes") || "";
+      var sOriginal = oEnrichModel.getProperty("/notesOriginal") || "";
+      if (sNotes === sOriginal) {
+        return Promise.resolve();
+      }
+      this._destroyNotesWriteBinding();
+      var oText = ServiceSchema.textEntity;
+      var oProps = oText.properties;
+      var oBinding = oHeaderContext.getModel().bindList(
+        oText.navigation,
+        oHeaderContext,
+        undefined,
+        [new Filter(oProps.longTextId, FilterOperator.EQ, oText.notesLongTextId)],
+        {
+          $$updateGroupId: ServiceSchema.editUpdateGroup,
+          $select: [oProps.language, oProps.longTextId, oProps.longText].join(",")
+        }
+      );
+      this._oNotesWriteBinding = oBinding;
+      return oBinding.requestContexts(0, 20).then(function (aContexts) {
+        var oNotesContext = aContexts.filter(function (oContext) {
+          var sLanguage = oContext.getProperty(oProps.language);
+          return sLanguage === oText.defaultLanguage || sLanguage === "EN";
+        })[0] || aContexts[0];
+        if (oNotesContext) {
+          this._bNotesNeedsCreate = false;
+          oNotesContext.setProperty(oProps.longText, sNotes);
+        } else if (sNotes) {
+          this._bNotesNeedsCreate = true;
+        }
+      }.bind(this));
+    },
+
+    _destroyNotesWriteBinding: function () {
+      if (this._oNotesWriteBinding) {
+        this._oNotesWriteBinding.destroy();
+        this._oNotesWriteBinding = null;
       }
     },
 
@@ -3099,11 +3196,13 @@ sap.ui.define([
           var oNewContext = oResult.context;
           sNewId = oResult.orderId;
           var oEnrich = that.getView().getModel("createEnrich").getData();
-          return CreateOrderService.enrich(oNewContext, {
-            contactId: oEnrich.contactId,
-            employeeResponsibleId: oEnrich.employeeResponsibleId,
-            status: oEnrich.status,
-            shipToPartyId: oEnrich.shipToPartyId
+          return CreateOrderService.saveNotes(oNewContext, oEnrich.notes).then(function () {
+            return CreateOrderService.enrich(oNewContext, {
+              contactId: oEnrich.contactId,
+              employeeResponsibleId: oEnrich.employeeResponsibleId,
+              status: oEnrich.status,
+              shipToPartyId: oEnrich.shipToPartyId
+            });
           }).catch(function (oError) {
             oError.orderCreatedId = sNewId;
             throw oError;
@@ -3214,6 +3313,7 @@ sap.ui.define([
         // receives automatically.
         parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: "SAP__Messages" }
       });
+      this._loadHeaderNotes(this.getView().getBindingContext());
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
       this._computeHeaderPriority();

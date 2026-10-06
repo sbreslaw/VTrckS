@@ -835,19 +835,15 @@ sap.ui.define([], function () {
       properties: {
         salesOrder: "SalesOrder",
         language: "Language",
+        languageForEdit: "LanguageForEdit",
         longTextId: "LongTextID",
+        longTextIdForEdit: "LongTextIDForEdit",
         longText: "LongText"
-      }
+      },
+      prepareForEditAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.PrepareForEdit",
+      defaultLanguage: "E",
+      notesLongTextId: "ZVRH"
     },
-    // TODO-VERIFY(notes-long-text-id): no live backend access this session
-    // to read an existing order's own `_Text` rows and learn which
-    // LongTextID actually carries the CDC order notes (legacy KTEXT-family
-    // vs. a Z text ID, per Session Prompt Issue Batch 9-30-001 §2 Step-0) -
-    // never guessed. Left null on purpose: every notes read/write below
-    // degrades to a no-op (same BLOCKED-BY-SERVICE pattern as
-    // enrichmentAction/iohCreateAction) until a populated example is found
-    // and this constant is set to the real code. See OPEN_QUESTIONS.md.
-    notesLongTextId: null,
 
     showJurisdictionFilter: true,
     statusSource: "e008", // "standard" for temporary service, "e008" for swap-back

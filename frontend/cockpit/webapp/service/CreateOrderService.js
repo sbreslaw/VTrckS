@@ -1,9 +1,11 @@
 sap.ui.define([
   "sap/ui/core/Messaging",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator",
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor"
-], function (Messaging, ServiceSchema, Enums, MessageExtractor) {
+], function (Messaging, Filter, FilterOperator, ServiceSchema, Enums, MessageExtractor) {
   "use strict";
 
   // CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — reinstates
@@ -135,8 +137,68 @@ sap.ui.define([
     return oClean;
   }
 
+  function saveNotes(oHeaderContext, sNotes) {
+    if (!sNotes) {
+      return Promise.resolve();
+    }
+    var oModel = oHeaderContext.getModel();
+    var oText = ServiceSchema.textEntity;
+    var oProps = oText.properties;
+    var oBinding;
+    var oPrepare = oModel.bindContext(oText.prepareForEditAction + "(...)", oHeaderContext, {
+      $$updateGroupId: CREATE_REPLAY_GROUP
+    });
+    var pPrepare = oPrepare.execute(CREATE_REPLAY_GROUP);
+    oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () {});
+    return pPrepare.then(function () {
+      oBinding = oModel.bindList(
+        oText.navigation,
+        oHeaderContext,
+        undefined,
+        [new Filter(oProps.longTextId, FilterOperator.EQ, oText.notesLongTextId)],
+        {
+          $$updateGroupId: CREATE_REPLAY_GROUP,
+          $select: [oProps.language, oProps.languageForEdit, oProps.longTextId,
+            oProps.longTextIdForEdit, oProps.longText].join(",")
+        }
+      );
+      return oBinding.requestContexts(0, 20).then(function (aContexts) {
+        var oNotesContext = aContexts.filter(function (oContext) {
+          var sLanguage = oContext.getProperty(oProps.language);
+          return sLanguage === oText.defaultLanguage || sLanguage === "EN";
+        })[0] || aContexts[0];
+        var pWrite;
+        if (oNotesContext) {
+          pWrite = oNotesContext.setProperty(oProps.longText, sNotes);
+        } else {
+          var oPayload = {};
+          oPayload[oProps.languageForEdit] = oText.defaultLanguage;
+          oPayload[oProps.longTextIdForEdit] = oText.notesLongTextId;
+          oPayload[oProps.longText] = sNotes;
+          pWrite = oBinding.create(oPayload).created();
+        }
+        var oSave = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
+          $$updateGroupId: CREATE_REPLAY_GROUP,
+          $select: "SAP__Messages"
+        });
+        var pSave = oSave.execute(CREATE_REPLAY_GROUP, true);
+        var pSubmit = oModel.submitBatch(CREATE_REPLAY_GROUP);
+        return Promise.all([pWrite, pSave, pSubmit]);
+      });
+    }).catch(function (oError) {
+      return discardSession(oModel, "notes save failed").then(function () {
+        throw oError;
+      });
+    }).finally(function () {
+      if (oBinding) {
+        oBinding.destroy();
+      }
+    });
+  }
+
   var CreateOrderService = {
     UPDATE_GROUP: CREATE_GROUP,
+    saveNotes: saveNotes,
 
     // Exposed so Detail.controller.js can re-seed local scratch rows from
     // an orphaned session's row data (session-death recovery) with the
