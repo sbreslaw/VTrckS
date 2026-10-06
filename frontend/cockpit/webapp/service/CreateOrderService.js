@@ -305,7 +305,7 @@ sap.ui.define([
     // uses MessageExtractor.js to parse it) if any step fails; a best-effort
     // DiscardChanges runs first for any failure from step ① onward (v5
     // Required Fix 2).
-    save: function (oScratchContext, oItemsBinding, oSession) {
+    save: function (oScratchContext, oItemsBinding, oSession, oCreateOptions) {
       // Message Accuracy & Hygiene task, Gap 1 - pre-attempt clearing: a
       // stale extractor/technical message from a PRIOR failed save attempt
       // must never carry over and look like part of THIS ①–④ attempt.
@@ -323,7 +323,7 @@ sap.ui.define([
       // ①③④ themselves are otherwise UNCHANGED from the original v5 shape -
       // only WHEN ① ran (here vs. earlier) differs.
       if (oSession && oSession.opened && oSession.plainContext) {
-        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData, oSession);
+        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData, oSession, oCreateOptions);
       }
 
       // Fallback - session never opened interactively (e.g. Save reached
@@ -412,7 +412,7 @@ sap.ui.define([
               });
             })
             .then(function () {
-              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession);
+              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions);
             });
         });
     },
@@ -422,7 +422,7 @@ sap.ui.define([
     // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
     // bound context - see the (still-applicable) v5 gotcha comment history
     // above for why a plain canonical-path context is required here instead.
-    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession) {
+    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions) {
       // v5 gotcha, round 6 (live test, 2026-08-28): without an explicit
       // $$updateGroupId here (unlike its sibling contexts elsewhere in this
       // flow), this operation binding fell back to "$auto" instead of
@@ -500,7 +500,7 @@ sap.ui.define([
           var oNewContext = oModel.bindContext(ServiceSchema.buildHeaderPath(sNewId), undefined, {
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
-          return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData).then(function () {
+          return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
             // Both SaveChanges above and this PATCH just succeeded,
             // each re-running the same backend validation - collapse
             // the resulting exact-duplicate messages (see
@@ -525,12 +525,18 @@ sap.ui.define([
     // Internal — PATCH the non-action header fields onto the new real
     // context, in one batch. Items are deep-created earlier, on the sticky
     // session context, before SaveChanges (see save() above).
-    _replayHeaderProperties: function (oNewContext, oScratchData) {
+    _replayHeaderProperties: function (oNewContext, oScratchData, oCreateOptions) {
       REPLAY_HEADER_PROPERTIES.forEach(function (sProperty) {
         if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "") {
           oNewContext.setProperty(sProperty, oScratchData[sProperty]);
         }
       });
+      if (oCreateOptions && oCreateOptions.shipToAddressId) {
+        oNewContext.setProperty(
+          ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.addressId,
+          oCreateOptions.shipToAddressId
+        );
+      }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
     },

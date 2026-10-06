@@ -125,6 +125,7 @@ sap.ui.define([
       // each time createMode is entered (_setCreateMode), sent as the enrichment
       // payload at Save (still a no-op today, see CreateOrderService.js#enrich).
       this.getView().setModel(new JSONModel(this._createEnrichDefaults()), "createEnrich");
+      this.getView().setModel(new JSONModel({ providerName: "", addresses: [], createAddressKey: "", busy: false }), "shippingEdit");
       this.getView().setModel(this._createEnumsModel(), "enums");
       this.getView().setModel(this._createFundTypesModel(), "fundTypes");
       // v5 ("UX phasing + triad sourcing"): createMode opens with only the
@@ -404,6 +405,88 @@ sap.ui.define([
       });
       EditRequestService.beginEdit(oContext, sSectionId);
       oFlags.setProperty("/" + sSectionId + "/editing", true);
+      if (sSectionId === "shipping") {
+        this._prepareShippingEdit(oContext);
+      }
+    },
+
+    _prepareShippingEdit: function (oContext) {
+      var oShipTo = ServiceSchema.shipToPartyProperties;
+      var oEditModel = this.getView().getModel("shippingEdit");
+      Promise.all([
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.id),
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.fullName),
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.addressId),
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.address),
+        oContext.requestProperty("PartnerDeterminationProcedure")
+      ]).then(function (aValues) {
+        oEditModel.setProperty("/providerName", aValues[1]);
+        return this._loadShippingAddresses(aValues[0], aValues[4], {
+          id: aValues[2],
+          address: aValues[3]
+        });
+      }.bind(this));
+    },
+
+    _loadShippingAddresses: function (sProviderId, sProcedure, oCurrentAddress) {
+      var oSchema = ServiceSchema.shippingAddressValueHelp;
+      var oProps = oSchema.properties;
+      var oEditModel = this.getView().getModel("shippingEdit");
+      var iRequest = (this._iShippingAddressRequest || 0) + 1;
+      this._iShippingAddressRequest = iRequest;
+      var oBinding = this.getView().getModel("shippingAddressVH").bindList(
+        "/" + oSchema.entitySet,
+        undefined,
+        undefined,
+        [
+          new Filter(oProps.customer, FilterOperator.EQ, sProviderId),
+          new Filter(oProps.partnerFunction, FilterOperator.EQ, oSchema.shipToPartnerFunction),
+          new Filter(oProps.partnerDeterminationProcedure, FilterOperator.EQ, sProcedure)
+        ],
+        { $select: [oProps.addressId, oProps.address].join(",") }
+      );
+      oEditModel.setProperty("/busy", true);
+      return oBinding.requestContexts(0, 100).then(function (aContexts) {
+        if (this._iShippingAddressRequest !== iRequest) {
+          return null;
+        }
+        var aAddresses = aContexts.map(function (oAddressContext) {
+          return {
+            id: oAddressContext.getProperty(oProps.addressId),
+            address: oAddressContext.getProperty(oProps.address)
+          };
+        }).filter(function (oAddress) {
+          return !!oAddress.id && !!oAddress.address;
+        });
+        if (oCurrentAddress && oCurrentAddress.id && !aAddresses.some(function (oAddress) {
+          return oAddress.id === oCurrentAddress.id;
+        })) {
+          aAddresses.unshift(oCurrentAddress);
+        }
+        oEditModel.setProperty("/addresses", aAddresses);
+        return aAddresses;
+      }.bind(this)).finally(function () {
+        if (this._iShippingAddressRequest === iRequest) {
+          oEditModel.setProperty("/busy", false);
+        }
+        oBinding.destroy();
+      }.bind(this));
+    },
+
+    onShippingProviderValueHelpRequest: function () {
+      var that = this;
+      var oContext = this.getView().getBindingContext();
+      this._openShipToPartyValueHelpDialog(this.getResourceBundle().getText("providerPickerTitle"), function (oItem) {
+        oContext.setProperty(ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.id, oItem.id);
+        that.getView().getModel("shippingEdit").setProperty("/providerName", oItem.fullName);
+        oContext.requestProperty("PartnerDeterminationProcedure").then(function (sProcedure) {
+          return that._loadShippingAddresses(oItem.id, sProcedure);
+        }).then(function (aAddresses) {
+          if (aAddresses && aAddresses.length) {
+            oContext.setProperty(ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.addressId, aAddresses[0].id);
+          }
+        });
+      });
     },
 
     onSectionCancelPress: function (sSectionId) {
@@ -1583,6 +1666,7 @@ sap.ui.define([
         this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
         this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
+        this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
         this.getView().getModel("createState").setProperty("/priorityLocked", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
@@ -1670,6 +1754,7 @@ sap.ui.define([
       return {
         providerName: "",
         providerAddress: "",
+        providerAddressId: "",
         contactId: "",
         contactName: "",
         employeeResponsibleId: this._getCurrentUserId(),
@@ -2003,11 +2088,36 @@ sap.ui.define([
       var oEnrichModel = this.getView().getModel("createEnrich");
       oEnrichModel.setProperty("/providerName", oItem.fullName);
       oEnrichModel.setProperty("/providerAddress", oItem.address);
+      oEnrichModel.setProperty("/providerAddressId", "");
+      var oShippingEditModel = this.getView().getModel("shippingEdit");
+      var sDefaultAddressKey = "__providerDefault:" + oItem.id;
+      oShippingEditModel.setProperty("/createAddressKey", "");
+      this._loadShippingAddresses(
+        oItem.id,
+        ServiceSchema.shippingAddressValueHelp.createPartnerDeterminationProcedure,
+        { id: sDefaultAddressKey, address: oItem.address }
+      ).then(function (aAddresses) {
+        if (aAddresses) {
+          oShippingEditModel.setProperty("/createAddressKey", sDefaultAddressKey);
+        }
+      });
       this.getView().getModel("createState").setProperty("/providerChosen", true);
       this._prefillMainContact(oItem.id);
       this._iProviderIohRequest = (this._iProviderIohRequest || 0) + 1;
       this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
       this._setProviderValueState(true);
+    },
+
+    onCreateShippingAddressChange: function (oEvent) {
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var oAddressContext = oSelectedItem && oSelectedItem.getBindingContext("shippingEdit");
+      if (!oAddressContext) {
+        return;
+      }
+      var sAddressId = oAddressContext.getProperty("id");
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      oEnrichModel.setProperty("/providerAddress", oAddressContext.getProperty("address"));
+      oEnrichModel.setProperty("/providerAddressId", sAddressId.indexOf("__providerDefault:") === 0 ? "" : sAddressId);
     },
 
     onInventoryEditListPress: function () {
@@ -2843,7 +2953,9 @@ sap.ui.define([
             }
           });
         }
-        return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession);
+        return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession, {
+          shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId")
+        });
       })
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by

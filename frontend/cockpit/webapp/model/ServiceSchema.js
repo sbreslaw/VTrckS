@@ -198,7 +198,21 @@ sap.ui.define([], function () {
     shipToPartyProperties: {
       id: "Partner",
       fullName: "FullName",
+      addressId: "AddressID",
       address: "FormattedPostalAddressDesc"
+    },
+
+    shippingAddressValueHelp: {
+      entitySet: "C_SDCustomerAddressVH",
+      properties: {
+        customer: "Customer",
+        addressId: "AddressID",
+        partnerFunction: "PartnerFunction",
+        partnerDeterminationProcedure: "PartnerDeterminationProcedure",
+        address: "FormattedPostalAddressDesc"
+      },
+      shipToPartnerFunction: "WE",
+      createPartnerDeterminationProcedure: "TA"
     },
 
     // CustomerSalesAreaType (design/so.xml ~line 1131) - the Provider picker's
