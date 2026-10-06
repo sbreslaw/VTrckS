@@ -1921,20 +1921,53 @@ sap.ui.define([
       oDialog.open();
     },
 
-    // Best-effort Contact prefill after a Provider is picked: was meant to take
-    // the most recent `/StandardPartnerContactInfo` row for that SoldToParty as
-    // a stand-in "main contact", but the backend query provider
-    // (CL_SD_S4H_STD_PARTNER_CONTACT) rejects ANY standalone query on this
-    // entity set with 501 Not Implemented (confirmed live, filtered or not) -
-    // Session Prompt (Detail View Adjustments) 3.5: Contact is now backed by a
-    // DIFFERENT, real, filterable entity set (po>/ProviderContact) - but no
-    // auto-prefill rule was specified (only "clear on provider change"), and a
-    // best-effort auto-pick here would be guessing at ranking criteria never
-    // given - still always left blank for manual selection via the new VH
-    // (onContactValueHelpRequest below).
+    // Prefill the selected Provider's current default contact. The backend's
+    // ABAP "X" flag is exposed by OData as an Edm.Boolean, so the service filter
+    // must compare IsStandardRelationship with true.
     _prefillMainContact: function (sProviderId) {
-      this.getView().getModel("createEnrich").setProperty("/contactName", "");
-      this.getView().getModel("createEnrich").setProperty("/contactId", "");
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      var oProps = ServiceSchema.providerOrderService.providerContactProperties;
+      var iRequest = (this._iContactPrefillRequest || 0) + 1;
+      var oToday = new Date();
+      this._iContactPrefillRequest = iRequest;
+      oEnrichModel.setProperty("/contactName", "");
+      oEnrichModel.setProperty("/contactId", "");
+
+      var oListBinding = this.getView().getModel("po").bindList(
+        "/" + ServiceSchema.providerOrderService.entitySets.providerContact,
+        undefined,
+        undefined,
+        [
+          new Filter(oProps.businessPartnerCompany, FilterOperator.EQ, sProviderId),
+          new Filter(oProps.isStandardRelationship, FilterOperator.EQ, true)
+        ],
+        {
+          $select: [oProps.businessPartnerCompany, oProps.businessPartnerPerson,
+            oProps.businessPartnerPersonText, oProps.validityStartDate,
+            oProps.validityEndDate].join(",")
+        }
+      );
+
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        if (this._iContactPrefillRequest !== iRequest) {
+          return;
+        }
+        var oContact = aContexts.map(function (oContext) {
+          return oContext.getObject();
+        }).find(function (oRow) {
+          var oStart = oRow[oProps.validityStartDate] ? new Date(oRow[oProps.validityStartDate]) : null;
+          var oEnd = oRow[oProps.validityEndDate] ? new Date(oRow[oProps.validityEndDate]) : null;
+          return (!oStart || oStart <= oToday) && (!oEnd || oEnd >= oToday);
+        });
+        if (oContact) {
+          oEnrichModel.setProperty("/contactId", oContact[oProps.businessPartnerPerson]);
+          oEnrichModel.setProperty("/contactName", oContact[oProps.businessPartnerPersonText]);
+        }
+      }.bind(this)).catch(function () {
+        // Keep Contact blank when no default can be loaded; manual value help remains available.
+      }).finally(function () {
+        oListBinding.destroy();
+      });
     },
 
     // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the Provider-first
@@ -2425,7 +2458,6 @@ sap.ui.define([
         value: "{addParty>/customerName}",
         editable: false,
         showValueHelp: true,
-        valueHelpOnly: true,
         valueHelpRequest: function () {
           that._openShipToPartyValueHelpDialog(oBundle.getText("partiesInvolvedChoosePartner"), function (oItem) {
             oAddModel.setProperty("/customerId", oItem.id);

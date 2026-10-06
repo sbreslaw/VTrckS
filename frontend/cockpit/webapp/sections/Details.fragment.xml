@@ -100,9 +100,8 @@
 								</layoutData>
 								<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }"/>
 								<Input id="providerInput"
-									value="{path: 'createEnrich>/providerName', mode: 'OneWay'}"
+									value="{path: 'createEnrich>/providerName', mode: 'sap.ui.model.BindingMode.OneWay'}"
 									showValueHelp="true"
-									valueHelpOnly="false"
 									showSuggestion="true"
 									filterSuggests="false"
 									startSuggestion="2"
@@ -170,8 +169,9 @@
 								EndDate) - replaces the old free-text Input (the prior
 								StandardPartnerContactInfo VH source 501'd on any
 								standalone query). Locked until a Provider is picked;
-								cleared whenever the Provider changes (see
-								Detail.controller.js#onProviderValueHelpRequest). Contact
+								prefilled from the current IsStandardRelationship contact
+								when the Provider changes and still overridable through the
+								value help. Contact
 								persistence back to the order is still pending (no
 								confirmed write path this session) - see
 								OPEN_QUESTIONS.md. -->
@@ -183,7 +183,7 @@
 								<Input
 									value="{createEnrich>/contactName}"
 									showValueHelp="true"
-									valueHelpOnly="true"
+									editable="false"
 									visible="{sectionFlags>/createMode}"
 									enabled="{createState>/providerChosen}"
 									valueHelpRequest=".onContactValueHelpRequest"/>
@@ -214,7 +214,7 @@
 								<Input
 									value="{createEnrich>/employeeResponsibleName}"
 									showValueHelp="true"
-									valueHelpOnly="true"
+									editable="false"
 									visible="{sectionFlags>/createMode}"
 									enabled="{createState>/providerChosen}"
 									valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
