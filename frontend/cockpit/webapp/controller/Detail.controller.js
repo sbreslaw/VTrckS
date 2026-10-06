@@ -2085,6 +2085,7 @@ sap.ui.define([
       oContext.setProperty(ServiceSchema.headerProperties.salesOrganization, oItem.salesOrganization);
       oContext.setProperty(ServiceSchema.headerProperties.distributionChannel, oItem.distributionChannel);
       oContext.setProperty(ServiceSchema.headerProperties.division, oItem.division);
+      this._defaultProviderSalesOffice(oContext, oItem);
       var oEnrichModel = this.getView().getModel("createEnrich");
       oEnrichModel.setProperty("/providerName", oItem.fullName);
       oEnrichModel.setProperty("/providerAddress", oItem.address);
@@ -2106,6 +2107,39 @@ sap.ui.define([
       this._iProviderIohRequest = (this._iProviderIohRequest || 0) + 1;
       this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
       this._setProviderValueState(true);
+    },
+
+    _defaultProviderSalesOffice: function (oContext, oProvider) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.customerSalesAreaProperties;
+      var iRequest = (this._iSalesOfficeDefaultRequest || 0) + 1;
+      this._iSalesOfficeDefaultRequest = iRequest;
+      oContext.setProperty(ServiceSchema.headerProperties.salesOffice, "");
+      var oBinding = this.getView().getModel("po").bindList(
+        "/" + oSchema.entitySets.customerSalesArea,
+        undefined,
+        undefined,
+        [
+          new Filter(oProps.customer, FilterOperator.EQ, oProvider.id),
+          new Filter(oProps.salesOrganization, FilterOperator.EQ, oProvider.salesOrganization),
+          new Filter(oProps.distributionChannel, FilterOperator.EQ, oProvider.distributionChannel),
+          new Filter(oProps.division, FilterOperator.EQ, oProvider.division),
+          new Filter(oProps.isActiveEntity, FilterOperator.EQ, true)
+        ],
+        { $select: oProps.salesOffice }
+      );
+      oBinding.requestContexts(0, 1).then(function (aContexts) {
+        if (this._iSalesOfficeDefaultRequest === iRequest) {
+          oContext.setProperty(
+            ServiceSchema.headerProperties.salesOffice,
+            aContexts.length ? aContexts[0].getProperty(oProps.salesOffice) : ""
+          );
+        }
+      }.bind(this)).catch(function () {
+        // A missing provider sales-area default leaves Sales Office blank and selectable.
+      }).finally(function () {
+        oBinding.destroy();
+      });
     },
 
     onCreateShippingAddressChange: function (oEvent) {

@@ -717,9 +717,18 @@ sap.ui.define([], function () {
       // /IWFND/MAINT_SERVICE or the Fiori launchpad's service catalog before
       // relying on this in a live test.
       entitySets: {
+        customerSalesArea: "CustomerSalesArea",
         providerContact: "ProviderContact",
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails"
+      },
+      customerSalesAreaProperties: {
+        customer: "Customer",
+        salesOrganization: "SalesOrganization",
+        distributionChannel: "DistributionChannel",
+        division: "Division",
+        salesOffice: "SalesOffice",
+        isActiveEntity: "IsActiveEntity"
       },
       providerIohProperties: {
         soldToParty: "SoldToParty",
