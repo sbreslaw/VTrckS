@@ -59,11 +59,8 @@ sap.ui.define([
     { id: "BJONES", name: "Bob Jones (placeholder)" }
   ];
 
-  // Items fundType (MaterialGroup2) Select source - was a hardcoded core:Item
-  // list in Items.fragment.xml, now a data-driven "fundTypes" model
-  // (_createFundTypesModel) so targetField (this fund type's own quantity
-  // mirror property) travels with each entry for onFundTypeChange/
-  // onProdQtyChange to look up, instead of a second hand-maintained map.
+  // MaterialGroup2-to-quantity-mirror mapping used by onFundTypeChange and
+  // onProdQtyChange. Dropdown values come from po>/FundTypeVH per item row.
   // ARR and N/A share the single "leftover" ZZRESQTY mirror (no stated
   // per-code split from the client). SPL has no quantity mirror of its own -
   // selecting it opens the Fund Split dialog (FundSplitDialog.js) instead,
@@ -695,6 +692,10 @@ sap.ui.define([
     // §3.4) - same raw Product row object either way.
     _applyNdcPick: function (oRowContext, oItem) {
       var oProps = ServiceSchema.productProperties;
+      var sPreviousNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material);
+      if (sPreviousNdc && sPreviousNdc !== oItem[oProps.id]) {
+        this._clearFundTypeSelection(oRowContext);
+      }
       oRowContext.setProperty(ServiceSchema.itemProperties.material, oItem[oProps.id]);
       oRowContext.setProperty(ServiceSchema.itemProperties.itemText, oItem[oProps.text]);
       // Client requirement (2026-09-01): ZI_PRODUCTSTDVH_EXT - carry the NDC's
@@ -709,6 +710,7 @@ sap.ui.define([
       }
       this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", oItem[oProps.id]);
       this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
+      this._refreshFundTypeValueHelp(oRowContext);
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -719,6 +721,8 @@ sap.ui.define([
       oRowContext.setProperty(ServiceSchema.itemProperties.itemText, "");
       oRowContext.setProperty(ServiceSchema.itemProperties.brand, "");
       oRowContext.setProperty(ServiceSchema.itemProperties.unit, "");
+      this._clearFundTypeSelection(oRowContext);
+      this._refreshFundTypeValueHelp(oRowContext, "");
     },
 
     _ownsNdcAddGate: function (oRowContext) {
@@ -863,6 +867,88 @@ sap.ui.define([
       return aList.filter(function (oEntry) { return oEntry.key === sFundTypeKey; })[0];
     },
 
+    _getRowFundTypeSelect: function (oRow) {
+      return oRow && oRow.getCells().filter(function (oCell) {
+        var oBinding = oCell.getBinding && oCell.getBinding("selectedKey");
+        return oBinding && oBinding.getPath() === ServiceSchema.itemProperties.fundType;
+      })[0];
+    },
+
+    _getFundTypeSelectForContext: function (oRowContext) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var sPath = oRowContext && oRowContext.getPath();
+      var oRow = oTable && oTable.getItems().filter(function (oItem) {
+        var oContext = oItem.getBindingContext();
+        return oContext && oContext.getPath() === sPath;
+      })[0];
+      return this._getRowFundTypeSelect(oRow);
+    },
+
+    _bindFundTypeValueHelp: function (oSelect, sNdc, sOrderIntention) {
+      var oRowContext = oSelect && oSelect.getBindingContext();
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.fundTypeValueHelpProperties;
+      if (!oRowContext) {
+        return null;
+      }
+      sNdc = sNdc === undefined
+        ? oRowContext.getProperty(ServiceSchema.itemProperties.material)
+        : sNdc;
+      sOrderIntention = sOrderIntention === undefined
+        ? oRowContext.getProperty(ServiceSchema.itemProperties.orderIntention)
+        : sOrderIntention;
+      var sFilterKey = [oRowContext.getPath(), sNdc || "", sOrderIntention || ""].join("|");
+      if (oSelect.data("fundTypeFilterKey") === sFilterKey) {
+        return oSelect.getBinding("items");
+      }
+      oSelect.data("fundTypeFilterKey", sFilterKey);
+      oSelect.unbindAggregation("items");
+      if (!sNdc || !sOrderIntention) {
+        return null;
+      }
+      oSelect.bindAggregation("items", {
+        path: "po>/" + oSchema.entitySets.fundTypeValueHelp,
+        parameters: {
+          $select: [oProps.fundType, oProps.fundTypeText].join(",")
+        },
+        filters: [
+          new Filter(oProps.ndc, FilterOperator.EQ, sNdc),
+          new Filter(oProps.orderIntention, FilterOperator.EQ, sOrderIntention)
+        ],
+        template: new CoreItem({
+          key: "{po>" + oProps.fundType + "}",
+          text: "{po>" + oProps.fundTypeText + "}"
+        })
+      });
+      return oSelect.getBinding("items");
+    },
+
+    onFundTypeModelContextChange: function (oEvent) {
+      this._bindFundTypeValueHelp(oEvent.getSource());
+    },
+
+    _refreshFundTypeValueHelp: function (oRowContext, sNdc, sOrderIntention) {
+      return this._bindFundTypeValueHelp(
+        this._getFundTypeSelectForContext(oRowContext),
+        sNdc,
+        sOrderIntention
+      );
+    },
+
+    _clearFundTypeSelection: function (oRowContext) {
+      if (!oRowContext || !oRowContext.getProperty(ServiceSchema.itemProperties.fundType)) {
+        return [];
+      }
+      var aPending = [oRowContext.setProperty(ServiceSchema.itemProperties.fundType, "")];
+      this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
+        if (oEntry.targetField) {
+          aPending.push(oRowContext.setProperty(oEntry.targetField, 0));
+        }
+      });
+      FundLogicService.cacheAllocation(oRowContext);
+      return aPending;
+    },
+
     onProdQtyChange: function( oEvent) {
       var that = this;
       var oRowContext = oEvent.getSource().getBindingContext();
@@ -994,22 +1080,23 @@ sap.ui.define([
       var sIntention = oEvent.getParameter("selectedItem").getKey();
       var oRowContext = oEvent.getSource().getBindingContext();
       var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
-      var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
-      var aPending = [];
-      if (oFundType && !formatter.fundTypeItemEnabled(sIntention, oFundType.pediatricOnly, oFundType.disabled)) {
-        this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
-          if (oEntry.targetField) {
-            aPending.push(oRowContext.setProperty(oEntry.targetField, 0));
-          }
-        });
-        aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.fundType, ""));
-        FundLogicService.cacheAllocation(oRowContext);
-      }
-      // Intention can complete and activate an inactive row, so dependent
-      // fund cleanup must be staged before this final write.
-      aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.orderIntention, sIntention));
-      this._checkItemRowComplete(oRowContext);
-      Promise.all(aPending).catch(function (oError) {
+      var sFundType = oRowContext.getProperty(ServiceSchema.itemProperties.fundType);
+      var oBinding = this._refreshFundTypeValueHelp(oRowContext, undefined, sIntention);
+      var pAllowed = sFundType && oBinding
+        ? oBinding.requestContexts(0, 100).then(function (aContexts) {
+          return aContexts.some(function (oContext) {
+            return oContext.getProperty(ServiceSchema.providerOrderService.fundTypeValueHelpProperties.fundType) === sFundType;
+          });
+        }).catch(function () { return true; })
+        : Promise.resolve(!sFundType);
+      pAllowed.then(function (bAllowed) {
+        var aPending = bAllowed ? [] : this._clearFundTypeSelection(oRowContext);
+        // Intention can complete and activate an inactive row, so dependent
+        // fund cleanup must be staged before this final write.
+        aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.orderIntention, sIntention));
+        this._checkItemRowComplete(oRowContext);
+        return Promise.all(aPending);
+      }.bind(this)).catch(function (oError) {
         this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
       }.bind(this));
     },

@@ -718,6 +718,7 @@ sap.ui.define([], function () {
       // relying on this in a live test.
       entitySets: {
         customerSalesArea: "CustomerSalesArea",
+        fundTypeValueHelp: "FundTypeVH",
         providerContact: "ProviderContact",
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails"
@@ -729,6 +730,12 @@ sap.ui.define([], function () {
         division: "Division",
         salesOffice: "SalesOffice",
         isActiveEntity: "IsActiveEntity"
+      },
+      fundTypeValueHelpProperties: {
+        ndc: "NDC",
+        orderIntention: "OrderIntention",
+        fundType: "FundType",
+        fundTypeText: "FundTypeText"
       },
       providerIohProperties: {
         soldToParty: "SoldToParty",
