@@ -73,6 +73,19 @@
   max-width: none;
 }
 
+.detailSingleSelectValueHelpTable .sapUiTableRowSel .sapUiTableCell,
+.detailSingleSelectValueHelpTable tr[aria-selected="true"] .sapUiTableCell {
+  background-color: color-mix(in srgb, var(--sapList_Hover_Background) 35%, var(--sapList_Background)) !important;
+  border-bottom-color: var(--sapList_BorderColor) !important;
+}
+
+.detailSingleSelectValueHelpTable .sapUiTableCell:focus,
+.detailSingleSelectValueHelpTable .sapUiTableCell:focus::before,
+.detailSingleSelectValueHelpTable .sapUiTableCell:focus::after {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 @media (max-width: 75rem) {
   .masterSearchFilterBar .sapUiCompFilterBarItem {
     flex-basis: 12rem !important;

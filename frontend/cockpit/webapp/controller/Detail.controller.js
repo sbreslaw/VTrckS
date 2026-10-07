@@ -710,7 +710,7 @@ sap.ui.define([
       var oInput = oEvent.getSource();
       var oBundle = this.getResourceBundle();
       var oRowContext = oInput.getBindingContext();
-      this._openProductValueHelpDialog(oBundle.getText("ndcCodePickerTitle"), function (oItem) {
+      this._openProductValueHelpDialog(oBundle.getText("filterNdc"), function (oItem) {
         this._applyNdcPick(oRowContext, oItem);
         this._setNdcValueState(oInput, true);
       }.bind(this));
@@ -2033,6 +2033,15 @@ sap.ui.define([
         return [oRow[oProps.customer], oRow[oProps.salesOrganization],
           oRow[oProps.distributionChannel], oRow[oProps.division]].join("|");
       };
+      var fnSelectProvider = function (oProvider) {
+        oSelectedProvider = oProvider;
+        oSelectionModel.setProperty("/key", fnProviderKey(oSelectedProvider));
+        oDialog.setTokens([]);
+        oDialog.setTokens([new Token({
+          key: oSelectedProvider[oProps.customer],
+          text: oSelectedProvider[oProps.customerName] + " (" + oSelectedProvider[oProps.customer] + ")"
+        })]);
+      };
       var fnGetFilters = function () {
         var aFilters = [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)];
         var sSearchValue = oBasicSearch.getValue();
@@ -2053,11 +2062,18 @@ sap.ui.define([
         return aFilters;
       };
       var oTable = new GridTable({
-        selectionMode: "None",
+        selectionMode: "Single",
+        selectionBehavior: "RowOnly",
         rowMode: new AutoRowMode({ minRowCount: 8 }),
         threshold: 100,
-        enableColumnReordering: false
-      });
+        enableColumnReordering: false,
+        rowSelectionChange: function (oEvent) {
+          var oContext = oEvent.getParameter("rowContext");
+          if (oContext) {
+            fnSelectProvider(oContext.getObject());
+          }
+        }
+      }).addStyleClass("detailSingleSelectValueHelpTable");
       oTable.setModel(oSelectionModel, "providerSelection");
       oTable.addColumn(new GridColumn({
         label: new Text(),
@@ -2082,14 +2098,9 @@ sap.ui.define([
               return;
             }
             var oContext = oEvent.getSource().getBindingContext();
-            oSelectedProvider = oContext && oContext.getObject();
-            if (oSelectedProvider) {
-              oSelectionModel.setProperty("/key", fnProviderKey(oSelectedProvider));
-              oDialog.setTokens([]);
-              oDialog.setTokens([new Token({
-                key: oSelectedProvider[oProps.customer],
-                text: oSelectedProvider[oProps.customerName] + " (" + oSelectedProvider[oProps.customer] + ")"
-              })]);
+            if (oContext) {
+              fnSelectProvider(oContext.getObject());
+              oTable.setSelectedIndex(oContext.getIndex());
             }
           }
         })
@@ -2141,6 +2152,7 @@ sap.ui.define([
         tokenRemove: function () {
           oSelectedProvider = null;
           oSelectionModel.setProperty("/key", "");
+          oTable.clearSelection();
           oDialog.setTokens([]);
         },
         afterClose: function () {
@@ -2150,6 +2162,7 @@ sap.ui.define([
       var fnBindRows = function () {
         oSelectedProvider = null;
         oSelectionModel.setProperty("/key", "");
+        oTable.clearSelection();
         oDialog.setTokens([]);
         oTable.bindRows({
           path: "/" + ServiceSchema.entitySets.customerSalesArea,
@@ -2186,7 +2199,8 @@ sap.ui.define([
       });
       oDialog.setFilterBar(oFilterBar);
       oDialog.setTable(oTable);
-      oTable.setSelectionMode("None");
+      oTable.setSelectionMode("Single");
+      oTable.setSelectionBehavior("RowOnly");
       this.getView().addDependent(oDialog);
       oDialog.open();
       fnBindRows();
@@ -2263,44 +2277,178 @@ sap.ui.define([
     // picked row's RequestedQuantityUnit (onItemNdcValueHelpRequest) so Items
     // UOM can go back to being read-only.
     _openProductValueHelpDialog: function (sTitle, fnApply) {
+      var oBundle = this.getResourceBundle();
       var oProps = ServiceSchema.productProperties;
-      var oDialog = new SelectDialog({
+      var aFields = [
+        { path: oProps.id, labelKey: "productHelpProductId" },
+        { path: oProps.text, labelKey: "productHelpProduct" },
+        { path: oProps.industryStandardName, labelKey: "productHelpBrand" }
+      ];
+      var oBasicSearch = new SearchField({
+        width: "100%",
+        placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+      });
+      var aFieldControls = aFields.map(function (oField) {
+        return { definition: oField, control: new Input() };
+      });
+      var oSelectionModel = new JSONModel({ key: "" });
+      var oSelectedProduct = null;
+      var fnSelectProduct = function (oProduct) {
+        oSelectedProduct = oProduct;
+        oSelectionModel.setProperty("/key", oSelectedProduct[oProps.id]);
+        oDialog.setTokens([]);
+        oDialog.setTokens([new Token({
+          key: oSelectedProduct[oProps.id],
+          text: oSelectedProduct[oProps.text] + " (" + oSelectedProduct[oProps.id] + ")"
+        })]);
+      };
+      var fnGetFilters = function () {
+        var aFilters = [];
+        var sSearchValue = oBasicSearch.getValue();
+        if (sSearchValue) {
+          aFilters.push(new Filter({
+            filters: aFields.map(function (oField) {
+              return new Filter(oField.path, FilterOperator.Contains, sSearchValue);
+            }),
+            and: false
+          }));
+        }
+        aFieldControls.forEach(function (oFieldControl) {
+          var sValue = oFieldControl.control.getValue();
+          if (sValue) {
+            aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
+          }
+        });
+        return aFilters;
+      };
+      var oTable = new GridTable({
+        selectionMode: "Single",
+        selectionBehavior: "RowOnly",
+        rowMode: new AutoRowMode({ minRowCount: 8 }),
+        threshold: 100,
+        enableColumnReordering: false,
+        rowSelectionChange: function (oEvent) {
+          var oContext = oEvent.getParameter("rowContext");
+          if (oContext) {
+            fnSelectProduct(oContext.getObject());
+          }
+        }
+      }).addStyleClass("detailSingleSelectValueHelpTable");
+      oTable.setModel(oSelectionModel, "productSelection");
+      oTable.addColumn(new GridColumn({
+        label: new Text(),
+        width: "3rem",
+        hAlign: "Center",
+        template: new RadioButton({
+          groupName: "productSelection",
+          selected: {
+            parts: [
+              { path: "productSelection>/key", targetType: "any" },
+              { path: oProps.id, targetType: "any" }
+            ],
+            formatter: function (sSelectedKey, sProduct) {
+              return sSelectedKey === sProduct;
+            }
+          },
+          select: function (oEvent) {
+            if (!oEvent.getParameter("selected")) {
+              return;
+            }
+            var oContext = oEvent.getSource().getBindingContext();
+            if (oContext) {
+              fnSelectProduct(oContext.getObject());
+              oTable.setSelectedIndex(oContext.getIndex());
+            }
+          }
+        })
+      }));
+      [
+        { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
+        { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
+        { path: oProps.group, labelKey: "productHelpBaseCategory", width: "10rem" },
+        { path: oProps.industryStandardName, labelKey: "productHelpBrand", width: "10rem" }
+      ].forEach(function (oColumn) {
+        oTable.addColumn(new GridColumn({
+          label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+          template: oColumn.path ? new Text({ text: "{" + oColumn.path + "}" }) : new Text(),
+          width: oColumn.width
+        }));
+      });
+      var oDialog = new ValueHelpDialog({
         title: sTitle,
-        growing: true,
-        items: {
+        key: oProps.id,
+        descriptionKey: oProps.text,
+        contentWidth: "66rem",
+        contentHeight: "47rem",
+        draggable: true,
+        resizable: true,
+        supportMultiselect: true,
+        supportRanges: false,
+        supportRangesOnly: false,
+        ok: function () {
+          if (!oSelectedProduct) {
+            return;
+          }
+          fnApply(oSelectedProduct);
+          oDialog.close();
+        },
+        cancel: function () {
+          oDialog.close();
+        },
+        tokenRemove: function () {
+          oSelectedProduct = null;
+          oSelectionModel.setProperty("/key", "");
+          oTable.clearSelection();
+          oDialog.setTokens([]);
+        },
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      });
+      var fnBindRows = function () {
+        oSelectedProduct = null;
+        oSelectionModel.setProperty("/key", "");
+        oTable.clearSelection();
+        oDialog.setTokens([]);
+        oTable.bindRows({
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
             $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
           },
-          template: new StandardListItem({
-            title: "{" + oProps.id + "}",
-            description: "{" + oProps.text + "}"
-          })
-        },
-        search: function (oEvent) {
-          var sValue = oEvent.getParameter("value");
-          var oBinding = oEvent.getSource().getBinding("items");
-          oBinding.filter(sValue ? new Filter({
-            filters: [
-              new Filter(oProps.id, FilterOperator.Contains, sValue),
-              new Filter(oProps.text, FilterOperator.Contains, sValue)
-            ],
-            and: false
-          }) : []);
-        },
-        confirm: function (oEvent) {
-          var oSelectedItem = oEvent.getParameter("selectedItem");
-          if (oSelectedItem) {
-            fnApply(oSelectedItem.getBindingContext().getObject());
+          filters: fnGetFilters(),
+          events: {
+            dataRequested: function () { oDialog.setBusy(true); },
+            dataReceived: function () {
+              oDialog.setBusy(false);
+              oDialog.update();
+            }
           }
-          oDialog.destroy();
-        },
-        cancel: function () {
-          oDialog.destroy();
-        }
+        });
+      };
+      var oFilterBar = new FilterBar({
+        advancedMode: true,
+        filterBarExpanded: true,
+        showGoOnFB: true,
+        search: fnBindRows
       });
+      oFilterBar.setBasicSearch(oBasicSearch);
+      oBasicSearch.attachSearch(fnBindRows);
+      aFieldControls.forEach(function (oFieldControl) {
+        oFilterBar.addFilterGroupItem(new FilterGroupItem({
+          groupName: "productValueHelp",
+          name: oFieldControl.definition.path,
+          label: oBundle.getText(oFieldControl.definition.labelKey),
+          visibleInFilterBar: true,
+          control: oFieldControl.control
+        }));
+      });
+      oDialog.setFilterBar(oFilterBar);
+      oDialog.setTable(oTable);
+      oTable.setSelectionMode("Single");
+      oTable.setSelectionBehavior("RowOnly");
       this.getView().addDependent(oDialog);
       oDialog.open();
+      fnBindRows();
     },
 
     // Prefill the selected Provider's current default contact. The backend's
