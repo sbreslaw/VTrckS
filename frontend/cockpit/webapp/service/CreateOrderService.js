@@ -171,10 +171,11 @@ sap.ui.define([
         if (oNotesContext) {
           pWrite = oNotesContext.setProperty(oProps.longText, sNotes);
         } else {
+          var oInsertProps = oText.insertProperties;
           var oPayload = {};
-          oPayload[oProps.languageForEdit] = oText.defaultLanguage;
-          oPayload[oProps.longTextIdForEdit] = oText.notesLongTextId;
-          oPayload[oProps.longText] = sNotes;
+          oPayload[oInsertProps.language] = oText.defaultLanguage;
+          oPayload[oInsertProps.longTextId] = oText.notesLongTextId;
+          oPayload[oInsertProps.longText] = sNotes;
           pWrite = oBinding.create(oPayload).created();
         }
         var oSave = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {

@@ -76,6 +76,10 @@ sap.ui.define([], function () {
       // Detail.controller.js#_setCreateMode.
       deliveryStatus: "OverallDeliveryStatus",
       deliveryBlockStatus: "OverallDeliveryBlockStatus",
+      // SalesOrderTextType is exposed as this top-level entity set for reads,
+      // but metadata marks it Insertable=false. New rows must be created via
+      // SalesOrderManage/_Text after PrepareForEdit.
+      salesOrderText: "SalesOrderText",
       // DF-1025: full code list (SalesDocumentRjcnReasonType); the property's own
       // ValueList points at i_salesdocallowedrjcnrsn (per-doc-type), the backend enforces that.
       rejectionReason: "SalesDocumentRjcnReason"
@@ -825,9 +829,12 @@ sap.ui.define([], function () {
 
     // Issue Batch 9-30-001 §3.1 (Notes write path): SalesOrderTextType is
     // real and confirmed (design/metadata/so_C_SALESORDERMANAGE_2026-09-30.xml -
-    // Key SalesOrder+Language+LongTextID, property LongText), reached only
-    // via the header's own `_Text` navigation (never a top-level query).
+    // Key SalesOrder+Language+LongTextID, property LongText). The top-level
+    // SalesOrderText entity set is Insertable=false; create through the
+    // header's `_Text` navigation, whose Insertable capability is controlled
+    // by SalesOrderManage/__CreateByAssociationControl/_Text.
     textEntity: {
+      entitySet: "SalesOrderText",
       navigation: "_Text",
       properties: {
         salesOrder: "SalesOrder",
@@ -835,6 +842,11 @@ sap.ui.define([], function () {
         languageForEdit: "LanguageForEdit",
         longTextId: "LongTextID",
         longTextIdForEdit: "LongTextIDForEdit",
+        longText: "LongText"
+      },
+      insertProperties: {
+        language: "LanguageForEdit",
+        longTextId: "LongTextIDForEdit",
         longText: "LongText"
       },
       prepareForEditAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.PrepareForEdit",
