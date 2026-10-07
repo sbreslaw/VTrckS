@@ -415,6 +415,7 @@
 									selectedKey="{priorityState>/value}"
 									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
 									width="100%"
+									forceSelection="false"
 									enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${createState>/priorityLocked} }"
 									tooltip="{i18n>priorityLockedTooltip}"
 									items="{path: '/DeliveryPriority'}"
