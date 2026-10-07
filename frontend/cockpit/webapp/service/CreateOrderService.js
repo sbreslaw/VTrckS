@@ -621,21 +621,6 @@ sap.ui.define([
         oAction.setParameter(sKey, oEnrichmentData[sKey]);
       });
       return oAction.invoke();
-    },
-
-    // Step ③ — IoH deep-create/createFromProposal from the local IoH rows
-    // (CR-002: IoH is a separate, decoupled activity document). BLOCKED-BY-
-    // SERVICE: the IoH BO/companion service (design/prompts/e008_ext_build.md)
-    // is a build prompt only, nothing is activated on-system yet
-    // (ServiceSchema.iohCreateAction is null). Degrades the same way as step
-    // ②: skip, rows stay local-only and are lost on exit — documented, not
-    // silently swallowed (see NOTES.md).
-    submitIoH: function (sSalesDocument, aRows) {
-      if (!ServiceSchema.iohCreateAction) {
-        return Promise.resolve({ skipped: true, reason: "IoH backend not available (design/prompts/e008_ext_build.md, not yet activated)", rows: aRows });
-      }
-      // TODO-VERIFY once the IoH BO/companion service ships: real invocation.
-      return Promise.resolve({ skipped: false, salesDocument: sSalesDocument, rows: aRows });
     }
   };
 

@@ -42,8 +42,8 @@
               <Input value="{ioh>quantity}" type="Number" textAlign="End"
                 editable="{= ${sectionFlags>/createMode} &amp;&amp; ${ioh>/editable} }" />
               <VBox>
-                <Text text="{ioh>expirationDate}" visible="{= !${ioh>isNew} }" />
-                <DatePicker value="{ioh>expirationDate}" valueFormat="MM/dd/yyyy" displayFormat="MM/dd/yyyy"
+                <Text text="{path: 'ioh>expirationDate', formatter: '.formatter.iohExpirationDate'}" visible="{= !${ioh>isNew} }" />
+                <DatePicker value="{ioh>expirationDate}" valueFormat="yyyy-MM-dd" displayFormat="MM/dd/yyyy"
                   visible="{ioh>isNew}" editable="{ioh>/editable}" />
               </VBox>
             </cells>

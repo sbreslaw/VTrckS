@@ -45,6 +45,7 @@ sap.ui.define([
   "cdc/vaccreq/model/PricingColumns",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
+  "cdc/vaccreq/service/ProviderInventoryService",
   "cdc/vaccreq/service/FundLogicService",
   "cdc/vaccreq/controller/FundSplitDialog"
 ], function (
@@ -52,7 +53,7 @@ sap.ui.define([
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
   Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
-  EditRequestService, CreateOrderService, FundLogicService, FundSplitDialog
+  EditRequestService, CreateOrderService, ProviderInventoryService, FundLogicService, FundSplitDialog
 ) {
   "use strict";
 
@@ -123,9 +124,8 @@ sap.ui.define([
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
-      // Provider inventory is loaded from po>/ProviderIOH after a Provider is
-      // selected and kept local for a responsive read-only table.
-      this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false }), "ioh");
+      this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
+      this._aDeletedProviderIohContexts = [];
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -1769,6 +1769,7 @@ sap.ui.define([
     _setCreateMode: function (bOn) {
       var oFlags = this.getView().getModel("sectionFlags");
       oFlags.setProperty("/createMode", bOn);
+      this._resetProviderInventoryState();
       // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): all createMode
       // sections are editable immediately — there is no separate
       // "bootstrapped" state anymore (the scratch context from _onCreateMatched
@@ -1780,7 +1781,6 @@ sap.ui.define([
         this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
         this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
         this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
-        this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
@@ -2549,8 +2549,7 @@ sap.ui.define([
       });
       this.getView().getModel("createState").setProperty("/providerChosen", true);
       this._prefillMainContact(oItem.id);
-      this._iProviderIohRequest = (this._iProviderIohRequest || 0) + 1;
-      this.getView().getModel("ioh").setData({ rows: [], busy: false, error: false, editable: false });
+      this._resetProviderInventoryState();
       this._setProviderValueState(true);
     },
 
@@ -2626,12 +2625,28 @@ sap.ui.define([
       this._loadProviderInventory(sProviderId);
     },
 
+    _resetProviderInventoryState: function () {
+      this._iProviderIohRequest = (this._iProviderIohRequest || 0) + 1;
+      if (this._oProviderIohListBinding) {
+        this._oProviderIohListBinding.destroy();
+        this._oProviderIohListBinding = null;
+      }
+      this._aDeletedProviderIohContexts = [];
+      this.getView().getModel("ioh").setData({
+        rows: [], busy: false, error: false, editable: false, loaded: false
+      });
+    },
+
     _loadProviderInventory: function (sProviderId) {
       var oIohModel = this.getView().getModel("ioh");
       var oProps = ServiceSchema.providerOrderService.providerIohProperties;
       var iRequest = (this._iProviderIohRequest || 0) + 1;
       this._iProviderIohRequest = iRequest;
-      oIohModel.setData({ rows: [], busy: true, error: false, editable: false });
+      if (this._oProviderIohListBinding) {
+        this._oProviderIohListBinding.destroy();
+      }
+      this._aDeletedProviderIohContexts = [];
+      oIohModel.setData({ rows: [], busy: true, error: false, editable: false, loaded: false });
 
       var oListBinding = this.getView().getModel("po").bindList(
         "/" + ServiceSchema.providerOrderService.entitySets.providerIoh,
@@ -2640,9 +2655,11 @@ sap.ui.define([
         [new Filter(oProps.soldToParty, FilterOperator.EQ, sProviderId)],
         {
           $select: [oProps.soldToParty, oProps.material, oProps.batch,
-            oProps.quantity, oProps.expirationDate, oProps.brand].join(",")
+            oProps.quantity, oProps.unit, oProps.expirationDate, oProps.brand].join(","),
+          $$updateGroupId: ProviderInventoryService.UPDATE_GROUP
         }
       );
+      this._oProviderIohListBinding = oListBinding;
 
       oListBinding.requestContexts(0, 500).then(function (aContexts) {
         if (this._iProviderIohRequest !== iRequest) {
@@ -2655,23 +2672,27 @@ sap.ui.define([
               ndc: oRow[oProps.material],
               lot: oRow[oProps.batch],
               quantity: oRow[oProps.quantity],
-              expirationDate: formatter.iohExpirationDate(oRow[oProps.expirationDate]),
-              isNew: false
+              originalQuantity: oRow[oProps.quantity],
+              unit: oRow[oProps.unit],
+              expirationDate: oRow[oProps.expirationDate],
+              isNew: false,
+              backendContext: oContext
             };
           });
         oIohModel.setData({
           rows: aRows,
           busy: false,
           error: false,
-          editable: !!this.getView().getModel("sectionFlags").getProperty("/createMode")
+          editable: !!this.getView().getModel("sectionFlags").getProperty("/createMode"),
+          loaded: true
         });
       }.bind(this)).catch(function () {
         if (this._iProviderIohRequest === iRequest) {
-          oIohModel.setData({ rows: [], busy: false, error: true, editable: false });
+          oListBinding.destroy();
+          this._oProviderIohListBinding = null;
+          oIohModel.setData({ rows: [], busy: false, error: true, editable: false, loaded: false });
         }
-      }.bind(this)).finally(function () {
-        oListBinding.destroy();
-      });
+      }.bind(this));
     },
 
     onInventoryInsertRow: function () {
@@ -2689,7 +2710,7 @@ sap.ui.define([
       if (oBinding) {
         oBinding.filter([]);
       }
-      aRows.push({ brand: "", ndc: "", lot: "", quantity: 0, expirationDate: "", isNew: true });
+      aRows.push({ brand: "", ndc: "", lot: "", quantity: 0, unit: "", expirationDate: "", isNew: true });
       oIohModel.setProperty("/rows", aRows);
     },
 
@@ -2704,6 +2725,10 @@ sap.ui.define([
       var oIohModel = this.getView().getModel("ioh");
       var iIndex = Number(oRowContext.getPath().split("/").pop());
       var aRows = oIohModel.getProperty("/rows").slice();
+      var oDeletedRow = aRows[iIndex];
+      if (oDeletedRow && !oDeletedRow.isNew && oDeletedRow.backendContext) {
+        this._aDeletedProviderIohContexts.push(oDeletedRow.backendContext);
+      }
       aRows.splice(iIndex, 1);
       oIohModel.setProperty("/rows", aRows);
     },
@@ -2734,7 +2759,7 @@ sap.ui.define([
         items: {
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
-            $select: [oProps.id, oProps.text, oProps.industryStandardName].join(",")
+            $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
           },
           filters: aExclusionFilters,
           template: new StandardListItem({
@@ -2763,6 +2788,7 @@ sap.ui.define([
             var oProduct = oSelectedItem.getBindingContext().getObject();
             oRowContext.setProperty("ndc", oProduct[oProps.id]);
             oRowContext.setProperty("brand", oProduct[oProps.industryStandardName] || "");
+            oRowContext.setProperty("unit", oProduct[oProps.baseUnit] || "");
           }
           oDialog.destroy();
         },
@@ -3484,6 +3510,7 @@ sap.ui.define([
       if (!oContext) {
         return;
       }
+      var sProviderId = oContext.getProperty(ServiceSchema.headerProperties.providerId);
 
       // Guard against a double-click firing the ①-④ replay (and its backend
       // SaveChanges commit) twice before setBusy(true)'s overlay blocks input.
@@ -3492,7 +3519,7 @@ sap.ui.define([
         return;
       }
 
-      if (!oContext.getProperty(ServiceSchema.headerProperties.providerId)) {
+      if (!sProviderId) {
         MessageToast.show(oBundle.getText("createRequestFieldRequired"));
         this._oSectionFactory.expandSection("details");
         return;
@@ -3503,6 +3530,14 @@ sap.ui.define([
       if (!CreateOrderService.hasMinItems(oItemsBinding)) {
         MessageToast.show(oBundle.getText("createRequestMinItemsError"));
         this._oSectionFactory.expandSection("items");
+        return;
+      }
+
+      var oIohModel = this.getView().getModel("ioh");
+      var oIohData = oIohModel.getData();
+      if (oIohData.loaded && ProviderInventoryService.hasInvalidRows(oIohData.rows)) {
+        MessageToast.show(oBundle.getText("inventoryRequiredFields"));
+        this._oSectionFactory.expandSection("inventory");
         return;
       }
 
@@ -3546,6 +3581,14 @@ sap.ui.define([
               status: oEnrich.status,
               shipToPartyId: oEnrich.shipToPartyId
             });
+          }).then(function () {
+            return ProviderInventoryService.save(
+              that.getView().getModel("po"),
+              that._oProviderIohListBinding,
+              sProviderId,
+              oIohData.rows,
+              that._aDeletedProviderIohContexts
+            );
           }).catch(function (oError) {
             oError.orderCreatedId = sNewId;
             throw oError;

@@ -526,6 +526,7 @@ sap.ui.define([], function () {
     // createReplayGroup/CreateOrderService.js#save). ---
     createUpdateGroup: "vrCreate",
     createPayloadUom: "EA",
+    providerIohUpdateGroup: "providerIohChanges",
 
     // Ancillary Items & Opt-Out session prompt (v5 item-handling amendment):
     // once a scratch item row is complete, it POSTs straight to the real
@@ -605,13 +606,9 @@ sap.ui.define([], function () {
 
     // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
     // definition extension action on the standard BO, name/params TBD once
-    // activated on-system) and step ③ IoH deep-create/createFromProposal
-    // (design/prompts/e008_ext_build.md — ZUI_VR_EXT companion service, not yet
-    // built/activated anywhere). Both are null = confirmed BLOCKED-BY-SERVICE,
-    // never invented — CreateOrderService.js degrades per the v3 prompt's own
-    // Step-0 rule (skip the call; affected fields stay read-only in createMode).
+    // activated on-system). Null means confirmed BLOCKED-BY-SERVICE; affected
+    // fields remain read-only in create mode.
     enrichmentAction: null,
-    iohCreateAction: null,
 
     // Session Prompt (Detail View Adjustments) 3.9: the ONLY way to add a new
     // HeaderPartner row - Container/HeaderPartner InsertRestrictions.

@@ -26,7 +26,13 @@ sap.ui.define([
     OrganizationDivision: "orgData",
     Product: "items",
     RequestedQuantity: "items",
-    RequestedQuantityUnit: "items"
+    RequestedQuantityUnit: "items",
+    Material: "inventory",
+    Batch: "inventory",
+    Quantity: "inventory",
+    Unit: "inventory",
+    ExpirationDate: "inventory",
+    Brand: "inventory"
   };
 
   // Message Accuracy & Hygiene task (this file's own header comment above is
