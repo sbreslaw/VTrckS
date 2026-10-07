@@ -86,6 +86,14 @@
   box-shadow: none !important;
 }
 
+.providerSearchModeSpacer {
+  visibility: hidden;
+}
+
+.providerValueHelpDialog .sapUiCompFilterBarAdvancedItem {
+  margin-bottom: 0.125rem;
+}
+
 @media (max-width: 75rem) {
   .masterSearchFilterBar .sapUiCompFilterBarItem {
     flex-basis: 12rem !important;

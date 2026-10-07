@@ -15,6 +15,7 @@ sap.ui.define([
   "sap/m/Dialog",
   "sap/m/Button",
   "sap/m/Input",
+  "sap/m/Select",
   "sap/m/List",
   "sap/m/Column",
   "sap/m/ColumnListItem",
@@ -35,13 +36,15 @@ sap.ui.define([
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/VariantStore"
+  "cdc/vaccreq/model/VariantStore",
+  "cdc/vaccreq/service/ProviderSearchService",
+  "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
-  Dialog, Button, Input, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, SearchField, Token,
+  Dialog, Button, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, SearchField, Token,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
-  formatter, ServiceSchema, VariantStore
+  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
 ) {
   "use strict";
 
@@ -381,13 +384,26 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
       var oValueHelpModel = oConfig.loadRows ? new JSONModel({ rows: [] }) : null;
+      var sSearchMode = oConfig.defaultSearchMode;
+      var iRowPageSize = oConfig.rowPageSize || 50;
+      var iRowLimit = iRowPageSize;
+      var iLoadRequest = 0;
+      var bHasMoreRows = true;
+      var bRowsLoading = false;
       var oBasicSearch = new SearchField({
         width: "100%",
         placeholder: oBundle.getText("valueHelpSearchPlaceholder")
       });
-      var aFieldControls = oConfig.fields.map(function (oField) {
-        return { definition: oField, control: new Input() };
+      var aFieldControls = [];
+      var fnCreateFieldControls = function (aFields) {
+        aFieldControls = aFields.map(function (oField) {
+          return { definition: oField, control: new Input() };
+        });
+      };
+      var oInitialSearchMode = (oConfig.searchModes || []).find(function (oMode) {
+        return oMode.key === sSearchMode;
       });
+      fnCreateFieldControls(oInitialSearchMode ? oInitialSearchMode.fields : oConfig.fields);
       var fnGetFilters = function () {
         var aFilters = [];
         var sSearchValue = oBasicSearch.getValue();
@@ -409,7 +425,10 @@ sap.ui.define([
       };
       var oTable = new GridTable({
         selectionMode: "MultiToggle",
-        rowMode: new AutoRowMode({ minRowCount: 8 }),
+        rowMode: new AutoRowMode({
+          minRowCount: oConfig.maxVisibleRows || 8,
+          maxRowCount: oConfig.maxVisibleRows
+        }),
         threshold: 100,
         enableColumnReordering: false
       });
@@ -418,16 +437,20 @@ sap.ui.define([
       } else if (oConfig.modelName) {
         oTable.setModel(this.getOwnerComponent().getModel(oConfig.modelName));
       }
-      oConfig.columns.forEach(function (oColumn) {
-        oTable.addColumn(new Column({
-          label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
-          template: oColumn.path ? new Text({ text: "{" + oColumn.path + "}" }) : new Text(),
-          width: oColumn.width
-        }));
-      });
+      var fnSetColumns = function (aColumns) {
+        oTable.removeAllColumns().forEach(function (oColumn) { oColumn.destroy(); });
+        aColumns.forEach(function (oColumn) {
+          oTable.addColumn(new Column({
+            label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+            template: oColumn.path ? new Text({ text: "{" + oColumn.path + "}" }) : new Text(),
+            width: oColumn.width
+          }));
+        });
+      };
+      fnSetColumns(oInitialSearchMode ? oInitialSearchMode.columns : oConfig.columns);
       var oDialog = new ValueHelpDialog({
         title: oConfig.title,
-        contentWidth: "66rem",
+        contentWidth: oConfig.contentWidth || "66rem",
         contentHeight: "47rem",
         draggable: true,
         resizable: true,
@@ -470,25 +493,46 @@ sap.ui.define([
           oDialog.destroy();
         }
       });
-      var fnBindRows = function () {
+      if (oConfig.styleClass) {
+        oDialog.addStyleClass(oConfig.styleClass);
+      }
+      var fnBindRows = function (bIncremental) {
         if (oConfig.loadRows) {
           var mFieldValues = {};
           aFieldControls.forEach(function (oFieldControl) {
             mFieldValues[oFieldControl.definition.path] = oFieldControl.control.getValue();
           });
-          oDialog.setBusy(true);
-          oConfig.loadRows(oBasicSearch.getValue(), mFieldValues)
+          var iCurrentRequest = ++iLoadRequest;
+          bRowsLoading = true;
+          if (!bIncremental) {
+            oDialog.setBusy(true);
+          }
+          oConfig.loadRows(oBasicSearch.getValue(), mFieldValues, sSearchMode, iRowLimit)
             .then(function (aRows) {
+              if (iCurrentRequest !== iLoadRequest) {
+                return;
+              }
+              bHasMoreRows = !oConfig.progressiveRows ||
+                (typeof aRows.hasMore === "boolean" ? aRows.hasMore : aRows.length >= iRowLimit);
               oValueHelpModel.setProperty("/rows", aRows);
-              oTable.bindRows("/rows");
+              if (!oTable.getBinding("rows")) {
+                oTable.bindRows("/rows");
+              }
               oDialog.update();
             })
             .catch(function () {
+              if (iCurrentRequest !== iLoadRequest) {
+                return;
+              }
+              bHasMoreRows = false;
               oValueHelpModel.setProperty("/rows", []);
-              MessageToast.show(oBundle.getText("providerPinHelpLoadError"));
+              MessageToast.show(oBundle.getText(oConfig.loadErrorKey || "providerPinHelpLoadError"));
             })
             .finally(function () {
-              oDialog.setBusy(false);
+              if (iCurrentRequest === iLoadRequest) {
+                bRowsLoading = false;
+                oDialog.setBusy(false);
+              }
             });
           return;
         }
@@ -505,32 +549,95 @@ sap.ui.define([
           }
         });
       };
+      var fnResetAndBindRows = function () {
+        iRowLimit = iRowPageSize;
+        bHasMoreRows = true;
+        fnBindRows();
+      };
       var oFilterBar = new FilterBar({
         advancedMode: true,
         filterBarExpanded: true,
         showGoOnFB: true,
-        search: fnBindRows
-      });
+        search: fnResetAndBindRows
+      }).addStyleClass(oConfig.searchModes ? "providerSearchValueHelpFilterBar" : "");
       oFilterBar.setBasicSearch(oBasicSearch);
-      oBasicSearch.attachSearch(fnBindRows);
-      aFieldControls.forEach(function (oFieldControl) {
+      oBasicSearch.attachSearch(fnResetAndBindRows);
+      var fnAddFieldControls = function () {
+        aFieldControls.forEach(function (oFieldControl, iIndex) {
+          if (oConfig.searchModes && iIndex === 2) {
+            oFilterBar.addFilterGroupItem(new FilterGroupItem({
+              groupName: "valueHelp",
+              name: "searchModeSpacer",
+              label: "",
+              visibleInFilterBar: true,
+              control: new Input().addStyleClass("providerSearchModeSpacer")
+            }));
+          }
+          oFilterBar.addFilterGroupItem(new FilterGroupItem({
+            groupName: "valueHelp",
+            name: oFieldControl.definition.path,
+            label: oBundle.getText(oFieldControl.definition.labelKey),
+            visibleInFilterBar: true,
+            control: oFieldControl.control
+          }));
+        });
+      };
+      if (oConfig.searchModes) {
+        var oSearchModeSelect = new Select({
+          selectedKey: sSearchMode,
+          items: oConfig.searchModes.map(function (oMode) {
+            return new Item({ key: oMode.key, text: oBundle.getText(oMode.labelKey) });
+          }),
+          change: function (oEvent) {
+            sSearchMode = oEvent.getParameter("selectedItem").getKey();
+            var oMode = oConfig.searchModes.find(function (oSearchMode) {
+              return oSearchMode.key === sSearchMode;
+            });
+            oFilterBar.getFilterGroupItems().slice(1).forEach(function (oItem) {
+              oFilterBar.removeFilterGroupItem(oItem);
+              oItem.destroy();
+            });
+            fnSetColumns(oMode.columns);
+            fnCreateFieldControls(oMode.fields);
+            fnAddFieldControls();
+            fnResetAndBindRows();
+          }
+        }).addStyleClass("providerSearchModeSelect");
         oFilterBar.addFilterGroupItem(new FilterGroupItem({
           groupName: "valueHelp",
-          name: oFieldControl.definition.path,
-          label: oBundle.getText(oFieldControl.definition.labelKey),
+          name: "searchMode",
+          label: oBundle.getText("providerSearchFor"),
           visibleInFilterBar: true,
-          control: oFieldControl.control
+          control: oSearchModeSelect
         }));
-      });
+      }
+      fnAddFieldControls();
       oDialog.setFilterBar(oFilterBar);
       oDialog.setTable(oTable);
       oDialog.setRangeKeyFields([{ label: oConfig.title, key: oConfig.key, type: "string" }]);
       oDialog.setIncludeRangeOperations(CONDITION_OPERATIONS);
       oDialog.setExcludeRangeOperations(CONDITION_OPERATIONS);
       oDialog.setTokens(oInput.getTokens().map(function (oToken) { return oToken.clone(); }));
+      if (oConfig.progressiveRows) {
+        oTable.attachFirstVisibleRowChanged(function (oEvent) {
+          var iLoadedRows = oValueHelpModel.getProperty("/rows").length;
+          var iVisibleRows = oTable.getVisibleRowCount() || 8;
+          if (!bRowsLoading && bHasMoreRows && iLoadedRows &&
+              oEvent.getParameter("firstVisibleRow") + iVisibleRows >= iLoadedRows - 5) {
+            iRowLimit += iRowPageSize;
+            fnBindRows(true);
+          }
+        });
+      }
+      if (oConfig.fitTableRows) {
+        ValueHelpTableFitter.attach(oDialog, oTable, ResizeHandler);
+      }
       this.getView().addDependent(oDialog);
       oDialog.open();
-      fnBindRows();
+      if (oConfig.fitTableRows) {
+        ValueHelpTableFitter.fit(oDialog, oTable);
+      }
+      fnResetAndBindRows();
     },
 
     _loadProviderPinRows: function (sBasicSearch, mFieldValues, sAdditionalFilter) {
@@ -846,7 +953,27 @@ sap.ui.define([
       var oProps = ServiceSchema.customerSalesAreaProperties;
       this._openStandardEntityValueHelp(this.byId("filterProvider"), {
         title: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("providerHelpId"),
+        contentWidth: "78rem",
         entitySet: ServiceSchema.entitySets.customerSalesArea,
+        loadRows: function (sBasicSearch, mFieldValues, sSearchMode, iRowLimit) {
+          return ProviderSearchService.loadRows(
+            this.getOwnerComponent().getModel(),
+            this.getOwnerComponent().getModel("po"),
+            sSearchMode,
+            mFieldValues,
+            sBasicSearch,
+            [],
+            iRowLimit
+          );
+        }.bind(this),
+        searchModes: ProviderSearchService.modes,
+        defaultSearchMode: ProviderSearchService.defaultMode,
+        progressiveRows: true,
+        rowPageSize: 50,
+        maxVisibleRows: 7,
+        fitTableRows: true,
+        styleClass: "providerValueHelpDialog",
+        loadErrorKey: "providerSearchLoadError",
         key: oProps.customer,
         descriptionKey: oProps.customerName,
         select: [oProps.customer, oProps.customerName, oProps.postalCode, oProps.cityName, oProps.countryText],

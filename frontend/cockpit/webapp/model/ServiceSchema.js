@@ -642,10 +642,11 @@ sap.ui.define([], function () {
       text: "OverallSDProcessStatus_Text"
     },
 
-    // HeaderPartnerType (so.xml ~line 1065) - reached only via the header's
-    // _Partner navigation (navigation.headerToPartner), never queried
-    // top-level. Session Prompt (Detail View Adjustments) 3.9.
+    // HeaderPartnerType (so.xml ~line 1065) - reached through the header's
+    // _Partner navigation for editing and queried top-level for historical
+    // AP-contact fallback searches.
     headerPartnerProperties: {
+      salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
       // Customer is the real, settable partner-number field (set via a PATCH
       // after CreatePartner, see createPartnerAction above); Partner
@@ -658,6 +659,11 @@ sap.ui.define([], function () {
       phone: "InternationalPhoneNumber",
       email: "EmailAddress",
       address: "FormattedPostalAddressDesc",
+      postalCode: "PostalCode",
+      cityName: "CityName",
+      country: "Country",
+      streetName: "StreetName",
+      houseNumber: "HouseNumber",
       // Dynamic per-row capability structs (so.xml ~1065) - Delete/Update
       // enablement for each HeaderPartner row must read these, not a static
       // flag (Container/HeaderPartner UpdateRestrictions/DeleteRestrictions
