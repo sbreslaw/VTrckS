@@ -2222,13 +2222,14 @@ sap.ui.define([
     // BusinessPartnerPerson, displays BusinessPartnerPerson_Text.
     _openProviderContactValueHelpDialog: function (sTitle, sProviderId, fnApply) {
       var that = this;
+      var oBundle = this.getResourceBundle();
       var oProps = ServiceSchema.providerOrderService.providerContactProperties;
       var oModel = this.getView().getModel("po");
       var oToday = new Date();
       var oListBinding = oModel.bindList("/" + ServiceSchema.providerOrderService.entitySets.providerContact, undefined, undefined,
         new Filter(oProps.businessPartnerCompany, FilterOperator.EQ, sProviderId), {
           $select: [oProps.businessPartnerPerson, oProps.businessPartnerPersonText,
-            oProps.validityStartDate, oProps.validityEndDate].join(",")
+            oProps.relationshipCategory, oProps.validityStartDate, oProps.validityEndDate].join(",")
         });
 
       oListBinding.requestContexts(0, 500).then(function (aContexts) {
@@ -2238,35 +2239,167 @@ sap.ui.define([
           return (!oStart || oStart <= oToday) && (!oEnd || oEnd >= oToday);
         });
         var oPickerModel = new JSONModel({ rows: aValidRows });
-        var oDialog = new SelectDialog({
-          title: sTitle,
-          growing: true,
-          items: {
-            path: "picker>/rows",
-            template: new StandardListItem({
-              title: "{picker>" + oProps.businessPartnerPersonText + "}",
-              description: "{picker>" + oProps.businessPartnerPerson + "}"
-            })
-          },
-          search: function (oEvent) {
-            var sValue = oEvent.getParameter("value");
-            var oBinding = oEvent.getSource().getBinding("items");
-            oBinding.filter(sValue ? new Filter(oProps.businessPartnerPersonText, FilterOperator.Contains, sValue) : []);
-          },
-          confirm: function (oEvent) {
-            var oSelectedItem = oEvent.getParameter("selectedItem");
-            if (oSelectedItem) {
-              fnApply(oSelectedItem.getBindingContext("picker").getObject());
+        var aFields = [
+          { path: oProps.businessPartnerPerson, labelKey: "contactHelpId" },
+          { path: oProps.businessPartnerPersonText, labelKey: "contactHelpName" },
+          { path: oProps.relationshipCategory, labelKey: "contactHelpRelationshipCategory" }
+        ];
+        var oBasicSearch = new SearchField({
+          width: "100%",
+          placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+        });
+        var aFieldControls = aFields.map(function (oField) {
+          return { definition: oField, control: new Input() };
+        });
+        var oSelectionModel = new JSONModel({ key: "" });
+        var oSelectedContact = null;
+        var fnSelectContact = function (oContact) {
+          oSelectedContact = oContact;
+          oSelectionModel.setProperty("/key", oSelectedContact[oProps.businessPartnerPerson]);
+          oDialog.setTokens([]);
+          oDialog.setTokens([new Token({
+            key: oSelectedContact[oProps.businessPartnerPerson],
+            text: oSelectedContact[oProps.businessPartnerPersonText] +
+              " (" + oSelectedContact[oProps.businessPartnerPerson] + ")"
+          })]);
+        };
+        var fnGetFilters = function () {
+          var aFilters = [];
+          var sSearchValue = oBasicSearch.getValue();
+          if (sSearchValue) {
+            aFilters.push(new Filter({
+              filters: aFields.map(function (oField) {
+                return new Filter(oField.path, FilterOperator.Contains, sSearchValue);
+              }),
+              and: false
+            }));
+          }
+          aFieldControls.forEach(function (oFieldControl) {
+            var sValue = oFieldControl.control.getValue();
+            if (sValue) {
+              aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
             }
-            oDialog.destroy();
+          });
+          return aFilters;
+        };
+        var oTable = new GridTable({
+          selectionMode: "Single",
+          selectionBehavior: "RowOnly",
+          rowMode: new AutoRowMode({ minRowCount: 8 }),
+          enableColumnReordering: false,
+          rowSelectionChange: function (oEvent) {
+            var oContext = oEvent.getParameter("rowContext");
+            if (oContext) {
+              fnSelectContact(oContext.getObject());
+            }
+          }
+        }).addStyleClass("detailSingleSelectValueHelpTable");
+        oTable.setModel(oPickerModel, "picker");
+        oTable.setModel(oSelectionModel, "contactSelection");
+        oTable.addColumn(new GridColumn({
+          label: new Text(),
+          width: "3rem",
+          hAlign: "Center",
+          template: new RadioButton({
+            groupName: "contactSelection",
+            selected: {
+              parts: [
+                { path: "contactSelection>/key", targetType: "any" },
+                { path: "picker>" + oProps.businessPartnerPerson, targetType: "any" }
+              ],
+              formatter: function (sSelectedKey, sContactId) {
+                return sSelectedKey === sContactId;
+              }
+            },
+            select: function (oEvent) {
+              if (!oEvent.getParameter("selected")) {
+                return;
+              }
+              var oContext = oEvent.getSource().getBindingContext("picker");
+              if (oContext) {
+                fnSelectContact(oContext.getObject());
+                oTable.setSelectedIndex(oContext.getIndex());
+              }
+            }
+          })
+        }));
+        [
+          { path: oProps.businessPartnerPerson, labelKey: "contactHelpId", width: "11rem" },
+          { path: oProps.businessPartnerPersonText, labelKey: "contactHelpName", width: "22rem" },
+          { path: oProps.relationshipCategory, labelKey: "contactHelpRelationshipCategory", width: "12rem" },
+          { path: oProps.validityStartDate, labelKey: "contactHelpValidFrom", width: "10rem" },
+          { path: oProps.validityEndDate, labelKey: "contactHelpValidTo", width: "10rem" }
+        ].forEach(function (oColumn) {
+          oTable.addColumn(new GridColumn({
+            label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+            template: new Text({ text: "{picker>" + oColumn.path + "}" }),
+            width: oColumn.width
+          }));
+        });
+        var oDialog = new ValueHelpDialog({
+          title: sTitle,
+          key: oProps.businessPartnerPerson,
+          descriptionKey: oProps.businessPartnerPersonText,
+          contentWidth: "66rem",
+          contentHeight: "47rem",
+          draggable: true,
+          resizable: true,
+          supportMultiselect: true,
+          supportRanges: false,
+          supportRangesOnly: false,
+          ok: function () {
+            if (!oSelectedContact) {
+              return;
+            }
+            fnApply(oSelectedContact);
+            oDialog.close();
           },
           cancel: function () {
+            oDialog.close();
+          },
+          tokenRemove: function () {
+            oSelectedContact = null;
+            oSelectionModel.setProperty("/key", "");
+            oTable.clearSelection();
+            oDialog.setTokens([]);
+          },
+          afterClose: function () {
             oDialog.destroy();
           }
         });
-        oDialog.setModel(oPickerModel, "picker");
+        var fnBindRows = function () {
+          oSelectedContact = null;
+          oSelectionModel.setProperty("/key", "");
+          oTable.clearSelection();
+          oDialog.setTokens([]);
+          oTable.bindRows({ path: "picker>/rows", filters: fnGetFilters() });
+        };
+        var oFilterBar = new FilterBar({
+          advancedMode: true,
+          filterBarExpanded: true,
+          showGoOnFB: true,
+          search: fnBindRows
+        });
+        oFilterBar.setBasicSearch(oBasicSearch);
+        oBasicSearch.attachSearch(fnBindRows);
+        aFieldControls.forEach(function (oFieldControl) {
+          oFilterBar.addFilterGroupItem(new FilterGroupItem({
+            groupName: "contactValueHelp",
+            name: oFieldControl.definition.path,
+            label: oBundle.getText(oFieldControl.definition.labelKey),
+            visibleInFilterBar: true,
+            control: oFieldControl.control
+          }));
+        });
+        oDialog.setFilterBar(oFilterBar);
+        oDialog.setTable(oTable);
+        oTable.setSelectionMode("Single");
+        oTable.setSelectionBehavior("RowOnly");
         that.getView().addDependent(oDialog);
         oDialog.open();
+        fnBindRows();
+      }).finally(function () {
+        oListBinding.destroy();
       });
     },
 
@@ -2971,7 +3104,8 @@ sap.ui.define([
       if (!sProviderId) {
         return;
       }
-      this._openProviderContactValueHelpDialog(oBundle.getText("contactPickerTitle"), sProviderId, function (oItem) {
+      this._openProviderContactValueHelpDialog(oBundle.getText("filterContact"), sProviderId, function (oItem) {
+        this._iContactPrefillRequest = (this._iContactPrefillRequest || 0) + 1;
         var oModel = this.getView().getModel("createEnrich");
         oModel.setProperty("/contactId", oItem[oProps.businessPartnerPerson]);
         oModel.setProperty("/contactName", oItem[oProps.businessPartnerPersonText]);
@@ -3039,8 +3173,11 @@ sap.ui.define([
     // columns exist, but the relative `items` binding simply yields zero rows
     // until a real context exists, giving the designed empty state for free.
     _onSectionContentLoaded: function (sSectionId) {
-      if (sSectionId === "details" && !this.getView().getModel("sectionFlags").getProperty("/createMode")) {
-        this._loadHeaderNotes(this.getView().getBindingContext());
+      if (sSectionId === "details") {
+        this._attachContactValueHelpActivation();
+        if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+          this._loadHeaderNotes(this.getView().getBindingContext());
+        }
       } else if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
         // 3.3: the Items panel's own contexts are the most convenient point
@@ -3052,6 +3189,35 @@ sap.ui.define([
         var oTable = this._byIdInSection("priceTotals", "priceTotalsTable");
         PricingColumns.bindTable(oTable, this.getResourceBundle(), ServiceSchema.pricingElements.headerNavigation);
       }
+    },
+
+    _attachContactValueHelpActivation: function () {
+      var oContactInput = this._byIdInSection("details", "contactInput");
+      if (!oContactInput) {
+        return;
+      }
+      var fnSetNativeReadOnly = function () {
+        var oInputDomRef = oContactInput.getFocusDomRef();
+        if (oInputDomRef) {
+          oInputDomRef.readOnly = true;
+          oInputDomRef.setAttribute("aria-readonly", "true");
+        }
+      };
+      var fnOpenValueHelp = function (oEvent) {
+        if (!this.getView().getModel("createState").getProperty("/providerChosen")) {
+          return;
+        }
+        if (oEvent.target.closest(".sapMInputBaseIconContainer")) {
+          return;
+        }
+        oEvent.preventDefault();
+        this.onContactValueHelpRequest();
+      }.bind(this);
+      oContactInput.addEventDelegate({
+        onAfterRendering: fnSetNativeReadOnly,
+        onclick: fnOpenValueHelp
+      });
+      fnSetNativeReadOnly();
     },
 
     _loadHeaderNotes: function (oHeaderContext) {

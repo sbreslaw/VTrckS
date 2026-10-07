@@ -180,12 +180,12 @@
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 								<Text text="{_SoldToPartyContactInfo/FullName}" visible="{= !${sectionFlags>/createMode} }"/>
-								<Input
+								<Input id="contactInput"
 									value="{createEnrich>/contactName}"
 									showValueHelp="true"
-									editable="false"
-									visible="{sectionFlags>/createMode}"
+									editable="true"
 									enabled="{createState>/providerChosen}"
+									visible="{sectionFlags>/createMode}"
 									valueHelpRequest=".onContactValueHelpRequest"/>
 							</VBox>
 						</f:fields>
