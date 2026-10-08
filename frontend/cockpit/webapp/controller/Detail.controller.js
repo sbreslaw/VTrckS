@@ -3772,6 +3772,13 @@ sap.ui.define([
         this._oSectionFactory.expandSection("items");
         return;
       }
+      if (CreateOrderService.hasIncompleteItems(oItemsBinding)) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
+        MessageToast.show(oBundle.getText("createRequestIncompleteItemsError"));
+        this._oSectionFactory.expandSection("items");
+        return;
+      }
 
       var oIohModel = this.getView().getModel("ioh");
       var oIohData = oIohModel.getData();

@@ -365,6 +365,23 @@ sap.ui.define([
       return iValid >= Enums.MIN_ITEMS;
     },
 
+    hasIncompleteItems: function (oItemsBinding) {
+      if (!oItemsBinding || !oItemsBinding.getCurrentContexts) {
+        return false;
+      }
+      var oProps = ServiceSchema.itemProperties;
+      return oItemsBinding.getCurrentContexts().some(function (oContext) {
+        if (oContext.getProperty(oProps.higherLevelItem)) {
+          return false;
+        }
+        var fQty = parseFloat(oContext.getProperty(oProps.quantity));
+        return !oContext.getProperty(oProps.material)
+          || isNaN(fQty) || fQty <= 0
+          || !oContext.getProperty(oProps.fundType)
+          || !oContext.getProperty(oProps.orderIntention);
+      });
+    },
+
     // Replay the scratch transient context as a real create: ①
     // CreateWithSalesOrderType, ② item deep-creates on the resulting sticky
     // session, ③ SaveChanges (assigns the real key), ④ PATCH of the
