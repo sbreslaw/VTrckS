@@ -12,7 +12,7 @@
     <OverflowToolbar class="detailItemsToolbar">
       <ToolbarSpacer />
       <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
-        enabled="{= ${itemsMeta>/canAddItem} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" press=".onItemsAddRow" />
+        enabled="{= ${itemsMeta>/canAddItem} &amp;&amp; (${sectionFlags>/createMode} ? ${createState>/providerChosen} : !!%{__CreateByAssociationControl/_Item}) }" press=".onItemsAddRow" />
       <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
       <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
     </OverflowToolbar>
@@ -147,14 +147,13 @@
                only); writes go through the bound SetRejectionReason/RemoveRejectionReason
                actions in onItemRejectionReasonChange. Items come from the JSON
                "rejectionReasons" model: an absolute OData list nested in this row template
-               would pollute _Item's autoExpandSelect $select. Editable only on a posted
-               createMode row (sticky session); change mode stays read-only until the
-               sessionless-action ruling (OPEN_QUESTIONS DF-1025). -->
+               would pollute _Item's autoExpandSelect $select. Existing-order edit mode
+               invokes the bound action directly; create mode also honors its session's
+               dynamic operation controls. -->
           <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
             visible="{itemsColumns>/rejectionReason}"
             items="{rejectionReasons>/list}"
-            editable="{= !!(${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (%{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"
-            tooltip="{= %{sectionFlags>/items/editing} &amp;&amp; !%{sectionFlags>/createMode} ? ${i18n>rejectionReasonChangeModePending} : '' }"
+            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (!${sectionFlags>/createMode} || %{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"
             change=".onItemRejectionReasonChange">
             <core:Item key="{rejectionReasons>key}" text="{rejectionReasons>text}" />
           </Select>

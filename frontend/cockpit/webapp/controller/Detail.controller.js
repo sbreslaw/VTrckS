@@ -1205,10 +1205,31 @@ sap.ui.define([
         return;
       }
       var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), this.getResourceBundle());
+      if (this.getView().getModel("sectionFlags").getProperty("/createMode")
+          && this._bItemsSessionBound && this._hasHttpStatus(oError, 404)) {
+        this._revertItemsToScratch();
+        if (this._oCreateSession) {
+          this._oCreateSession.opened = false;
+          this._oCreateSession.plainContext = null;
+          this._oCreateSession.pending = null;
+        }
+      }
       aSectionIds.forEach(function (sId) {
         this._oSectionFactory.expandSection(sId);
       }, this);
       this._openMessagePopover();
+    },
+
+    _hasHttpStatus: function (oError, iStatus) {
+      var oCurrent = oError;
+      while (oCurrent) {
+        if (Number(oCurrent.status || oCurrent.statusCode || oCurrent.httpStatus) === iStatus
+            || String(oCurrent.message || "").indexOf(String(iStatus)) !== -1) {
+          return true;
+        }
+        oCurrent = oCurrent.cause;
+      }
+      return false;
     },
 
     // Fund Split dialog session prompt, Trigger 2 (item Action menu): mode is
