@@ -25,7 +25,8 @@ sap.ui.define([
       this._oRouter = this.getOwnerComponent().getRouter();
       this._oRouter.getRoute("itemDetail").attachPatternMatched(this._onObjectMatched, this);
       this._aSectionMeta = ItemSectionConfig;
-      this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this), "itemSectionFlags");
+      this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta,
+        this._onSectionContentLoaded.bind(this), "itemSectionFlags", "itemDetailSectionsContainer");
       this.getView().setModel(this._createSectionFlagsModel(), "itemSectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "itemSectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");

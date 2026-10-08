@@ -94,6 +94,34 @@
   margin-bottom: 0.125rem;
 }
 
+.providerValueHelpDialog .providerTableLoadingIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.newOrderUnsavedDialog .sapMDialogScrollCont {
+  padding: 1.25rem 1.5rem 1.375rem;
+}
+
+.newOrderUnsavedDialog .sapMMsgBoxText {
+  line-height: 1.5;
+}
+
+.newOrderUnsavedDialog .sapMDialogFooter .sapMBar {
+  padding-inline: 1rem;
+}
+
+.newOrderUnsavedDialog .newOrderCancelButton:focus > .sapMFocusable,
+.newOrderUnsavedDialog .newOrderCancelButton .sapMFocusable:focus {
+  outline: none;
+}
+
+.newOrderUnsavedDialog .newOrderCancelButton:focus > .sapMFocusable::before {
+  border: none !important;
+}
+
 @media (max-width: 75rem) {
   .masterSearchFilterBar .sapUiCompFilterBarItem {
     flex-basis: 12rem !important;

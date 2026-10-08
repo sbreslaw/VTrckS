@@ -22,7 +22,7 @@ sap.ui.define([
   // per-button code path. `oMeta.headerAction` adds an enabled command beside
   // the title, before the spacer, for section-specific workflows such as
   // Inventory's Edit List loader.
-  function SectionFactory(oView, aMeta, fnOnContentLoaded, sFlagsModel) {
+  function SectionFactory(oView, aMeta, fnOnContentLoaded, sFlagsModel, sContainerId) {
     this._oView = oView;
     this._aMeta = aMeta || [];
     this._mLoaded = {};
@@ -33,10 +33,11 @@ sap.ui.define([
     // forced createMode expand.
     this._fnOnContentLoaded = fnOnContentLoaded;
     this._sFlagsModel = sFlagsModel || "sectionFlags";
+    this._sContainerId = sContainerId || "sectionsContainer";
   }
 
   SectionFactory.prototype.ensurePanels = function () {
-    var oContainer = this._oView.byId("sectionsContainer");
+    var oContainer = this._oView.byId(this._sContainerId);
     if (!oContainer || oContainer.getItems().length) {
       return;
     }
@@ -177,7 +178,7 @@ sap.ui.define([
   };
 
   SectionFactory.prototype.rebind = function () {
-    var oContainer = this._oView.byId("sectionsContainer");
+    var oContainer = this._oView.byId(this._sContainerId);
     if (!oContainer) {
       return;
     }

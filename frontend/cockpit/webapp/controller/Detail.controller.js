@@ -6,6 +6,7 @@ sap.ui.define([
   "sap/m/MessageItem",
   "sap/m/Dialog",
   "sap/m/Button",
+  "sap/m/BusyIndicator",
   "sap/m/Text",
   "sap/m/List",
   "sap/m/CustomListItem",
@@ -31,6 +32,7 @@ sap.ui.define([
   "sap/ui/core/Fragment",
   "sap/ui/core/Messaging",
   "sap/ui/core/EventBus",
+  "sap/ui/core/Element",
   "sap/ui/core/ResizeHandler",
   "sap/ui/model/json/JSONModel",
   "sap/ui/model/Filter",
@@ -52,10 +54,10 @@ sap.ui.define([
   "cdc/vaccreq/controller/FundSplitDialog",
   "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
-  Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
+  Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -211,6 +213,108 @@ sap.ui.define([
       if (oContext) {
         oContext.refresh();
       }
+    },
+
+    onNewPress: function () {
+      var oBundle = this.getResourceBundle();
+      if (this._bStartNewAfterSave) {
+        return;
+      }
+      if (!this._hasUnsavedOrderChanges()) {
+        this._discardCurrentOrderAndStartNew();
+        return;
+      }
+
+      var sSave = oBundle.getText("newOrderSave");
+      var sDiscard = oBundle.getText("newOrderDiscard");
+      var sCancel = oBundle.getText("newOrderCancel");
+      var sDialogId = this.getView().createId("newOrderUnsavedDialog");
+      MessageBox.warning(oBundle.getText("newOrderUnsavedMessage"), {
+        id: sDialogId,
+        title: oBundle.getText("newOrderUnsavedTitle"),
+        contentWidth: "32rem",
+        styleClass: "newOrderUnsavedDialog",
+        actions: [sSave, sDiscard, sCancel],
+        emphasizedAction: sSave,
+        initialFocus: sCancel,
+        onClose: function (sAction) {
+          if (sAction === sSave) {
+            this._saveCurrentOrderAndStartNew();
+          } else if (sAction === sDiscard) {
+            this._discardCurrentOrderAndStartNew();
+          }
+        }.bind(this)
+      });
+      var oDialog = Element.getElementById(sDialogId);
+      var oCancelButton = oDialog && oDialog.getButtons().find(function (oButton) {
+        return oButton.getText() === sCancel;
+      });
+      if (oCancelButton) {
+        oCancelButton.setType("Transparent").addStyleClass("newOrderCancelButton");
+      }
+    },
+
+    _hasUnsavedOrderChanges: function () {
+      var oContext = this.getView().getBindingContext();
+      var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
+      if (bCreateMode) {
+        return !!(this.getView().getModel("createState").getProperty("/providerChosen") ||
+          (this._oCreateSession && this._oCreateSession.opened));
+      }
+      if (!oContext) {
+        return false;
+      }
+      var oPriorityModel = this.getView().getModel("priorityState");
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      return oContext.getModel().hasPendingChanges(ServiceSchema.editUpdateGroup) ||
+        oPriorityModel.getProperty("/dirty") ||
+        oEnrichModel.getProperty("/notes") !== oEnrichModel.getProperty("/notesOriginal");
+    },
+
+    _getEditingSectionId: function () {
+      var oFlags = this.getView().getModel("sectionFlags");
+      var oEditingSection = this._aSectionMeta.find(function (oMeta) {
+        return oMeta.editLive && oFlags.getProperty("/" + oMeta.id + "/editing");
+      });
+      return oEditingSection ? oEditingSection.id : "details";
+    },
+
+    _saveCurrentOrderAndStartNew: function () {
+      this._bStartNewAfterSave = true;
+      this.byId("newOrderBtn").setEnabled(false);
+      if (this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        this.onCreateSavePress();
+      } else {
+        this.onSectionSavePress(this._getEditingSectionId());
+      }
+    },
+
+    _discardCurrentOrderAndStartNew: function () {
+      var oContext = this.getView().getBindingContext();
+      var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
+      this._bStartNewAfterSave = false;
+      if (!bCreateMode) {
+        Promise.resolve(oContext && EditRequestService.cancel(oContext)).then(function () {
+          this._destroyNotesWriteBinding();
+          Messaging.removeAllMessages();
+          this._oRouter.navTo("create", {}, false);
+        }.bind(this));
+        return;
+      }
+
+      this.getView().setBusy(true);
+      CreateOrderService.cancel(oContext, this._oCreateSession).then(function () {
+        this._oCreateListBinding = null;
+        this._oCreateSession = null;
+        this._bItemsSessionBound = false;
+        FundLogicService.clearAllocationCache();
+        this.getView().setBusy(false);
+        this._onCreateMatched();
+      }.bind(this), function (oError) {
+        this.getView().setBusy(false);
+        MessageExtractor.extract(oError, oContext && oContext.getPath(), this.getResourceBundle());
+        this._openMessagePopover();
+      }.bind(this));
     },
 
     onPreviewOutput: function () {
@@ -588,7 +692,14 @@ sap.ui.define([
         if (sSectionId === "items") {
           that._computeHeaderTaxAmount();
         }
+        if (that._bStartNewAfterSave) {
+          that._bStartNewAfterSave = false;
+          that.byId("newOrderBtn").setEnabled(true);
+          that._oRouter.navTo("create", {}, false);
+        }
       }, function (oError) {
+        that._bStartNewAfterSave = false;
+        that.byId("newOrderBtn").setEnabled(true);
         if (oError.isConflict) {
           that._showConflictDialog(oContext, sSectionId);
         } else {
@@ -2035,21 +2146,6 @@ sap.ui.define([
         return { definition: oField, control: new Input() };
       });
       var oValueHelpModel = new JSONModel({ rows: [] });
-      var oSelectionModel = new JSONModel({ key: "" });
-      var oSelectedProvider = null;
-      var fnProviderKey = function (oRow) {
-        return [oRow[oProps.customer], oRow[oProps.salesOrganization],
-          oRow[oProps.distributionChannel], oRow[oProps.division]].join("|");
-      };
-      var fnSelectProvider = function (oProvider) {
-        oSelectedProvider = oProvider;
-        oSelectionModel.setProperty("/key", fnProviderKey(oSelectedProvider));
-        oDialog.setTokens([]);
-        oDialog.setTokens([new Token({
-          key: oSelectedProvider[oProps.customer],
-          text: oSelectedProvider[oProps.customerName] + " (" + oSelectedProvider[oProps.customer] + ")"
-        })]);
-      };
       var fnGetFieldValues = function () {
         var mFieldValues = {};
         aFieldControls.forEach(function (oFieldControl) {
@@ -2066,44 +2162,25 @@ sap.ui.define([
         rowSelectionChange: function (oEvent) {
           var oContext = oEvent.getParameter("rowContext");
           if (oContext) {
-            fnSelectProvider(oContext.getObject());
+            var oRow = oContext.getObject();
+            fnApply({
+              id: oRow[oProps.customer],
+              fullName: oRow[oProps.customerName],
+              address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+                .filter(function (sPart) { return !!sPart; })
+                .join(", "),
+              salesOrganization: oRow[oProps.salesOrganization],
+              distributionChannel: oRow[oProps.distributionChannel],
+              division: oRow[oProps.division]
+            });
+            oDialog.close();
           }
         }
       }).addStyleClass("detailSingleSelectValueHelpTable");
+      oTable.setBusyIndicatorDelay(0);
       oTable.setModel(oValueHelpModel);
-      oTable.setModel(oSelectionModel, "providerSelection");
-      oTable.addColumn(new GridColumn({
-        label: new Text(),
-        width: "3rem",
-        hAlign: "Center",
-        template: new RadioButton({
-          groupName: "providerSelection",
-          selected: {
-            parts: [
-              { path: "providerSelection>/key", targetType: "any" },
-              { path: oProps.customer, targetType: "any" },
-              { path: oProps.salesOrganization, targetType: "any" },
-              { path: oProps.distributionChannel, targetType: "any" },
-              { path: oProps.division, targetType: "any" }
-            ],
-            formatter: function (sSelectedKey, sCustomer, sOrganization, sChannel, sDivision) {
-              return sSelectedKey === [sCustomer, sOrganization, sChannel, sDivision].join("|");
-            }
-          },
-          select: function (oEvent) {
-            if (!oEvent.getParameter("selected")) {
-              return;
-            }
-            var oContext = oEvent.getSource().getBindingContext();
-            if (oContext) {
-              fnSelectProvider(oContext.getObject());
-              oTable.setSelectedIndex(oContext.getIndex());
-            }
-          }
-        })
-      }));
       var fnSetResultColumns = function (aColumns) {
-        oTable.getColumns().slice(1).forEach(function (oColumn) {
+        oTable.getColumns().forEach(function (oColumn) {
           oTable.removeColumn(oColumn);
           oColumn.destroy();
         });
@@ -2124,34 +2201,11 @@ sap.ui.define([
         contentHeight: "47rem",
         draggable: true,
         resizable: true,
-        supportMultiselect: true,
+        supportMultiselect: false,
         supportRanges: false,
         supportRangesOnly: false,
-        ok: function () {
-          if (!oSelectedProvider) {
-            return;
-          }
-          var oRow = oSelectedProvider;
-          fnApply({
-            id: oRow[oProps.customer],
-            fullName: oRow[oProps.customerName],
-            address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
-              .filter(function (sPart) { return !!sPart; })
-              .join(", "),
-            salesOrganization: oRow[oProps.salesOrganization],
-            distributionChannel: oRow[oProps.distributionChannel],
-            division: oRow[oProps.division]
-          });
-          oDialog.close();
-        },
         cancel: function () {
           oDialog.close();
-        },
-        tokenRemove: function () {
-          oSelectedProvider = null;
-          oSelectionModel.setProperty("/key", "");
-          oTable.clearSelection();
-          oDialog.setTokens([]);
         },
         afterClose: function () {
           oDialog.destroy();
@@ -2159,16 +2213,12 @@ sap.ui.define([
       }).addStyleClass("providerValueHelpDialog");
       var fnBindRows = function (bPreserveSelection) {
         if (!bPreserveSelection) {
-          oSelectedProvider = null;
-          oSelectionModel.setProperty("/key", "");
           oTable.clearSelection();
-          oDialog.setTokens([]);
         }
         var iCurrentRequest = ++iLoadRequest;
         bRowsLoading = true;
-        if (!bPreserveSelection) {
-          oDialog.setBusy(true);
-        }
+        oTable.setNoData(new BusyIndicator({ size: "1.5rem" }).addStyleClass("providerTableLoadingIndicator"));
+        oTable.setBusy(true);
         ProviderSearchService.loadRows(
           this.getView().getModel(),
           this.getOwnerComponent().getModel("po"),
@@ -2197,7 +2247,8 @@ sap.ui.define([
         }).finally(function () {
           if (iCurrentRequest === iLoadRequest) {
             bRowsLoading = false;
-            oDialog.setBusy(false);
+            oTable.setBusy(false);
+            oTable.setNoData(null);
           }
         });
       }.bind(this);
@@ -2503,17 +2554,6 @@ sap.ui.define([
       var aFieldControls = aFields.map(function (oField) {
         return { definition: oField, control: new Input() };
       });
-      var oSelectionModel = new JSONModel({ key: "" });
-      var oSelectedProduct = null;
-      var fnSelectProduct = function (oProduct) {
-        oSelectedProduct = oProduct;
-        oSelectionModel.setProperty("/key", oSelectedProduct[oProps.id]);
-        oDialog.setTokens([]);
-        oDialog.setTokens([new Token({
-          key: oSelectedProduct[oProps.id],
-          text: oSelectedProduct[oProps.text] + " (" + oSelectedProduct[oProps.id] + ")"
-        })]);
-      };
       var fnGetFilters = function () {
         var aFilters = [];
         var sSearchValue = oBasicSearch.getValue();
@@ -2542,38 +2582,11 @@ sap.ui.define([
         rowSelectionChange: function (oEvent) {
           var oContext = oEvent.getParameter("rowContext");
           if (oContext) {
-            fnSelectProduct(oContext.getObject());
+            fnApply(oContext.getObject());
+            oDialog.close();
           }
         }
       }).addStyleClass("detailSingleSelectValueHelpTable");
-      oTable.setModel(oSelectionModel, "productSelection");
-      oTable.addColumn(new GridColumn({
-        label: new Text(),
-        width: "3rem",
-        hAlign: "Center",
-        template: new RadioButton({
-          groupName: "productSelection",
-          selected: {
-            parts: [
-              { path: "productSelection>/key", targetType: "any" },
-              { path: oProps.id, targetType: "any" }
-            ],
-            formatter: function (sSelectedKey, sProduct) {
-              return sSelectedKey === sProduct;
-            }
-          },
-          select: function (oEvent) {
-            if (!oEvent.getParameter("selected")) {
-              return;
-            }
-            var oContext = oEvent.getSource().getBindingContext();
-            if (oContext) {
-              fnSelectProduct(oContext.getObject());
-              oTable.setSelectedIndex(oContext.getIndex());
-            }
-          }
-        })
-      }));
       [
         { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
         { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
@@ -2594,34 +2607,18 @@ sap.ui.define([
         contentHeight: "47rem",
         draggable: true,
         resizable: true,
-        supportMultiselect: true,
+        supportMultiselect: false,
         supportRanges: false,
         supportRangesOnly: false,
-        ok: function () {
-          if (!oSelectedProduct) {
-            return;
-          }
-          fnApply(oSelectedProduct);
-          oDialog.close();
-        },
         cancel: function () {
           oDialog.close();
-        },
-        tokenRemove: function () {
-          oSelectedProduct = null;
-          oSelectionModel.setProperty("/key", "");
-          oTable.clearSelection();
-          oDialog.setTokens([]);
         },
         afterClose: function () {
           oDialog.destroy();
         }
       });
       var fnBindRows = function () {
-        oSelectedProduct = null;
-        oSelectionModel.setProperty("/key", "");
         oTable.clearSelection();
-        oDialog.setTokens([]);
         oTable.bindRows({
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
@@ -3753,6 +3750,8 @@ sap.ui.define([
       var oBundle = this.getResourceBundle();
       var oContext = this.getView().getBindingContext();
       if (!oContext) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         return;
       }
       var sProviderId = oContext.getProperty(ServiceSchema.headerProperties.providerId);
@@ -3761,10 +3760,14 @@ sap.ui.define([
       // SaveChanges commit) twice before setBusy(true)'s overlay blocks input.
       var oSaveBtn = this.getView().byId("createSaveBtn");
       if (oSaveBtn && !oSaveBtn.getEnabled()) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         return;
       }
 
       if (!sProviderId) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         MessageToast.show(oBundle.getText("createRequestFieldRequired"));
         this._oSectionFactory.expandSection("details");
         return;
@@ -3773,6 +3776,8 @@ sap.ui.define([
       var oItemsTable = this._byIdInSection("items", "itemsTable");
       var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
       if (!CreateOrderService.hasMinItems(oItemsBinding)) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         MessageToast.show(oBundle.getText("createRequestMinItemsError"));
         this._oSectionFactory.expandSection("items");
         return;
@@ -3781,6 +3786,8 @@ sap.ui.define([
       var oIohModel = this.getView().getModel("ioh");
       var oIohData = oIohModel.getData();
       if (oIohData.loaded && ProviderInventoryService.hasInvalidRows(oIohData.rows)) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         MessageToast.show(oBundle.getText("inventoryRequiredFields"));
         this._oSectionFactory.expandSection("inventory");
         return;
@@ -3842,9 +3849,14 @@ sap.ui.define([
         .then(function () {
           that.getView().setBusy(false);
           MessageToast.show(oBundle.getText("createRequestSuccessToast", [sNewId]));
-          that._completeCreate(sNewId);
+          var bStartNew = !!that._bStartNewAfterSave;
+          that._bStartNewAfterSave = false;
+          that.byId("newOrderBtn").setEnabled(true);
+          that._completeCreate(sNewId, bStartNew);
         }, function (oError) {
           that.getView().setBusy(false);
+          that._bStartNewAfterSave = false;
+          that.byId("newOrderBtn").setEnabled(true);
           if (oSaveBtn) {
             oSaveBtn.setEnabled(true);
           }
@@ -3877,7 +3889,7 @@ sap.ui.define([
     // list (EventBus, channel "app" — Master.controller.js owns its own
     // table; deliberately distinct from the "vrCreate" update-group literal,
     // see CreateOrderService.js/ServiceSchema.js).
-    _completeCreate: function (sNewId) {
+    _completeCreate: function (sNewId, bStartNew) {
       this._oCreateListBinding = null;
       this._oCreateSession = null;
       this._bItemsSessionBound = false;
@@ -3887,7 +3899,11 @@ sap.ui.define([
       FundLogicService.clearAllocationCache();
       this._setCreateMode(false);
       EventBus.getInstance().publish("app", "orderCreated", { orderId: sNewId });
-      this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
+      if (bStartNew) {
+        this._onCreateMatched();
+      } else {
+        this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
+      }
     },
 
     _createSectionFlagsModel: function () {
@@ -3998,6 +4014,11 @@ sap.ui.define([
       if (oSaveButton) {
         oSaveButton.setEnabled(true);
       }
+      var oNewButton = this.byId("newOrderBtn");
+      if (oNewButton) {
+        oNewButton.setEnabled(true);
+      }
+      this._bStartNewAfterSave = false;
     },
 
     // Cleans up a previous transient create context (e.g. the user leaves the

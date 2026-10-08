@@ -14,6 +14,7 @@ sap.ui.define([
   "sap/m/Link",
   "sap/m/Dialog",
   "sap/m/Button",
+  "sap/m/BusyIndicator",
   "sap/m/Input",
   "sap/m/Select",
   "sap/m/List",
@@ -41,7 +42,7 @@ sap.ui.define([
   "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
-  Dialog, Button, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, SearchField, Token,
+  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, SearchField, Token,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
   formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
@@ -432,6 +433,7 @@ sap.ui.define([
         threshold: 100,
         enableColumnReordering: false
       });
+      oTable.setBusyIndicatorDelay(0);
       if (oValueHelpModel) {
         oTable.setModel(oValueHelpModel);
       } else if (oConfig.modelName) {
@@ -504,9 +506,8 @@ sap.ui.define([
           });
           var iCurrentRequest = ++iLoadRequest;
           bRowsLoading = true;
-          if (!bIncremental) {
-            oDialog.setBusy(true);
-          }
+          oTable.setNoData(new BusyIndicator({ size: "1.5rem" }).addStyleClass("providerTableLoadingIndicator"));
+          oTable.setBusy(true);
           oConfig.loadRows(oBasicSearch.getValue(), mFieldValues, sSearchMode, iRowLimit)
             .then(function (aRows) {
               if (iCurrentRequest !== iLoadRequest) {
@@ -531,7 +532,8 @@ sap.ui.define([
             .finally(function () {
               if (iCurrentRequest === iLoadRequest) {
                 bRowsLoading = false;
-                oDialog.setBusy(false);
+                oTable.setBusy(false);
+                oTable.setNoData(null);
               }
             });
           return;

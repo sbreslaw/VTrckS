@@ -60,7 +60,7 @@
     </f:header>
 
     <f:content>
-      <VBox id="sectionsContainer" class="sapUiResponsiveContentPadding" />
+      <VBox id="itemDetailSectionsContainer" class="sapUiResponsiveContentPadding" />
     </f:content>
   </f:DynamicPage>
 </mvc:View>

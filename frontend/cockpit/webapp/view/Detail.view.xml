@@ -48,7 +48,7 @@
             visible="{= !${sectionFlags>/createMode} }" />
           <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
             visible="{= !${sectionFlags>/createMode} }" />
-          <Button text="{i18n>actionNew}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button id="newOrderBtn" text="{i18n>actionNew}" press=".onNewPress" />
           <Button text="{i18n>actionCopy}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button text="{i18n>actionCreateReturn}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button text="{i18n>actionCreateReplacement}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
