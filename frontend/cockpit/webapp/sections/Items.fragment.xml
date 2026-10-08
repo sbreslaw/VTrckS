@@ -8,19 +8,24 @@
        both the "detail" and "create" routes.
        DF-1025: the Rejection Reason column shows in both modes; it is written
        only via bound actions (Computed property), never through this binding. -->
-  <Table id="itemsTable" items="{_Item}" growing="true" growingThreshold="20">
-    <headerToolbar>
-      <OverflowToolbar>
-        <ToolbarSpacer />
-        <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
-          enabled="{= ${itemsMeta>/canAddItem} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" press=".onItemsAddRow" />
-        <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
-        <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
-      </OverflowToolbar>
-    </headerToolbar>
+  <VBox width="100%">
+    <OverflowToolbar class="detailItemsToolbar">
+      <ToolbarSpacer />
+      <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
+        enabled="{= ${itemsMeta>/canAddItem} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" press=".onItemsAddRow" />
+      <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
+      <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
+    </OverflowToolbar>
+    <ScrollContainer width="100%" horizontal="true" vertical="false" class="detailItemsScroll">
+    <Table id="itemsTable" width="130rem" items="{_Item}" growing="true" growingThreshold="20">
     <columns>
       <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
-      <Column width="4rem" visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
+      <Column width="6.5rem" visible="{itemsColumns>/optOut}">
+        <VBox class="itemsOptOutHeader">
+          <Text text="{i18n>colOptOut}" wrapping="false" />
+          <Text text="{i18n>colAncillary}" wrapping="false" />
+        </VBox>
+      </Column>
       <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
       <Column width="4rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
       <Column width="5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
@@ -156,5 +161,7 @@
         </cells>
       </ColumnListItem>
     </items>
-  </Table>
+    </Table>
+    </ScrollContainer>
+  </VBox>
 </core:FragmentDefinition>

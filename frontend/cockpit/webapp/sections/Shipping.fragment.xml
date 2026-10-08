@@ -22,7 +22,7 @@
 				columnsXL="2" 
 				columnsL="2" 
 				columnsM="1" 
-				singleContainerFullSize="false"
+				singleContainerFullSize="true"
 			/>
 		</f:layout>
 

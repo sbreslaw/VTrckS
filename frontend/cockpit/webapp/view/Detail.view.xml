@@ -4,46 +4,33 @@
   xmlns="sap.m"
   xmlns:f="sap.f"
   xmlns:core="sap.ui.core">
-  <f:DynamicPage id="detailPage" fitContent="true">
+  <f:DynamicPage id="detailPage" fitContent="true" preserveHeaderStateOnScroll="true"
+    showFooter="{sectionFlags>/createMode}" class="detailObjectPage">
     <f:title>
-      <f:DynamicPageTitle>
+      <f:DynamicPageTitle class="detailObjectPageTitle">
         <f:heading>
-          <Title id="detailTitle" />
+          <Title id="detailTitle" level="H1" class="detailObjectTitle" />
         </f:heading>
         <f:expandedContent>
-          <HBox renderType="Bare" justifyContent="SpaceBetween" width="100%">
+          <HBox renderType="Bare" wrap="Wrap" alignItems="Center" class="detailHeaderFacts"
+            visible="{= !${sectionFlags>/createMode} }">
             <items>
-              <HBox renderType="Bare" wrap="Wrap" width="80%">
-                <items>
-                  <Text id="detailCreatedOnBy" class="sapUiTinyMarginEnd" />
-                  <ObjectNumber id="detailNetValue" />
-                </items>
-              </HBox>
-              <OverflowToolbar>
-                <ToolbarSpacer />
-                <Button text="{i18n>close}" type="Transparent" press=".onCloseColumn" />
-              </OverflowToolbar>
+              <Text id="detailCreatedOnBy" class="detailHeaderFact" />
+              <ObjectNumber id="detailNetValue" class="detailHeaderValue" />
             </items>
           </HBox>
         </f:expandedContent>
 
         <f:content>
-          <OverflowToolbar>
+          <HBox renderType="Bare" alignItems="Center" class="detailStatusRow">
             <GenericTag id="detailStatus"
               visible="{= !${sectionFlags>/createMode} }"
               design="StatusIconHidden">
            </GenericTag>
-          </OverflowToolbar>
+          </HBox>
         </f:content>
 
         <f:actions>
-          <!-- CRUD Task 1 v3 (In-Place Create): the global Save/Cancel for the
-               create spine — only visible while the "create" route is active
-               (design/prompts/CRUD Task 1 Prompt v3.md). -->
-          <Button id="createSaveBtn" text="{i18n>actionSave}" type="Emphasized"
-            visible="{sectionFlags>/createMode}" press=".onCreateSavePress" />
-          <Button id="createCancelBtn" text="{i18n>actionCancel}"
-            visible="{sectionFlags>/createMode}" press=".onCreateCancelPress" />
           <Button text="{i18n>actionSave}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
             visible="{= !${sectionFlags>/createMode} }" />
           <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
@@ -54,6 +41,7 @@
           <Button text="{i18n>actionCreateReplacement}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button icon="sap-icon://print" text="{i18n>actionPreviewOutput}" press=".onPreviewOutput" visible="{= !${sectionFlags>/createMode} }" />
           <Button icon="sap-icon://refresh" text="{i18n>actionRefresh}" press=".onRefresh" visible="{= !${sectionFlags>/createMode} }" />
+          <Button text="{i18n>actionValidate}" press=".onValidate" />
         </f:actions>
         <f:navigationActions>
           <Button
@@ -62,35 +50,20 @@
             text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
             type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
             press=".onMessagePopoverPress" />
-          <Button text="{i18n>actionValidate}" press=".onValidate" />
-
-					<Button
-						id="enterFullScreen"
-						icon="sap-icon://full-screen"
-						type="Transparent" 
-						visible="{= !${appView>/actionButtonsInfo/midColumn/fullScreen} }"
-						press="toggleFullScreen"				
-						/>
-					<Button
-						id="exitFullScreen"
-						icon="sap-icon://exit-full-screen"
-						type="Transparent" 
-						visible="{= ${appView>/actionButtonsInfo/midColumn/fullScreen}  }"
-						press="toggleFullScreen"				
-						/>
-
+          <Button id="enterFullScreen" icon="sap-icon://full-screen" type="Transparent"
+            visible="{= !${appView>/actionButtonsInfo/midColumn/fullScreen} }" press="toggleFullScreen" />
+          <Button id="exitFullScreen" icon="sap-icon://exit-full-screen" type="Transparent"
+            visible="{= ${appView>/actionButtonsInfo/midColumn/fullScreen} }" press="toggleFullScreen" />
+          <Button icon="sap-icon://decline" type="Transparent" tooltip="{i18n>close}" press=".onCloseColumn" />
         </f:navigationActions>
       </f:DynamicPageTitle>
     </f:title>
 
     <f:header>
-      <f:DynamicPageHeader>
-        <HBox wrap="Wrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}">
+      <f:DynamicPageHeader class="detailAnchorHeader">
+        <HBox id="detailAnchorBar" wrap="NoWrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}" class="detailAnchorBar">
           <items>
-            <!-- CRUD Task 1 v3: hide anchors for sections SectionFactory.js is
-                 hiding entirely while createMode is on (createVisible flag). -->
-            <Link text="{sectionsNav>title}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom"
-              visible="{= !${sectionFlags>/createMode} || ${sectionsNav>createVisible} }">
+              <Link text="{sectionsNav>title}" press=".onAnchorPress" class="detailAnchorLink">
               <customData>
                 <core:CustomData key="panelId" value="{sectionsNav>id}" writeToDom="false" />
               </customData>
@@ -101,7 +74,15 @@
     </f:header>
 
     <f:content>
-      <VBox id="sectionsContainer" class="sapUiResponsiveContentPadding" />
+      <VBox id="sectionsContainer" class="detailSections sapUiResponsiveContentPadding" />
     </f:content>
+
+    <f:footer>
+      <OverflowToolbar class="detailCreateFooter">
+        <ToolbarSpacer />
+        <Button id="createSaveBtn" text="{i18n>actionSave}" type="Emphasized" press=".onCreateSavePress" />
+        <Button id="createCancelBtn" text="{i18n>actionCancel}" press=".onCreateCancelPress" />
+      </OverflowToolbar>
+    </f:footer>
   </f:DynamicPage>
 </mvc:View>

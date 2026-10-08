@@ -20,9 +20,9 @@
 				emptySpanL="0"
 				emptySpanM="0"
 				emptySpanS="0"
-				columnsXL="2" 
-				columnsL="2" 
-				columnsM="1" 
+				columnsXL="3"
+				columnsL="2"
+				columnsM="1"
 				singleContainerFullSize="false"
 			/>
 		</f:layout>
@@ -34,7 +34,7 @@
 						<f:label>
 							<Label text="{i18n>detailRequestId}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -52,7 +52,7 @@
 						<f:label>
 							<Label text="{i18n>colDescription}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -77,7 +77,7 @@
 						<f:label>
 							<Label text="{i18n>providerId}" required="{sectionFlags>/createMode}">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -126,7 +126,7 @@
 						<f:label>
 							<Label text="{i18n>providerAddress}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -154,7 +154,7 @@
 						<f:label>
 							<Label text="{i18n>contact}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -195,7 +195,7 @@
 						<f:label>
 							<Label text="{i18n>colEmployeeResponsible}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -228,7 +228,7 @@
 						<f:label>
 							<Label text="{i18n>otherReason}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -257,7 +257,7 @@
 						<f:label>
 							<Label text="{i18n>category}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -297,7 +297,7 @@
 						<f:label>
 							<Label text="{i18n>filterExisId}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -326,7 +326,7 @@
 						<f:label>
 							<Label text="{i18n>colCreatedAt}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -344,7 +344,7 @@
 						<f:label>
 							<Label text="{i18n>colStatus}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -385,7 +385,7 @@
 						<f:label>
 							<Label text="{i18n>filterPriority}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -439,7 +439,7 @@
 						<f:label>
 							<Label text="{i18n>detailsNotes}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -467,7 +467,7 @@
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -485,7 +485,7 @@
 						<f:label>
 							<Label text="{i18n>taxAmount}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -510,7 +510,7 @@
 						<f:label>
 							<Label text="{i18n>grossValue}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>

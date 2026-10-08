@@ -182,6 +182,14 @@ sap.ui.define([
 
     onAfterRendering: function () {
       this._oSectionFactory.ensurePanels();
+      var oAnchorBar = this.byId("detailAnchorBar");
+      var aAnchors = oAnchorBar ? oAnchorBar.getItems() : [];
+      if (!aAnchors.some(function (oAnchor) { return oAnchor.hasStyleClass("detailAnchorLinkActive"); })) {
+        var oFirstVisibleAnchor = aAnchors.filter(function (oAnchor) { return oAnchor.getVisible(); })[0];
+        if (oFirstVisibleAnchor) {
+          oFirstVisibleAnchor.addStyleClass("detailAnchorLinkActive");
+        }
+      }
       // First-ever render can race _onObjectMatched/_onCreateMatched (the
       // "details-title" control doesn't exist until ensurePanels() runs) -
       // (re)apply the binding here too, it's idempotent.
@@ -194,7 +202,15 @@ sap.ui.define([
     },
 
     onAnchorPress: function (oEvent) {
-      var sPanelId = oEvent.getSource().data("panelId");
+      var oAnchor = oEvent.getSource();
+      var oAnchorBar = oAnchor.getParent();
+      if (oAnchorBar && oAnchorBar.getItems) {
+        oAnchorBar.getItems().forEach(function (oLink) {
+          oLink.removeStyleClass("detailAnchorLinkActive");
+        });
+      }
+      oAnchor.addStyleClass("detailAnchorLinkActive");
+      var sPanelId = oAnchor.data("panelId");
       var oPanel = this.byId(sPanelId);
       if (oPanel) {
         oPanel.setExpanded(true);
@@ -348,13 +364,13 @@ sap.ui.define([
       var oSaved = oData.variants && oData.variants.layout;
       var oVisibility = {};
       ITEMS_COLUMN_KEYS.forEach(function (sKey) {
-        oVisibility[sKey] = oSaved && oSaved[sKey] === false ? false : true;
+        oVisibility[sKey] = sKey === "rejectionReason" || !(oSaved && oSaved[sKey] === false);
       });
       return oVisibility;
     },
 
     onItemsExport: function (oEvent) {
-      var oTable = oEvent.getSource().getParent().getParent();
+      var oTable = this._byIdInSection("items", "itemsTable");
       var oBinding = oTable.getBinding("items");
       var aContexts = oBinding ? oBinding.getContexts(0, oBinding.getLength()) : [];
       var oBundle = this.getResourceBundle();
@@ -407,7 +423,9 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getResourceBundle();
       var oWorkingModel = new JSONModel({
-        rows: ITEMS_COLUMN_KEYS.filter(function (sKey) { return sKey !== "rowAction"; }).map(function (sKey) {
+        rows: ITEMS_COLUMN_KEYS.filter(function (sKey) {
+          return sKey !== "rowAction" && sKey !== "rejectionReason";
+        }).map(function (sKey) {
           return {
             key: sKey,
             label: oBundle.getText(ITEMS_COLUMN_I18N[sKey]),

@@ -47,7 +47,11 @@ sap.ui.define([
     var sFlags = this._sFlagsModel;
     this._aMeta.forEach(function (oMeta, iIndex) {
       var aToolbarContent = [
-          new Title(this._oView.createId(oMeta.id + "-title"), { text: oBundle.getText(oMeta.titleKey), level: "H4" })
+          new Title(this._oView.createId(oMeta.id + "-title"), {
+            text: oBundle.getText(oMeta.titleKey),
+            level: "H2",
+            titleStyle: "H4"
+          })
       ];
 
         if (oMeta.headerAction) {
@@ -96,7 +100,10 @@ sap.ui.define([
         } else {
           aToolbarContent.push(new Button(this._oView.createId(oMeta.id + "-editBtn"), {
             text: oBundle.getText("sectionEdit"),
-            visible: "{" + sFlags + ">/" + oMeta.id + "/editVisible}",
+            visible: {
+              parts: [sFlags + ">/" + oMeta.id + "/editVisible", sFlags + ">/createMode"],
+              formatter: function (bVisible, bCreateMode) { return !!bVisible && !bCreateMode; }
+            },
             enabled: "{" + sFlags + ">/" + oMeta.id + "/editEnabled}",
             tooltip: oBundle.getText("editAvailableLaterPhase"),
             press: function () {
@@ -119,20 +126,15 @@ sap.ui.define([
       }, this);
 
       var oToolbar = new OverflowToolbar({ content: aToolbarContent });
+      oToolbar.addStyleClass("detailSectionToolbar");
 
       var oPanel = new Panel(this._oView.createId(oMeta.id), {
         headerToolbar: oToolbar,
         expandable: true,
         expanded: iIndex === 0 || !!oMeta.expanded,
-        // CRUD Task 1 v3: sections not flagged createVisible in SectionConfig.js
-        // are hidden entirely while createMode is on (design/prompts/CRUD Task 1
-        // Prompt v3.md "All other sections: hidden ... per SectionConfig flag").
-        visible: {
-          path: sFlags + ">/createMode",
-          formatter: function (bCreateMode) { return !bCreateMode || !!oMeta.createVisible; }
-        },
         expand: this._oView.getController().onExpandPanel.bind(this._oView.getController())
       });
+      oPanel.addStyleClass("detailSectionPanel");
 
       oPanel.data("fragment", oMeta.fragment);
       oContainer.addItem(oPanel);

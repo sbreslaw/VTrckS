@@ -17,11 +17,10 @@ sap.ui.define([], function () {
   // Billing removed 2026-10-01 (client request) - Billing.fragment.xml is
   // kept on disk but no longer referenced here.
   //
-  // `createVisible` (CRUD Task 1 v3, In-Place Create) marks the sections that
-  // stay visible/expanded while the Detail view is in createMode; every other
-  // section is hidden entirely during createMode (SectionFactory.js panel
-  // `visible` binding) \u2014 per design/prompts/CRUD Task 1 Prompt v3.md "All other
-  // sections: hidden ... in createMode per SectionConfig flag."
+  // `createVisible` marks the sections that expand and load immediately in
+  // createMode. All configured sections remain available through the anchor
+  // bar; sections without this flag stay collapsed until requested so their
+  // content is not loaded eagerly.
   var aSectionConfig = [
     { id: "details", titleKey: "sectionDetails", fragment: "cdc.vaccreq.sections.Details", expanded: true, editable: true, editLive: true, createVisible: true },
     { id: "items", titleKey: "sectionItems", fragment: "cdc.vaccreq.sections.Items", expanded: true, editable: true, editLive: true, createVisible: true },
