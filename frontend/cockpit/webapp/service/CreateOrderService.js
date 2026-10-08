@@ -93,6 +93,9 @@ sap.ui.define([
   // response). Never lets a discard failure mask the original error.
   // TODO-VERIFY on first live forced-failure test (v5 verification trace).
   function discardSession(oModel, sReason) {
+    if (oModel.hasPendingChanges(CREATE_REPLAY_GROUP)) {
+      oModel.resetChanges(CREATE_REPLAY_GROUP);
+    }
     var oDiscardAction = oModel.bindContext(ServiceSchema.discardAction + "(...)");
     var pDiscard = oDiscardAction.execute(CREATE_REPLAY_GROUP);
     // Issue Batch 9-30-001 §5: submitBatch()'s OWN returned promise also
@@ -178,13 +181,16 @@ sap.ui.define([
           oPayload[oInsertProps.longText] = sNotes;
           pWrite = oBinding.create(oPayload).created();
         }
-        var oSave = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
-          $$updateGroupId: CREATE_REPLAY_GROUP,
-          $select: "SAP__Messages"
+        var pWriteSubmit = oModel.submitBatch(CREATE_REPLAY_GROUP);
+        return Promise.all([pWrite, pWriteSubmit]).then(function () {
+          var oSave = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
+            $$updateGroupId: CREATE_REPLAY_GROUP,
+            $select: "SAP__Messages"
+          });
+          var pSave = oSave.execute(CREATE_REPLAY_GROUP, true);
+          var pSaveSubmit = oModel.submitBatch(CREATE_REPLAY_GROUP);
+          return Promise.all([pSave, pSaveSubmit]);
         });
-        var pSave = oSave.execute(CREATE_REPLAY_GROUP, true);
-        var pSubmit = oModel.submitBatch(CREATE_REPLAY_GROUP);
-        return Promise.all([pWrite, pSave, pSubmit]);
       });
     }).catch(function (oError) {
       return discardSession(oModel, "notes save failed").then(function () {
