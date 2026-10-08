@@ -91,11 +91,11 @@
             press=".onItemNumberPress" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
             enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
-          <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
-               carried over from the NDC's own IndustryStandardName on product
-               selection (onItemNdcValueHelpRequest) - never typed in directly.
-               §3.2: indented for an ancillary child row (HigherLevelItem set). -->
-          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
+          <!-- Brand is authoritative from the selected Product. A scratch row
+            cannot resolve _Product until it is posted, so the locally copied
+            ZZIndustryStandardName only bridges that pre-POST interval.
+            §3.2: indented for an ancillary child row (HigherLevelItem set). -->
+          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${_Product/IndustryStandardName} || ${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
           <!-- The newest row keeps an editable NDC until another row is added.
             Its current value identifies an unnumbered row; the item number
             preserves ownership after posting and list refreshes. -->
