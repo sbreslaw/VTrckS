@@ -530,7 +530,6 @@ sap.ui.define([], function () {
     // createReplayGroup/CreateOrderService.js#save). ---
     createUpdateGroup: "vrCreate",
     createPayloadUom: "EA",
-    providerIohUpdateGroup: "providerIohChanges",
 
     // Ancillary Items & Opt-Out session prompt (v5 item-handling amendment):
     // once a scratch item row is complete, it POSTs straight to the real
@@ -714,6 +713,7 @@ sap.ui.define([], function () {
     // ProviderContact, ProviderIOH, and SoldToDetails are read from this
     // service. ProductUOM remains unused/unwired.
     providerOrderService: {
+      serviceRoot: "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
       // TODO-VERIFY: URL follows the standard OData v4 SEGW/RAP binding-name
       // convention (design/zui_providerorder_meta.xml service definition name
       // "zui_providerorder_srv") mirrored from mainService's own
@@ -730,6 +730,7 @@ sap.ui.define([], function () {
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails"
       },
+      submitInventoryAction: "com.sap.gateway.srvd.zui_providerorder_srv.v0001.submitInventory",
       customerSalesAreaProperties: {
         customer: "Customer",
         salesOrganization: "SalesOrganization",

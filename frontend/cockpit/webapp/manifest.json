@@ -97,12 +97,7 @@
                 "settings": {
                     "operationMode": "Server",
                     "autoExpandSelect": true,
-                    "groupId": "$auto",
-                    "groupProperties": {
-                        "providerIohChanges": {
-                            "submit": "API"
-                        }
-                    }
+                    "groupId": "$auto"
                 }
             },
             "shippingAddressVH": {

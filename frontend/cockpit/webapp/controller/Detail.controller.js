@@ -131,7 +131,6 @@ sap.ui.define([
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
-      this._aDeletedProviderIohContexts = [];
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -2840,7 +2839,6 @@ sap.ui.define([
         this._oProviderIohListBinding.destroy();
         this._oProviderIohListBinding = null;
       }
-      this._aDeletedProviderIohContexts = [];
       this.getView().getModel("ioh").setData({
         rows: [], busy: false, error: false, editable: false, loaded: false
       });
@@ -2854,7 +2852,6 @@ sap.ui.define([
       if (this._oProviderIohListBinding) {
         this._oProviderIohListBinding.destroy();
       }
-      this._aDeletedProviderIohContexts = [];
       oIohModel.setData({ rows: [], busy: true, error: false, editable: false, loaded: false });
 
       var oListBinding = this.getView().getModel("po").bindList(
@@ -2864,8 +2861,7 @@ sap.ui.define([
         [new Filter(oProps.soldToParty, FilterOperator.EQ, sProviderId)],
         {
           $select: [oProps.soldToParty, oProps.material, oProps.batch,
-            oProps.quantity, oProps.unit, oProps.expirationDate, oProps.brand].join(","),
-          $$updateGroupId: ProviderInventoryService.UPDATE_GROUP
+            oProps.quantity, oProps.unit, oProps.expirationDate, oProps.brand].join(",")
         }
       );
       this._oProviderIohListBinding = oListBinding;
@@ -2881,11 +2877,9 @@ sap.ui.define([
               ndc: oRow[oProps.material],
               lot: oRow[oProps.batch],
               quantity: oRow[oProps.quantity],
-              originalQuantity: oRow[oProps.quantity],
               unit: oRow[oProps.unit],
               expirationDate: oRow[oProps.expirationDate],
-              isNew: false,
-              backendContext: oContext
+              isNew: false
             };
           });
         oIohModel.setData({
@@ -2934,10 +2928,6 @@ sap.ui.define([
       var oIohModel = this.getView().getModel("ioh");
       var iIndex = Number(oRowContext.getPath().split("/").pop());
       var aRows = oIohModel.getProperty("/rows").slice();
-      var oDeletedRow = aRows[iIndex];
-      if (oDeletedRow && !oDeletedRow.isNew && oDeletedRow.backendContext) {
-        this._aDeletedProviderIohContexts.push(oDeletedRow.backendContext);
-      }
       aRows.splice(iIndex, 1);
       oIohModel.setProperty("/rows", aRows);
     },
@@ -3785,6 +3775,13 @@ sap.ui.define([
 
       var oIohModel = this.getView().getModel("ioh");
       var oIohData = oIohModel.getData();
+      if (oIohData.busy || oIohData.error) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
+        MessageToast.show(oBundle.getText(oIohData.error ? "inventoryLoadError" : "inventoryLoading"));
+        this._oSectionFactory.expandSection("inventory");
+        return;
+      }
       if (oIohData.loaded && ProviderInventoryService.hasInvalidRows(oIohData.rows)) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
@@ -3834,13 +3831,18 @@ sap.ui.define([
               shipToPartyId: oEnrich.shipToPartyId
             });
           }).then(function () {
+            if (!oIohData.loaded) {
+              return { skipped: true };
+            }
             return ProviderInventoryService.save(
-              that.getView().getModel("po"),
-              that._oProviderIohListBinding,
               sProviderId,
-              oIohData.rows,
-              that._aDeletedProviderIohContexts
-            );
+              oIohData.rows
+            ).then(function (oInventoryResult) {
+              if (oInventoryResult && oInventoryResult.Message) {
+                MessageExtractor.addNote(oInventoryResult.Message, "Success");
+              }
+              return oInventoryResult;
+            });
           }).catch(function (oError) {
             oError.orderCreatedId = sNewId;
             throw oError;

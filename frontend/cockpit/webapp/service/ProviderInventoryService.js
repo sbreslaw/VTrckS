@@ -3,72 +3,65 @@ sap.ui.define([
 ], function (ServiceSchema) {
   "use strict";
 
-  var UPDATE_GROUP = ServiceSchema.providerIohUpdateGroup;
-
   function quantity(vValue) {
     var fValue = Number(vValue);
-    return Number.isFinite(fValue) ? String(fValue) : null;
+    return Number.isFinite(fValue) ? fValue : null;
   }
 
-  function isValidNewRow(oRow) {
-    return !!(oRow.ndc && oRow.lot && oRow.unit && quantity(oRow.quantity) !== null);
+  function isValidRow(oRow) {
+    return !!(oRow.ndc && oRow.lot && oRow.expirationDate && quantity(oRow.quantity) !== null);
+  }
+
+  function responseError(oResponse, oBody) {
+    var vMessage = oBody && oBody.error && oBody.error.message;
+    var sMessage = typeof vMessage === "string" ? vMessage : vMessage && vMessage.value;
+    return new Error(sMessage || "Provider inventory submission failed (HTTP " + oResponse.status + ")");
+  }
+
+  function parseBody(oResponse) {
+    return oResponse.text().then(function (sBody) {
+      var oBody = sBody ? JSON.parse(sBody) : {};
+      if (!oResponse.ok) {
+        throw responseError(oResponse, oBody);
+      }
+      return oBody;
+    });
   }
 
   var ProviderInventoryService = {
-    UPDATE_GROUP: UPDATE_GROUP,
-
     hasInvalidRows: function (aRows) {
       return (aRows || []).some(function (oRow) {
-        return oRow.isNew && !isValidNewRow(oRow);
+        return !isValidRow(oRow);
       });
     },
 
-    save: function (oModel, oListBinding, sProviderId, aRows, aDeletedContexts) {
-      if (!oListBinding) {
-        return Promise.resolve({ skipped: true });
-      }
-
-      var oProps = ServiceSchema.providerOrderService.providerIohProperties;
-      var aOperationPromises = [];
-
-      (aDeletedContexts || []).forEach(function (oContext) {
-        aOperationPromises.push(oContext.delete(UPDATE_GROUP));
-      });
-
-      (aRows || []).forEach(function (oRow) {
-        var sQuantity = quantity(oRow.quantity);
-        if (oRow.isNew) {
-          var oPayload = {};
-          oPayload[oProps.soldToParty] = sProviderId;
-          oPayload[oProps.material] = oRow.ndc;
-          oPayload[oProps.batch] = oRow.lot;
-          oPayload[oProps.quantity] = sQuantity;
-          oPayload[oProps.unit] = oRow.unit;
-          oPayload[oProps.expirationDate] = oRow.expirationDate || null;
-          oPayload[oProps.brand] = oRow.brand || "";
-          aOperationPromises.push(oListBinding.create(oPayload).created());
-          return;
+    save: function (sProviderId, aRows) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oPayload = {
+        SoldToParty: sProviderId,
+        _Items: (aRows || []).map(function (oRow) {
+          return {
+            Material: oRow.ndc,
+            Batch: oRow.lot,
+            Quantity: quantity(oRow.quantity),
+            ExpirationDate: oRow.expirationDate
+          };
+        })
+      };
+      return fetch(oSchema.serviceRoot + oSchema.entitySets.providerIoh + "/" + oSchema.submitInventoryAction, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "OData-Version": "4.0"
+        },
+        body: JSON.stringify(oPayload)
+      }).then(parseBody).then(function (oResult) {
+        if (oResult && oResult.Success === false) {
+          throw new Error(oResult.Message || "Provider inventory submission failed");
         }
-
-        if (oRow.backendContext && quantity(oRow.originalQuantity) !== sQuantity) {
-          aOperationPromises.push(oRow.backendContext.setProperty(oProps.quantity, sQuantity, UPDATE_GROUP));
-        }
-      });
-
-      if (!aOperationPromises.length) {
-        return Promise.resolve({ skipped: true });
-      }
-
-      return oModel.submitBatch(UPDATE_GROUP).then(function () {
-        if (oModel.hasPendingChanges(UPDATE_GROUP)) {
-          throw new Error("Provider inventory save failed: one or more changes were rejected");
-        }
-        return Promise.all(aOperationPromises).then(function () {
-          return { skipped: false };
-        });
-      }).catch(function (oError) {
-        oModel.resetChanges(UPDATE_GROUP);
-        throw oError;
+        return oResult || { Success: true };
       });
     }
   };
