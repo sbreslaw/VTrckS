@@ -10,6 +10,14 @@ sap.ui.define([
   var oIohSourceDateFormat = DateFormat.getDateInstance({ pattern: "yyyy-MM-dd", UTC: true });
   var oIohDisplayDateFormat = DateFormat.getDateInstance({ pattern: "MM/dd/yyyy", UTC: true });
 
+  function formatIsoDate(vValue) {
+    if (!vValue) {
+      return "";
+    }
+    var oDate = vValue instanceof Date ? vValue : oIohSourceDateFormat.parse(vValue);
+    return oDate ? oIohDisplayDateFormat.format(oDate) : vValue;
+  }
+
   function orDash(vValue) {
     if (vValue === null || vValue === undefined || vValue === "") {
       return EM_DASH;
@@ -226,13 +234,9 @@ sap.ui.define([
       return oValue;
     },
 
-    iohExpirationDate: function (vValue) {
-      if (!vValue) {
-        return "";
-      }
-      var oDate = vValue instanceof Date ? vValue : oIohSourceDateFormat.parse(vValue);
-      return oDate ? oIohDisplayDateFormat.format(oDate) : vValue;
-    },
+    iohExpirationDate: formatIsoDate,
+
+    transactionDeliveryDate: formatIsoDate,
 
     // Employee Responsible name is not exposed by this service (only the personnel
     // number via the contact-info navigation's ResponsibleEmployee field) — title is BLOCKED-BY-SERVICE.

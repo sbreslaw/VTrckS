@@ -153,10 +153,9 @@ sap.ui.define([], function () {
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
-      // Client requirement (2026-09-01): real custom header field, renamed by
-      // the backend team (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc - open for
-      // entry on Create (Details.fragment.xml) - see updatableHeaderProperties
-      // below for the create-replay persistence note.
+      // C_SalesOrderManage header Description field. Open for entry on Create
+      // (Details.fragment.xml); see updatableHeaderProperties below for the
+      // create-replay persistence note.
       description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: rebound from the old
       // SalesOrderType display-only alias to the REAL, independently writable
@@ -728,7 +727,15 @@ sap.ui.define([], function () {
         fundTypeValueHelp: "FundTypeVH",
         providerContact: "ProviderContact",
         providerIoh: "ProviderIOH",
-        soldToDetails: "SoldToDetails"
+        soldToDetails: "SoldToDetails",
+        providerDeliveries: "ProvOrdDelvs"
+      },
+      // ProvOrdDelvs: the SalesOrder filter key is assumed - verify against $metadata.
+      providerDeliveryProperties: {
+        salesOrder: "SalesOrder",
+        delivery: "Delivery",
+        subsequentDocumentCategoryText: "SubsequentDocumentCategoryText",
+        deliveryCreationDate: "DeliveryCreationDate"
       },
       submitInventoryAction: "com.sap.gateway.srvd.zui_providerorder_srv.v0001.submitInventory",
       customerSalesAreaProperties: {
@@ -802,14 +809,7 @@ sap.ui.define([], function () {
       paymentTerms: "CustomerPaymentTerms",
       salesOffice: "SalesOffice",
       salesGroup: "SalesGroup",
-      // Client requirement (2026-09-01): needed here ONLY so the create-replay
-      // step (CreateOrderService.js#_replayHeaderProperties) actually PATCHes
-      // the value entered during Create - Description is deliberately NOT
-      // rendered as an editable Input in change mode (Details.fragment.xml
-      // shows create-mode-only), so its PATCHability on an EXISTING order is
-      // still unconfirmed/out of this task's scope - verify before ever
-      // wiring a change-mode Input for it. Renamed by the backend team
-      // (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc.
+      // Used by create replay and the existing-order Details edit session.
       description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: real, independently
       // writable field (headerProperties.category above) - confirmed no

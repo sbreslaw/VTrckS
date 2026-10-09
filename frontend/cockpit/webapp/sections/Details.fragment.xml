@@ -58,18 +58,14 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Client requirement (2026-09-01): real field, renamed by the
-								backend team (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc - open
-								for entry on Create only - change-mode PATCHability is
-								unconfirmed, see ServiceSchema.js updatableHeaderProperties. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/createMode} }"/>
-								<Input value="{path: 'ZOrdDesc', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
-									maxLength="40" visible="{sectionFlags>/createMode}"
-									enabled="{createState>/providerChosen}"/>
+								<Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input id="headerDescInput" value="{path: 'ZOrdDesc', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="40" visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>

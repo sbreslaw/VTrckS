@@ -131,6 +131,7 @@ sap.ui.define([
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
+      this.getView().setModel(new JSONModel({ salesOrder: "", rows: [], busy: false, error: false, loaded: false }), "transactionHistory");
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -199,6 +200,7 @@ sap.ui.define([
     onExpandPanel: function (oEvent) {
       var oPanel = oEvent.getSource();
       this._oSectionFactory.ensurePanelContent(oPanel);
+      this._refreshTransactionHistory();
     },
 
     onAnchorPress: function (oEvent) {
@@ -215,6 +217,7 @@ sap.ui.define([
       if (oPanel) {
         oPanel.setExpanded(true);
         this._oSectionFactory.ensurePanelContent(oPanel);
+        this._refreshTransactionHistory();
         oPanel.getDomRef().scrollIntoView({ behavior: "smooth", block: "start" });
       }
     },
@@ -2883,6 +2886,94 @@ sap.ui.define([
       });
     },
 
+    onTransactionHistorySearch: function (oEvent) {
+      var oTable = this._byIdInSection("transactionHistory", "transactionHistoryTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (!oBinding) {
+        return;
+      }
+      var sQuery = oEvent.getSource().getValue();
+      var aFilters = sQuery ? [new Filter({
+        filters: [
+          new Filter({ path: "delivery", operator: FilterOperator.Contains, value1: sQuery, caseSensitive: false }),
+          new Filter({ path: "transactionType", operator: FilterOperator.Contains, value1: sQuery, caseSensitive: false })
+        ],
+        and: false
+      })] : [];
+      oBinding.filter(aFilters, "Application");
+    },
+
+    // Transaction History (Detail page): deliveries (ProvOrdDelvs) for the saved
+    // sales order. Loads only once the section is expanded; a new order resets it.
+    _refreshTransactionHistory: function () {
+      var oHistoryModel = this.getView().getModel("transactionHistory");
+      var oPanel = this.byId("transactionHistory");
+      var sSalesOrder = oHistoryModel.getProperty("/salesOrder");
+      if (!sSalesOrder || !oPanel || !oPanel.getExpanded()) {
+        return;
+      }
+      if (oHistoryModel.getProperty("/loaded") || oHistoryModel.getProperty("/busy")) {
+        return;
+      }
+      this._loadTransactionHistory(sSalesOrder);
+    },
+
+    _resetTransactionHistoryState: function (sSalesOrder) {
+      this._iTransactionHistoryRequest = (this._iTransactionHistoryRequest || 0) + 1;
+      if (this._oTransactionHistoryListBinding) {
+        this._oTransactionHistoryListBinding.destroy();
+        this._oTransactionHistoryListBinding = null;
+      }
+      this.getView().getModel("transactionHistory").setData({
+        salesOrder: sSalesOrder || "", rows: [], busy: false, error: false, loaded: false
+      });
+    },
+
+    _loadTransactionHistory: function (sSalesOrder) {
+      var oHistoryModel = this.getView().getModel("transactionHistory");
+      var oProps = ServiceSchema.providerOrderService.providerDeliveryProperties;
+      var iRequest = (this._iTransactionHistoryRequest || 0) + 1;
+      this._iTransactionHistoryRequest = iRequest;
+      if (this._oTransactionHistoryListBinding) {
+        this._oTransactionHistoryListBinding.destroy();
+        this._oTransactionHistoryListBinding = null;
+      }
+      oHistoryModel.setData({ salesOrder: sSalesOrder, rows: [], busy: true, error: false, loaded: false });
+
+      var oListBinding = this.getView().getModel("po").bindList(
+        "/" + ServiceSchema.providerOrderService.entitySets.providerDeliveries,
+        undefined,
+        undefined,
+        [new Filter(oProps.salesOrder, FilterOperator.EQ, sSalesOrder)],
+        {
+          $select: [oProps.delivery, oProps.subsequentDocumentCategoryText, oProps.deliveryCreationDate].join(",")
+        }
+      );
+      this._oTransactionHistoryListBinding = oListBinding;
+
+      oListBinding.requestContexts(0, 500).then(function (aContexts) {
+        if (this._iTransactionHistoryRequest !== iRequest) {
+          return;
+        }
+        var aRows = aContexts.map(function (oContext) {
+          var oRow = oContext.getObject();
+          return {
+            delivery: oRow[oProps.delivery],
+            transactionType: oRow[oProps.subsequentDocumentCategoryText],
+            createdOn: oRow[oProps.deliveryCreationDate]
+          };
+        });
+        oHistoryModel.setData({ salesOrder: sSalesOrder, rows: aRows, busy: false, error: false, loaded: true });
+      }.bind(this)).catch(function () {
+        if (this._iTransactionHistoryRequest !== iRequest) {
+          return;
+        }
+        oListBinding.destroy();
+        this._oTransactionHistoryListBinding = null;
+        oHistoryModel.setData({ salesOrder: sSalesOrder, rows: [], busy: false, error: true, loaded: false });
+      }.bind(this));
+    },
+
     _loadProviderInventory: function (sProviderId) {
       var oIohModel = this.getView().getModel("ioh");
       var oProps = ServiceSchema.providerOrderService.providerIohProperties;
@@ -3290,6 +3381,8 @@ sap.ui.define([
         // actually loaded (change mode - createMode items have no server-
         // computed TaxAmount yet, see _computeHeaderTaxAmount doc comment).
         this._computeHeaderTaxAmount();
+      } else if (sSectionId === "transactionHistory") {
+        this._refreshTransactionHistory();
       } else if (sSectionId === "priceTotals") {
         var oTable = this._byIdInSection("priceTotals", "priceTotalsTable");
         PricingColumns.bindTable(oTable, this.getResourceBundle(), ServiceSchema.pricingElements.headerNavigation);
@@ -3995,6 +4088,9 @@ sap.ui.define([
       this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
       this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
       this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
+      var sHeaderSelect = ["SAP__Messages"].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
+        return ServiceSchema.updatableHeaderProperties[sKey];
+      })).join(",");
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
@@ -4005,8 +4101,8 @@ sap.ui.define([
         // default - explicit $select here (not $$inheritExpandSelect, per the
         // workaround bindings already in play on this view) so a change-mode
         // PATCH failure can surface the same detailed backend messages F3893
-        // receives automatically.
-        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: "SAP__Messages" }
+        // receives automatically. Editable fields stay in the parent entity cache.
+        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: sHeaderSelect }
       });
       this._loadHeaderNotes(this.getView().getBindingContext());
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
@@ -4014,6 +4110,8 @@ sap.ui.define([
       this._computeHeaderPriority();
       this._computeHeaderTaxAmount();
       this._oSectionFactory.rebind();
+      this._resetTransactionHistoryState(sId);
+      this._refreshTransactionHistory();
     },
 
     // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the "create" route
@@ -4037,6 +4135,7 @@ sap.ui.define([
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
+      this._resetTransactionHistoryState("");
       this._resetItemsTableForCreate();
       this._bindDetailHeader();
       // All createMode-visible sections are expanded/loaded simultaneously —
