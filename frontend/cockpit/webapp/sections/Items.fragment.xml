@@ -11,35 +11,35 @@
   <VBox width="100%">
     <OverflowToolbar class="detailItemsToolbar">
       <ToolbarSpacer />
-      <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
-        enabled="{= ${itemsMeta>/canAddItem} &amp;&amp; (${sectionFlags>/createMode} ? ${createState>/providerChosen} : !!%{__CreateByAssociationControl/_Item}) }" press=".onItemsAddRow" />
       <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
       <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
     </OverflowToolbar>
-    <ScrollContainer width="100%" horizontal="true" vertical="false" class="detailItemsScroll">
-    <Table id="itemsTable" width="130rem" items="{_Item}" growing="true" growingThreshold="20">
+    <VBox id="itemsViewport" class="detailItemsViewport">
+    <Table id="itemsTable" width="100%" items="{_Item}" class="detailItemsTable" fixedLayout="true"
+      updateFinished=".onItemsTableUpdateFinished">
     <columns>
-      <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
-      <Column width="6.5rem" visible="{itemsColumns>/optOut}">
+      <Column width="2.5rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" wrapping="true" /></Column>
+      <Column width="4.75rem" visible="{itemsColumns>/optOut}" demandPopin="true" minScreenWidth="1280px">
         <VBox class="itemsOptOutHeader">
-          <Text text="{i18n>colOptOut}" wrapping="false" />
-          <Text text="{i18n>colAncillary}" wrapping="false" />
+          <Text text="{i18n>colOptOutPrefix}" wrapping="false" />
+          <Text text="{i18n>colOptOutSuffix}" wrapping="false" />
+          <Text text="{i18n>colAncillary}" wrapping="true" />
         </VBox>
       </Column>
       <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
-      <Column width="4rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
-      <Column width="5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
-      <Column width="8rem" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
-      <Column width="15rem" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" /></Column>
-      <Column width="6rem" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" /></Column>
-      <Column width="3rem" visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/orderIntention}"><Text text="{i18n>colOrderIntention}" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
-      <Column width="6rem" hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
+      <Column width="3.5rem" visible="{itemsColumns>/itemNumber}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colItemNumber}" wrapping="true" /></Column>
+      <Column width="4.5rem" visible="{itemsColumns>/exisId}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colExisId}" wrapping="true" /></Column>
+      <Column width="4rem" visible="{itemsColumns>/brand}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colBrand}" wrapping="true" /></Column>
+      <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" wrapping="true" /></Column>
+      <Column width="7rem" visible="{itemsColumns>/ndcDescription}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colNdcDescription}" wrapping="true" /></Column>
+      <Column width="3.5rem" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" wrapping="true" /></Column>
+      <Column width="3rem" visible="{itemsColumns>/uom}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>itemUom}" wrapping="true" /></Column>
+      <Column width="4.5rem" visible="{itemsColumns>/orderIntention}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colOrder}" wrapping="false" /><Text text="{i18n>colIntention}" wrapping="false" /></VBox></Column>
+      <Column width="4rem" visible="{itemsColumns>/fundType}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colFundType}" wrapping="true" /></Column>
+      <Column width="5rem" visible="{itemsColumns>/poReference}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colPo}" wrapping="false" /><Text text="{i18n>colReference}" wrapping="false" /></VBox></Column>
+      <Column width="4.5rem" visible="{itemsColumns>/deliveryStatus}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colDelivery}" wrapping="false" /><Text text="{i18n>colStatus}" wrapping="false" /></VBox></Column>
+      <Column width="4.25rem" hAlign="End" visible="{itemsColumns>/netValue}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colNet}" wrapping="false" /><Text text="{i18n>colAmount}" wrapping="false" /></VBox></Column>
+      <Column width="6.5rem" visible="{itemsColumns>/rejectionReason}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colRejection}" wrapping="false" /><Text text="{i18n>colReason}" wrapping="false" /></VBox></Column>
     </columns>
     <items>
       <ColumnListItem>
@@ -90,17 +90,14 @@
           <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
-            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
+            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" />
           <!-- Brand is authoritative from the selected Product. A scratch row
             cannot resolve _Product until it is posted, so the locally copied
             ZZIndustryStandardName only bridges that pre-POST interval.
             §3.2: indented for an ancillary child row (HigherLevelItem set). -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${_Product/IndustryStandardName} || ${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
-          <!-- The newest row keeps an editable NDC until another row is added.
-            Its current value identifies an unnumbered row; the item number
-            preserves ownership after posting and list refreshes. -->
-          <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ((!!%{SalesOrderItem} &amp;&amp; %{SalesOrderItem} === ${itemsMeta>/editableNdcItemNumber}) || (!%{SalesOrderItem} &amp;&amp; %{Product} === ${itemsMeta>/editableNdcValue})) }"
+          <Input value="{path: 'Product', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/ndcCode}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
             showValueHelp="true"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
@@ -161,6 +158,10 @@
       </ColumnListItem>
     </items>
     </Table>
-    </ScrollContainer>
+    </VBox>
+    <Button id="itemsAddMoreButton" text="{i18n>itemsAddMore}" width="100%" class="detailItemsAddMore"
+      visible="{sectionFlags>/items/editing}"
+      enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }"
+      press=".onItemsAddMore" />
   </VBox>
 </core:FragmentDefinition>

@@ -53,7 +53,7 @@ sap.ui.define([
   // Sales Order" app) ever sends on create. This whitelist is the ONLY
   // fields actually harvested onto the create payload (cleanItemPayload
   // below) - the six ZZ*QTY mirrors are Nullable="false" Int32s and must
-  // always be present (onItemsAddRow seeds them to 0).
+  // always be present (_addItemRows seeds them to 0).
   var ITEM_PROPERTIES = [
     ServiceSchema.itemProperties.material,
     ServiceSchema.itemProperties.quantity,
@@ -374,9 +374,11 @@ sap.ui.define([
         if (oContext.getProperty(oProps.higherLevelItem)) {
           return false;
         }
+        if (!oContext.getProperty(oProps.material)) {
+          return false;
+        }
         var fQty = parseFloat(oContext.getProperty(oProps.quantity));
-        return !oContext.getProperty(oProps.material)
-          || isNaN(fQty) || fQty <= 0
+        return isNaN(fQty) || fQty <= 0
           || !oContext.getProperty(oProps.fundType)
           || !oContext.getProperty(oProps.orderIntention);
       });
@@ -475,6 +477,9 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           var aScratchItemContexts = (oItemsBinding && oItemsBinding.getCurrentContexts) ? oItemsBinding.getCurrentContexts() : [];
+          aScratchItemContexts = aScratchItemContexts.filter(function (oItemContext) {
+            return !!oItemContext.getProperty(ServiceSchema.itemProperties.material);
+          });
           // Gap 0 correction (live network evidence): item-level validation
           // messages (e.g. VI-028/FI-759) attach to the _Item entity itself, not
           // the header - the create action's $select above never covered this

@@ -175,7 +175,7 @@ sap.ui.define([
       // child-row read-only/indent treatment (Items.fragment.xml). Empty
       // until the sticky session opens (createMode) or an existing order's
       // items load (change mode) - see _computeAncillaryParents.
-      this.getView().setModel(new JSONModel({ childParents: {}, editableNdcItemNumber: "", editableNdcValue: "", canAddItem: true }), "itemsMeta");
+      this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
 
@@ -540,6 +540,13 @@ sap.ui.define([
       });
       EditRequestService.beginEdit(oContext, sSectionId);
       oFlags.setProperty("/" + sSectionId + "/editing", true);
+      if (sSectionId === "items") {
+        var oItemsTable = this._byIdInSection("items", "itemsTable");
+        var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
+        if (oAddMoreButton && oAddMoreButton.getEnabled()) {
+          this._addItemsToMinimum(oItemsTable && oItemsTable.getBinding("items"));
+        }
+      }
       if (sSectionId === "shipping") {
         this._prepareShippingEdit(oContext);
       }
@@ -624,10 +631,14 @@ sap.ui.define([
       });
     },
 
-    onSectionCancelPress: function (sSectionId) {
+    onSectionCancelPress: async function (sSectionId) {
       var oContext = this.getView().getBindingContext();
       if (oContext) {
-        EditRequestService.cancel(oContext);
+        await EditRequestService.cancel(oContext);
+      }
+      if (sSectionId === "items") {
+        var oTable = this._byIdInSection("items", "itemsTable");
+        await this._deleteEmptyItemRows(oTable && oTable.getBinding("items"));
       }
       if (sSectionId === "details") {
         var oEnrichModel = this.getView().getModel("createEnrich");
@@ -672,6 +683,15 @@ sap.ui.define([
       if (!oContext) {
         return;
       }
+      var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
+      var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
+      if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding)) {
+        MessageToast.show(oBundle.getText("itemsIncompleteItemsError"));
+        return;
+      }
+      var pRemoveEmptyItems = sSectionId === "items"
+        ? this._deleteEmptyItemRows(oItemsBinding)
+        : Promise.resolve();
       // Session Prompt (Detail View Adjustments) 3.1: the "details" section's
       // own Save is also the only trigger for propagating a changed/mixed
       // header Priority selection down onto every item - staged into the same
@@ -681,7 +701,7 @@ sap.ui.define([
       var oStagePromise = sSectionId === "details"
         ? this._stageHeaderNotes(oContext)
         : Promise.resolve();
-      oStagePromise.then(function () {
+      pRemoveEmptyItems.then(function () { return pStagePromise; }).then(function () {
         if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
           return that._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
         }
@@ -755,69 +775,139 @@ sap.ui.define([
       return oPanel && Fragment.byId(oPanel.getId(), sControlId);
     },
 
-    onItemsAddRow: function () {
+    onItemsAddMore: function () {
       var oTable = this._byIdInSection("items", "itemsTable");
       var oBinding = oTable && oTable.getBinding("items");
       if (!oBinding) {
         return;
       }
-      var oItemsMeta = this.getView().getModel("itemsMeta");
-      oItemsMeta.setProperty("/editableNdcItemNumber", "");
-      oItemsMeta.setProperty("/editableNdcValue", "");
-      oItemsMeta.setProperty("/canAddItem", false);
-      var oNewRowData = {
-        Product: "",
-        // RequestedQuantity is Nullable="false" AND Edm.Decimal (design/so.xml)
-        // - never leave it null even transiently, must be the STRING "0", not
-        // the number 0, or the POST's own error response comes back malformed
-        // (confirmed live, same as onProdQtyChange's own decimal-string
-        // requirement below).
-        RequestedQuantity: "0",
-        RequestedQuantityUnit: ServiceSchema.createPayloadUom,
-        // Nullable="false" (design/so.xml) - seeded here too, not just on
-        // change (onProdQtyChange/onFundTypeChange), so a row never carries
-        // an unset Int32.
-        ZZVFCQTY: 0,
-        ZZ317QTY: 0,
-        ZZSTATEQTY: 0,
-        ZZCHIPQTY: 0,
-        ZZPANQTY: 0,
-        ZZRESQTY: 0
-      };
-      // Ancillary Items & Opt-Out session prompt §3.1: once the Items table
-      // has already switched to the real sticky session's own `_Item` list
-      // (this._bItemsSessionBound, see _bindItemsTableToSession), a newly
-      // added row IS that real list - there's no more need for a client-side
-      // placeholder SalesOrderItem (the model resolves the server-assigned
-      // one once this row's own create() settles under $auto).
-      if (this._bItemsSessionBound) {
-        // This binding's own group is $auto (unlike the pre-session scratch
-        // list's deferred "vrCreate") - a plain create() would POST an empty
-        // row to the backend the instant "Add Item" is clicked, 400ing
-        // (confirmed live). bInactive keeps it purely local until the user
-        // actually edits a field (requires $$ownRequest: true, already set
-        // by _rebindItemsGroup).
-        // Priority is already locked by the time this branch runs (the first
-        // posted item locked it) - stamp today's frozen value now, since a
-        // later PATCH to DeliveryPriority 422s once this row posts.
-        var sLockedPriority = this.getView().getModel("priorityState").getProperty("/value");
-        if (sLockedPriority) {
-          oNewRowData[ServiceSchema.itemProperties.deliveryPriority] = sLockedPriority;
-        }
-        // Live-test fix (round 18): bAtEnd (3rd arg) true - new rows append
-        // at the bottom of the table, not the top.
-        oBinding.create(oNewRowData, false, true, true);
-      } else {
-        // Pre-session (still the local, deferred, never-submitted scratch
-        // list): keep the existing client-only SD-style placeholder number
-        // (10, 20, 30...) so the row doesn't display blank until Save.
-        oNewRowData.SalesOrderItem = this._computeNextItemNumber(oBinding);
-        this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", oNewRowData.SalesOrderItem);
-        // Live-test fix (round 18): bAtEnd (2nd positional arg after
-        // bSkipRefresh) true - append at the bottom, matching the
-        // session-bound branch above.
-        oBinding.create(oNewRowData, false, true);
+      this._addItemRows(oBinding, 10);
+    },
+
+    _addInitialCreateItemRows: function () {
+      if (!this._bInitialCreateItemRowsPending) {
+        return;
       }
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (oBinding) {
+        this._bInitialCreateItemRowsPending = false;
+        this._addItemRows(oBinding, 10, false);
+      }
+    },
+
+    _addItemsToMinimum: function (oBinding) {
+      if (!oBinding || !oBinding.requestContexts) {
+        return;
+      }
+      oBinding.requestContexts(0, 10).then(function (aContexts) {
+        var oFlags = this.getView().getModel("sectionFlags");
+        var oTable = this._byIdInSection("items", "itemsTable");
+        var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
+        if (!oTable || oTable.getBinding("items") !== oBinding || !oFlags.getProperty("/items/editing") || !oAddMoreButton || !oAddMoreButton.getEnabled()) {
+          return;
+        }
+        var iRowsToAdd = Math.max(0, 10 - aContexts.length);
+        if (iRowsToAdd) {
+          this._addItemRows(oBinding, iRowsToAdd);
+        }
+      }.bind(this)).catch(function () {});
+    },
+
+    onItemsTableUpdateFinished: function (oEvent) {
+      var oTable = oEvent.getSource();
+      var oViewport = this._byIdInSection("items", "itemsViewport");
+      var oTableDom = oTable.getDomRef();
+      if (!oViewport || !oTableDom) {
+        return;
+      }
+      var oHeader = oTableDom.querySelector(".sapMListTblHeader");
+      var iHeight = oHeader ? oHeader.getBoundingClientRect().height : 0;
+      var aItems = oTable.getItems();
+      aItems.slice(0, 10).forEach(function (oItem) {
+        var oItemDom = oItem.getDomRef();
+        if (oItemDom) {
+          iHeight += oItemDom.getBoundingClientRect().height;
+          var oPopinRow = oItemDom.nextElementSibling;
+          if (oPopinRow && oPopinRow.classList.contains("sapMListTblSubRow")) {
+            iHeight += oPopinRow.getBoundingClientRect().height;
+          }
+        }
+      });
+      var oViewportDom = oViewport.getDomRef();
+      var iScrollbarHeight = oViewportDom && oViewportDom.scrollWidth > oViewportDom.clientWidth ? 16 : 0;
+      if (aItems.length <= 10) {
+        iHeight = oTableDom.getBoundingClientRect().height;
+      }
+      oViewport.setHeight(Math.ceil(iHeight + iScrollbarHeight + 8) + "px");
+    },
+
+    _addItemRows: function (oBinding, iCount, bAtEnd) {
+      if (!oBinding) {
+        return;
+      }
+      var aRows = [];
+      var oProps = ServiceSchema.itemProperties;
+      var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
+      var bInactive = this._bItemsSessionBound || !bCreateMode;
+      var iNextItemNumber = parseInt(this._computeNextItemNumber(oBinding), 10);
+      for (var iIndex = 0; iIndex < iCount; iIndex += 1) {
+        var oNewRowData = {};
+        oNewRowData[oProps.material] = "";
+        oNewRowData[oProps.quantity] = "0";
+        oNewRowData[oProps.unit] = ServiceSchema.createPayloadUom;
+        oNewRowData[oProps.vfcQty] = 0;
+        oNewRowData[oProps.qty317] = 0;
+        oNewRowData[oProps.stateQty] = 0;
+        oNewRowData[oProps.chipQty] = 0;
+        oNewRowData[oProps.panQty] = 0;
+        oNewRowData[oProps.resQty] = 0;
+        if (this._bItemsSessionBound) {
+          var sLockedPriority = this.getView().getModel("priorityState").getProperty("/value");
+          if (sLockedPriority) {
+            oNewRowData[ServiceSchema.itemProperties.deliveryPriority] = sLockedPriority;
+          }
+        } else if (bCreateMode) {
+          oNewRowData[oProps.itemNumber] = ("000000" + iNextItemNumber).slice(-6);
+          iNextItemNumber += 10;
+        }
+        aRows.push(oNewRowData);
+      }
+      if (bAtEnd === false && !this._bItemsSessionBound) {
+        aRows.reverse().forEach(function (oRowData) {
+          this._handleItemCreatePromise(oBinding.create(oRowData, false, false));
+        }, this);
+        return;
+      }
+      aRows.forEach(function (oRowData) {
+        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, bInactive));
+      }, this);
+    },
+
+    _handleItemCreatePromise: function (oContext) {
+      oContext.created().catch(function (oError) {
+        if (oError.canceled) {
+          return;
+        }
+        var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), this.getResourceBundle());
+        aSectionIds.forEach(function (sId) {
+          this._oSectionFactory.expandSection(sId);
+        }, this);
+        this._openMessagePopover();
+      }.bind(this));
+    },
+
+    _deleteEmptyItemRows: function (oBinding) {
+      var oProps = ServiceSchema.itemProperties;
+      var aContexts = oBinding && oBinding.getCurrentContexts ? oBinding.getCurrentContexts() : [];
+      var aDeletes = aContexts.filter(function (oContext) {
+        return oContext.isTransient && oContext.isTransient()
+          && !oContext.getProperty(oProps.material)
+          && !oContext.getProperty(oProps.higherLevelItem);
+      }).map(function (oContext) {
+        return oContext.delete();
+      });
+      return Promise.all(aDeletes);
     },
 
     // Client-side-only SD-style numbering (10, 20, 30...) for a newly-added
@@ -872,42 +962,8 @@ sap.ui.define([
       if (oItem[oProps.baseUnit]) {
         oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
       }
-      this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", oItem[oProps.id]);
-      this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
       this._refreshFundTypeValueHelp(oRowContext);
       this._checkItemRowComplete(oRowContext);
-    },
-
-    _clearNdcDerivedFields: function (oRowContext) {
-      if (!oRowContext) {
-        return;
-      }
-      oRowContext.setProperty(ServiceSchema.itemProperties.itemText, "");
-      oRowContext.setProperty(ServiceSchema.itemProperties.brand, "");
-      oRowContext.setProperty(ServiceSchema.itemProperties.unit, "");
-      this._clearFundTypeSelection(oRowContext);
-      this._refreshFundTypeValueHelp(oRowContext, "");
-    },
-
-    _ownsNdcAddGate: function (oRowContext) {
-      if (!oRowContext) {
-        return false;
-      }
-      var oItemsMeta = this.getView().getModel("itemsMeta");
-      var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber) || "";
-      var sNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material) || "";
-      var sEditableItemNumber = oItemsMeta.getProperty("/editableNdcItemNumber") || "";
-      var sEditableNdc = oItemsMeta.getProperty("/editableNdcValue") || "";
-      return sEditableItemNumber
-        ? sItemNumber === sEditableItemNumber
-        : !sItemNumber && sNdc === sEditableNdc;
-    },
-
-    _releaseNdcAddGate: function () {
-      var oItemsMeta = this.getView().getModel("itemsMeta");
-      oItemsMeta.setProperty("/editableNdcItemNumber", "");
-      oItemsMeta.setProperty("/editableNdcValue", "");
-      oItemsMeta.setProperty("/canAddItem", true);
     },
 
     // Issue Batch 9-30-001 §3.4: NDC typeahead - filters the row's own
@@ -966,35 +1022,28 @@ sap.ui.define([
       this._setNdcValueState(oInput, true);
     },
 
-    // Issue Batch 9-30-001 §3.4 (documented, accepted risk - see NOTES.md):
-    // the NDC Input's own "value" is a DIRECT two-way binding to the real
-    // Product property (Items.fragment.xml), unlike Provider's separate
-    // display-buffer model - free text typed here can reach the backend via
-    // its own PATCH before a suggestion/VH selection validates it.
-    // Live-test (2026-10-01): typing/pasting a full NDC and tabbing out
-    // (no suggestion/VH pick) left Text/Brand/UOM unpopulated. Root cause:
-    // the OLD "sValue === sCurrent means valid, do nothing" check was
-    // always true here regardless of HOW the value got in - the two-way
-    // binding already commits the typed value into Product before this
-    // handler even runs, so comparing against it can never catch a plain
-    // manual type. Now always looks the value up by exact Product id and,
-    // if found, applies it the same way a suggestion/VH pick would
-    // (_applyNdcPick) - harmless if this "change" followed a suggestion
-    // pick that already applied the same row (just a redundant re-fetch of
-    // the same values). Error state is the fallback for no match.
+    // Resolve typed Product IDs before writing them; an empty value must not
+    // clear an already-selected item.
     onItemNdcChange: function (oEvent) {
       var that = this;
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
       var sValue = (oEvent.getParameter("value") || "").trim();
-      this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", sValue);
-      this.getView().getModel("itemsMeta").setProperty("/canAddItem", false);
-      if (!oRowContext || !sValue) {
-        this._clearNdcDerivedFields(oRowContext);
-        this._setNdcValueState(oInput, true);
+      if (!oRowContext) {
         return;
       }
       var oProps = ServiceSchema.productProperties;
+      var sPreviousNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material) || "";
+      if (!sValue) {
+        oInput.setValue(sPreviousNdc);
+        if (sPreviousNdc) {
+          oInput.setValueState("Error");
+          oInput.setValueStateText(this.getResourceBundle().getText("ndcCannotClear"));
+        } else {
+          this._setNdcValueState(oInput, true);
+        }
+        return;
+      }
       var oLookupBinding = oRowContext.getModel().bindList(
         "/" + ServiceSchema.entitySets.product, undefined, undefined,
         [new Filter(oProps.id, FilterOperator.EQ, sValue)],
@@ -1009,11 +1058,11 @@ sap.ui.define([
           oInput.setValue(aContexts[0].getProperty(oProps.id));
           that._setNdcValueState(oInput, true);
         } else {
-          that._clearNdcDerivedFields(oRowContext);
+          oInput.setValue(sPreviousNdc);
           that._setNdcValueState(oInput, false);
         }
       }).catch(function () {
-        that._clearNdcDerivedFields(oRowContext);
+        oInput.setValue(sPreviousNdc);
         that._setNdcValueState(oInput, false);
       });
     },
@@ -1290,11 +1339,8 @@ sap.ui.define([
     // fund type + order intention are ALL set - reverted back to this after
     // live-testing an NDC-only rule raced the row's own follow-up field
     // edits against the backend (repo memory, round 23 live-test rounds
-    // 2/3). A row still incomplete when "Add Item" is clicked is NOT force-
-    // posted (round 24 live-test: the backend accepts a zero-quantity create
-    // but never durably persists it, 404ing on any later edit) - it just
-    // stays inactive/transient in the table, which never gets removed by
-    // adding another row, so nothing is lost by leaving it incomplete.
+    // 2/3). Incomplete rows remain inactive because the backend accepts a
+    // zero-quantity create without durably persisting it, causing later 404s.
     _isScratchRowComplete: function (oRowContext) {
       var oProps = ServiceSchema.itemProperties;
       var fQty = parseFloat(oRowContext.getProperty(oProps.quantity));
@@ -1304,7 +1350,7 @@ sap.ui.define([
         && !!oRowContext.getProperty(oProps.orderIntention);
     },
 
-    // bInactive create() (onItemsAddRow, post-session-bound branch) only
+    // bInactive create() (_addItemRows, post-session-bound branch) only
     // defers the row's FIRST edit - without this handler it would activate
     // (and auto-POST via $auto) after just one field, still missing the
     // other 3 mandatory ones. Keep re-deferring (preventDefault) on every
@@ -1342,10 +1388,6 @@ sap.ui.define([
       var oBundle = this.getResourceBundle();
       oRowContext.created()
         .then(function () {
-          that.getView().getModel("itemsMeta").setProperty(
-            "/editableNdcItemNumber",
-            oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber)
-          );
           // Issue Batch 9-30-001 \u00a72: the create response itself always
           // reads the six ZZ*QTY fields back as 0 (backend read-path defect,
           // see FundLogicService.js) - restore this row's own last-written
@@ -1418,10 +1460,6 @@ sap.ui.define([
       this._applyCreatePriorityToRow(oRowContext);
       CreateOrderService.postItem(this._oCreateSession, oHeaderContext, oRowContext.getObject())
         .then(function (oNewItemContext) {
-          that.getView().getModel("itemsMeta").setProperty(
-            "/editableNdcItemNumber",
-            oNewItemContext.getProperty(ServiceSchema.itemProperties.itemNumber)
-          );
           oRowContext.delete().catch(function () {});
           if (oAllocationSnapshot) {
             FundLogicService.transferSnapshot(oNewItemContext, oAllocationSnapshot);
@@ -1535,7 +1573,7 @@ sap.ui.define([
     // Re-creates any scratch rows stashed by _migrateRemainingScratchRows
     // (still incomplete when another row's completion triggered the switch
     // to the real session list) as new inactive rows on that same list -
-    // same bInactive create() onItemsAddRow already uses for item 2+, so the
+    // same bInactive create() _addItemRows uses for later rows, so the
     // user's partial entry (NDC/quantity/etc.) survives and can still be
     // completed normally.
     _recreatePendingIncompleteRows: function (oBinding) {
@@ -1545,11 +1583,10 @@ sap.ui.define([
         return;
       }
       aPending.forEach(function (oRowData) {
-        // Edm.Decimal - must stay/become a STRING, see onItemsAddRow's own
-        // RequestedQuantity comment.
+        // Edm.Decimal values must remain strings.
         oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
-        oBinding.create(oRowData, false, true, true);
-      });
+        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, true));
+      }, this);
     },
 
     // Issue Batch 9-30-001 §5 follow-up (live evidence, 2026-09-30): once
@@ -1587,7 +1624,7 @@ sap.ui.define([
       var oNewBinding = oTable.getBinding("items");
       if (oNewBinding) {
         // A just-`bindItems()`-created binding hasn't resolved its own
-        // length yet (unlike onItemsAddRow's bAtEnd:true, which only ever
+        // length yet (unlike _addItemRows's bAtEnd:true, which only ever
         // runs long after the Table's own rendering cycle has already
         // resolved it) - create(..., bAtEnd:true) here throws synchronously
         // ("Must know the final length to create at the end"). Insert at
@@ -1599,8 +1636,8 @@ sap.ui.define([
           oRowData.SalesOrderItem = ("000000" + ((iIndex + 1) * 10)).slice(-6);
         });
         aRowData.slice().reverse().forEach(function (oRowData) {
-          oNewBinding.create(oRowData, false, false);
-        });
+          this._handleItemCreatePromise(oNewBinding.create(oRowData, false, false));
+        }, this);
       }
       FundLogicService.clearAllocationCache();
     },
@@ -1608,9 +1645,6 @@ sap.ui.define([
     _resetItemsTableForCreate: function () {
       var oItemsMeta = this.getView().getModel("itemsMeta");
       oItemsMeta.setProperty("/childParents", {});
-      oItemsMeta.setProperty("/editableNdcItemNumber", "");
-      oItemsMeta.setProperty("/editableNdcValue", "");
-      oItemsMeta.setProperty("/canAddItem", true);
 
       var oTable = this._byIdInSection("items", "itemsTable");
       if (!oTable) {
@@ -1937,9 +1971,6 @@ sap.ui.define([
         oFlags.setProperty("/" + sId + "/editing", bOn);
       });
       if (bOn) {
-        this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
-        this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
-        this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
@@ -2005,7 +2036,7 @@ sap.ui.define([
     // Items.fragment.xml's MaterialGroup2 Select binds items/change against -
     // targetFieldKey is resolved here to the real property name
     // (ServiceSchema.itemProperties) so onFundTypeChange/onProdQtyChange/
-    // onItemsAddRow never hand-maintain a second copy of that mapping.
+    // _addItemRows never hand-maintain a second copy of that mapping.
     _createFundTypesModel: function () {
       var oBundle = this.getResourceBundle();
       return new JSONModel({
@@ -3376,6 +3407,7 @@ sap.ui.define([
         }
       } else if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
+        this._addInitialCreateItemRows();
         // 3.3: the Items panel's own contexts are the most convenient point
         // to (re)confirm the header Tax Amount sum once real item data is
         // actually loaded (change mode - createMode items have no server-
@@ -3936,22 +3968,24 @@ sap.ui.define([
       var sNewId;
 
       Promise.resolve().then(function () {
-        // Harvest create-mode Priority onto every still-transient item. This
-        // promise boundary also routes synchronous setup failures through the
-        // same cleanup path as rejected backend requests.
-        var sCreatePriority = that.getView().getModel("priorityState").getProperty("/value");
-        if (sCreatePriority && oItemsBinding) {
-          oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
-            if (oItemContext.isTransient && oItemContext.isTransient()) {
-              var pSetPriority = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
-              if (pSetPriority && pSetPriority.catch) {
-                pSetPriority.catch(function () {});
+        return that._deleteEmptyItemRows(oItemsBinding).then(function () {
+          // Harvest create-mode Priority onto every still-transient item. This
+          // promise boundary also routes synchronous setup failures through the
+          // same cleanup path as rejected backend requests.
+          var sCreatePriority = that.getView().getModel("priorityState").getProperty("/value");
+          if (sCreatePriority && oItemsBinding) {
+            oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
+              if (oItemContext.isTransient && oItemContext.isTransient()) {
+                var pSetPriority = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
+                if (pSetPriority && pSetPriority.catch) {
+                  pSetPriority.catch(function () {});
+                }
               }
-            }
+            });
+          }
+          return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession, {
+            shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId")
           });
-        }
-        return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession, {
-          shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId")
         });
       })
         // Step ① succeeded — the order now exists (oNewContext is the real,
@@ -4085,9 +4119,6 @@ sap.ui.define([
       this._destroyCreateContext();
       this._resetCreateSaveState();
       this._setCreateMode(false);
-      this.getView().getModel("itemsMeta").setProperty("/editableNdcItemNumber", "");
-      this.getView().getModel("itemsMeta").setProperty("/editableNdcValue", "");
-      this.getView().getModel("itemsMeta").setProperty("/canAddItem", true);
       var sHeaderSelect = ["SAP__Messages"].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
         return ServiceSchema.updatableHeaderProperties[sKey];
       })).join(",");
@@ -4132,11 +4163,13 @@ sap.ui.define([
       this._bItemsSessionBound = false;
       this._bPostingFirstItem = false;
       this._aPendingIncompleteRows = [];
+      this._bInitialCreateItemRowsPending = true;
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
       this._resetTransactionHistoryState("");
       this._resetItemsTableForCreate();
+      this._addInitialCreateItemRows();
       this._bindDetailHeader();
       // All createMode-visible sections are expanded/loaded simultaneously —
       // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1

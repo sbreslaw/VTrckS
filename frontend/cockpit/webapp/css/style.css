@@ -315,12 +315,13 @@
   background: var(--sapList_Hover_Background);
 }
 
-.detailObjectPage .detailSectionPanel .sapMListTblCell .sapMInputBase,
-.detailObjectPage .detailSectionPanel .sapMListTblCell .sapMSlt {
-  width: 100%;
+.detailObjectPage .detailSectionPanel .detailItemsTable .sapMListTblRow:hover,
+.detailObjectPage .detailSectionPanel .detailItemsTable .sapMListTblRow:hover > .sapMListTblCell {
+  background: var(--sapList_Background);
 }
 
-.detailItemsScroll {
+.detailObjectPage .detailSectionPanel .sapMListTblCell .sapMInputBase,
+.detailObjectPage .detailSectionPanel .sapMListTblCell .sapMSlt {
   width: 100%;
 }
 
@@ -335,12 +336,56 @@
   background: var(--sapList_Background);
 }
 
-.detailItemsScroll .sapMList {
+.detailItemsViewport.sapMVBox {
+  width: 100%;
+  height: auto;
+  overflow: auto;
+  border: 1px solid var(--sapList_BorderColor);
   border-radius: 0 0 0.5rem 0.5rem;
 }
 
-.detailItemsScroll .sapMScrollContScroll {
-  padding-bottom: 0.375rem;
+.detailItemsTable.sapMList {
+  width: max-content !important;
+  min-width: 100%;
+  flex: 0 0 auto;
+}
+
+.detailItemsTable .sapMListTbl {
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.detailItemsTable .sapMListTblCell,
+.detailItemsTable .sapMListTblHeaderCell {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.detailItemsTable .sapMListTblHeaderCell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--sapList_HeaderBackground);
+}
+
+.detailItemsTable .sapMListTblHeaderCell:nth-child(14) {
+  text-align: left !important;
+}
+
+.detailItemsTable .sapMListTblHeaderCell:nth-child(14) .sapMVBox {
+  align-items: flex-start;
+  text-align: left !important;
+}
+
+.detailItemsTable .sapMListTblHeaderCell:nth-child(14) .sapMText {
+  text-align: left !important;
+}
+
+.detailItemsAddMore.sapMBtn {
+  width: 100%;
+  margin-block-start: 0.25rem;
 }
 
 .itemsOptOutHeader {
