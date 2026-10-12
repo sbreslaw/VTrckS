@@ -6,6 +6,7 @@ sap.ui.define([
   "sap/m/MessageItem",
   "sap/m/Dialog",
   "sap/m/Button",
+  "sap/m/BusyIndicator",
   "sap/m/Text",
   "sap/m/List",
   "sap/m/CustomListItem",
@@ -17,11 +18,22 @@ sap.ui.define([
   "sap/m/Label",
   "sap/m/SelectDialog",
   "sap/m/StandardListItem",
+  "sap/m/SearchField",
+  "sap/m/RadioButton",
+  "sap/m/Token",
+  "sap/ui/table/Table",
+  "sap/ui/table/Column",
+  "sap/ui/table/rowmodes/Auto",
+  "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
+  "sap/ui/comp/filterbar/FilterBar",
+  "sap/ui/comp/filterbar/FilterGroupItem",
   "sap/ui/core/Item",
   "sap/ui/core/ListItem",
   "sap/ui/core/Fragment",
   "sap/ui/core/Messaging",
   "sap/ui/core/EventBus",
+  "sap/ui/core/Element",
+  "sap/ui/core/ResizeHandler",
   "sap/ui/model/json/JSONModel",
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator",
@@ -30,19 +42,25 @@ sap.ui.define([
   "cdc/vaccreq/sections/SectionConfig",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/model/OrderModeConfig",
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor",
   "cdc/vaccreq/model/PricingColumns",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
+  "cdc/vaccreq/service/ProviderInventoryService",
+  "cdc/vaccreq/service/ProviderSearchService",
   "cdc/vaccreq/service/FundLogicService",
-  "cdc/vaccreq/controller/FundSplitDialog"
+  "cdc/vaccreq/controller/FundSplitDialog",
+  "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
-  Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, Text,
-  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
-  EditRequestService, CreateOrderService, FundLogicService, FundSplitDialog
+  Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
+  List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
+  RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
+  EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
+  ValueHelpTableFitter
 ) {
   "use strict";
 
@@ -59,11 +77,8 @@ sap.ui.define([
     { id: "BJONES", name: "Bob Jones (placeholder)" }
   ];
 
-  // Items fundType (MaterialGroup2) Select source - was a hardcoded core:Item
-  // list in Items.fragment.xml, now a data-driven "fundTypes" model
-  // (_createFundTypesModel) so targetField (this fund type's own quantity
-  // mirror property) travels with each entry for onFundTypeChange/
-  // onProdQtyChange to look up, instead of a second hand-maintained map.
+  // MaterialGroup2-to-quantity-mirror mapping used by onFundTypeChange and
+  // onProdQtyChange. Dropdown values come from po>/FundTypeVH per item row.
   // ARR and N/A share the single "leftover" ZZRESQTY mirror (no stated
   // per-code split from the client). SPL has no quantity mirror of its own -
   // selecting it opens the Fund Split dialog (FundSplitDialog.js) instead,
@@ -105,6 +120,7 @@ sap.ui.define([
       // bindElement path the "detail" route uses (design/prompts/CRUD Task 1
       // Prompt v3.md).
       this._oRouter.getRoute("create").attachPatternMatched(this._onCreateMatched, this);
+      this._oRouter.getRoute("master").attachPatternMatched(this._onMasterMatched, this);
       // Single source of truth for the panel stack: SectionConfig.js. The anchor
       // strip (sectionsNav model, below) and the sectionFlags model are both
       // derived from this same array, so a new section added there appears in
@@ -113,18 +129,20 @@ sap.ui.define([
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this));
       this.getView().setModel(this._createSectionFlagsModel(), "sectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
+      this.getView().setModel(new JSONModel(OrderModeConfig.resolveOrderType(
+        this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType")
+      ).ui), "orderUi");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
-      // CRUD Task 1 v3: IoH has no backend context pre-save (CR-002, local rows
-      // only until step ③) — a plain local JSON model, reset each time createMode
-      // is entered (_setCreateMode).
-      this.getView().setModel(new JSONModel({ rows: [] }), "ioh");
+      this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
+      this.getView().setModel(new JSONModel({ salesOrder: "", rows: [], busy: false, error: false, loaded: false }), "transactionHistory");
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
       // each time createMode is entered (_setCreateMode), sent as the enrichment
       // payload at Save (still a no-op today, see CreateOrderService.js#enrich).
       this.getView().setModel(new JSONModel(this._createEnrichDefaults()), "createEnrich");
+      this.getView().setModel(new JSONModel({ providerName: "", addresses: [], createAddressKey: "", busy: false }), "shippingEdit");
       this.getView().setModel(this._createEnumsModel(), "enums");
       this.getView().setModel(this._createFundTypesModel(), "fundTypes");
       // v5 ("UX phasing + triad sourcing"): createMode opens with only the
@@ -169,6 +187,14 @@ sap.ui.define([
 
     onAfterRendering: function () {
       this._oSectionFactory.ensurePanels();
+      var oAnchorBar = this.byId("detailAnchorBar");
+      var aAnchors = oAnchorBar ? oAnchorBar.getItems() : [];
+      if (!aAnchors.some(function (oAnchor) { return oAnchor.hasStyleClass("detailAnchorLinkActive"); })) {
+        var oFirstVisibleAnchor = aAnchors.filter(function (oAnchor) { return oAnchor.getVisible(); })[0];
+        if (oFirstVisibleAnchor) {
+          oFirstVisibleAnchor.addStyleClass("detailAnchorLinkActive");
+        }
+      }
       // First-ever render can race _onObjectMatched/_onCreateMatched (the
       // "details-title" control doesn't exist until ensurePanels() runs) -
       // (re)apply the binding here too, it's idempotent.
@@ -178,14 +204,24 @@ sap.ui.define([
     onExpandPanel: function (oEvent) {
       var oPanel = oEvent.getSource();
       this._oSectionFactory.ensurePanelContent(oPanel);
+      this._refreshTransactionHistory();
     },
 
     onAnchorPress: function (oEvent) {
-      var sPanelId = oEvent.getSource().data("panelId");
+      var oAnchor = oEvent.getSource();
+      var oAnchorBar = oAnchor.getParent();
+      if (oAnchorBar && oAnchorBar.getItems) {
+        oAnchorBar.getItems().forEach(function (oLink) {
+          oLink.removeStyleClass("detailAnchorLinkActive");
+        });
+      }
+      oAnchor.addStyleClass("detailAnchorLinkActive");
+      var sPanelId = oAnchor.data("panelId");
       var oPanel = this.byId(sPanelId);
       if (oPanel) {
         oPanel.setExpanded(true);
         this._oSectionFactory.ensurePanelContent(oPanel);
+        this._refreshTransactionHistory();
         oPanel.getDomRef().scrollIntoView({ behavior: "smooth", block: "start" });
       }
     },
@@ -199,6 +235,108 @@ sap.ui.define([
       if (oContext) {
         oContext.refresh();
       }
+    },
+
+    onNewPress: function () {
+      var oBundle = this.getResourceBundle();
+      if (this._bStartNewAfterSave) {
+        return;
+      }
+      if (!this._hasUnsavedOrderChanges()) {
+        this._discardCurrentOrderAndStartNew();
+        return;
+      }
+
+      var sSave = oBundle.getText("newOrderSave");
+      var sDiscard = oBundle.getText("newOrderDiscard");
+      var sCancel = oBundle.getText("newOrderCancel");
+      var sDialogId = this.getView().createId("newOrderUnsavedDialog");
+      MessageBox.warning(oBundle.getText("newOrderUnsavedMessage"), {
+        id: sDialogId,
+        title: oBundle.getText("newOrderUnsavedTitle"),
+        contentWidth: "32rem",
+        styleClass: "newOrderUnsavedDialog",
+        actions: [sSave, sDiscard, sCancel],
+        emphasizedAction: sSave,
+        initialFocus: sCancel,
+        onClose: function (sAction) {
+          if (sAction === sSave) {
+            this._saveCurrentOrderAndStartNew();
+          } else if (sAction === sDiscard) {
+            this._discardCurrentOrderAndStartNew();
+          }
+        }.bind(this)
+      });
+      var oDialog = Element.getElementById(sDialogId);
+      var oCancelButton = oDialog && oDialog.getButtons().find(function (oButton) {
+        return oButton.getText() === sCancel;
+      });
+      if (oCancelButton) {
+        oCancelButton.setType("Transparent").addStyleClass("newOrderCancelButton");
+      }
+    },
+
+    _hasUnsavedOrderChanges: function () {
+      var oContext = this.getView().getBindingContext();
+      var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
+      if (bCreateMode) {
+        return !!(this.getView().getModel("createState").getProperty("/providerChosen") ||
+          (this._oCreateSession && this._oCreateSession.opened));
+      }
+      if (!oContext) {
+        return false;
+      }
+      var oPriorityModel = this.getView().getModel("priorityState");
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      return oContext.getModel().hasPendingChanges(ServiceSchema.editUpdateGroup) ||
+        oPriorityModel.getProperty("/dirty") ||
+        oEnrichModel.getProperty("/notes") !== oEnrichModel.getProperty("/notesOriginal");
+    },
+
+    _getEditingSectionId: function () {
+      var oFlags = this.getView().getModel("sectionFlags");
+      var oEditingSection = this._aSectionMeta.find(function (oMeta) {
+        return oMeta.editLive && oFlags.getProperty("/" + oMeta.id + "/editing");
+      });
+      return oEditingSection ? oEditingSection.id : "details";
+    },
+
+    _saveCurrentOrderAndStartNew: function () {
+      this._bStartNewAfterSave = true;
+      this.byId("newOrderBtn").setEnabled(false);
+      if (this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        this.onCreateSavePress();
+      } else {
+        this.onSectionSavePress(this._getEditingSectionId());
+      }
+    },
+
+    _discardCurrentOrderAndStartNew: function () {
+      var oContext = this.getView().getBindingContext();
+      var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
+      this._bStartNewAfterSave = false;
+      if (!bCreateMode) {
+        Promise.resolve(oContext && EditRequestService.cancel(oContext)).then(function () {
+          this._destroyNotesWriteBinding();
+          Messaging.removeAllMessages();
+          this._oRouter.navTo("create", {}, false);
+        }.bind(this));
+        return;
+      }
+
+      this.getView().setBusy(true);
+      CreateOrderService.cancel(oContext, this._oCreateSession).then(function () {
+        this._oCreateListBinding = null;
+        this._oCreateSession = null;
+        this._bItemsSessionBound = false;
+        FundLogicService.clearAllocationCache();
+        this.getView().setBusy(false);
+        this._onCreateMatched();
+      }.bind(this), function (oError) {
+        this.getView().setBusy(false);
+        MessageExtractor.extract(oError, oContext && oContext.getPath(), this.getResourceBundle());
+        this._openMessagePopover();
+      }.bind(this));
     },
 
     onPreviewOutput: function () {
@@ -233,13 +371,13 @@ sap.ui.define([
       var oSaved = oData.variants && oData.variants.layout;
       var oVisibility = {};
       ITEMS_COLUMN_KEYS.forEach(function (sKey) {
-        oVisibility[sKey] = oSaved && oSaved[sKey] === false ? false : true;
+        oVisibility[sKey] = sKey === "rejectionReason" || !(oSaved && oSaved[sKey] === false);
       });
       return oVisibility;
     },
 
     onItemsExport: function (oEvent) {
-      var oTable = oEvent.getSource().getParent().getParent();
+      var oTable = this._byIdInSection("items", "itemsTable");
       var oBinding = oTable.getBinding("items");
       var aContexts = oBinding ? oBinding.getContexts(0, oBinding.getLength()) : [];
       var oBundle = this.getResourceBundle();
@@ -260,7 +398,6 @@ sap.ui.define([
             type: "String"
           };
         });
-
       var aRows = aContexts.map(function (oCtx) {
         return {
           optOut: oCtx.getProperty(ServiceSchema.itemProperties.optOutAncillary),
@@ -293,7 +430,9 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getResourceBundle();
       var oWorkingModel = new JSONModel({
-        rows: ITEMS_COLUMN_KEYS.filter(function (sKey) { return sKey !== "rowAction"; }).map(function (sKey) {
+        rows: ITEMS_COLUMN_KEYS.filter(function (sKey) {
+          return sKey !== "rowAction" && sKey !== "rejectionReason";
+        }).map(function (sKey) {
           return {
             key: sKey,
             label: oBundle.getText(ITEMS_COLUMN_I18N[sKey]),
@@ -372,7 +511,10 @@ sap.ui.define([
             template: new MessageItem({
               type: "{message>type}",
               title: "{message>message}",
-              subtitle: "{message>additionalText}",
+              subtitle: {
+                parts: ["message>code", "message>additionalText", "message>technicalDetails"],
+                formatter: formatter.messageSubtitle
+              },
               description: "{message>description}"
             })
           }
@@ -402,14 +544,132 @@ sap.ui.define([
       });
       EditRequestService.beginEdit(oContext, sSectionId);
       oFlags.setProperty("/" + sSectionId + "/editing", true);
+      if (sSectionId === "items") {
+        var oItemsTable = this._byIdInSection("items", "itemsTable");
+        var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
+        if (oAddMoreButton && oAddMoreButton.getEnabled()) {
+          this._addItemsToMinimum(oItemsTable && oItemsTable.getBinding("items"));
+        }
+      }
+      if (sSectionId === "shipping") {
+        this._prepareShippingEdit(oContext);
+      }
     },
 
-    onSectionCancelPress: function (sSectionId) {
+    _prepareShippingEdit: function (oContext) {
+      var oShipTo = ServiceSchema.shipToPartyProperties;
+      var oEditModel = this.getView().getModel("shippingEdit");
+      Promise.all([
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.id),
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.fullName),
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.addressId),
+        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.address),
+        oContext.requestProperty("PartnerDeterminationProcedure")
+      ]).then(function (aValues) {
+        oEditModel.setProperty("/providerName", aValues[1]);
+        return this._loadShippingAddresses(aValues[0], aValues[4], {
+          id: aValues[2],
+          address: aValues[3]
+        });
+      }.bind(this));
+    },
+
+    _loadShippingAddresses: function (sProviderId, sProcedure, oCurrentAddress) {
+      var oSchema = ServiceSchema.shippingAddressValueHelp;
+      var oProps = oSchema.properties;
+      var oEditModel = this.getView().getModel("shippingEdit");
+      var iRequest = (this._iShippingAddressRequest || 0) + 1;
+      this._iShippingAddressRequest = iRequest;
+      var oBinding = this.getView().getModel("shippingAddressVH").bindList(
+        "/" + oSchema.entitySet,
+        undefined,
+        undefined,
+        [
+          new Filter(oProps.customer, FilterOperator.EQ, sProviderId),
+          new Filter(oProps.partnerFunction, FilterOperator.EQ, oSchema.shipToPartnerFunction),
+          new Filter(oProps.partnerDeterminationProcedure, FilterOperator.EQ, sProcedure)
+        ],
+        { $select: [oProps.addressId, oProps.address].join(",") }
+      );
+      oEditModel.setProperty("/busy", true);
+      return oBinding.requestContexts(0, 100).then(function (aContexts) {
+        if (this._iShippingAddressRequest !== iRequest) {
+          return null;
+        }
+        var aAddresses = aContexts.map(function (oAddressContext) {
+          return {
+            id: oAddressContext.getProperty(oProps.addressId),
+            address: oAddressContext.getProperty(oProps.address)
+          };
+        }).filter(function (oAddress) {
+          return !!oAddress.id && !!oAddress.address;
+        });
+        if (oCurrentAddress && oCurrentAddress.id && !aAddresses.some(function (oAddress) {
+          return oAddress.id === oCurrentAddress.id;
+        })) {
+          aAddresses.unshift(oCurrentAddress);
+        }
+        oEditModel.setProperty("/addresses", aAddresses);
+        return aAddresses;
+      }.bind(this)).finally(function () {
+        if (this._iShippingAddressRequest === iRequest) {
+          oEditModel.setProperty("/busy", false);
+        }
+        oBinding.destroy();
+      }.bind(this));
+    },
+
+    onShippingProviderValueHelpRequest: function () {
+      var that = this;
+      var oContext = this.getView().getBindingContext();
+      this._openShipToPartyValueHelpDialog(this.getResourceBundle().getText("providerPickerTitle"), function (oItem) {
+        oContext.setProperty(ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.id, oItem.id);
+        that.getView().getModel("shippingEdit").setProperty("/providerName", oItem.fullName);
+        oContext.requestProperty("PartnerDeterminationProcedure").then(function (sProcedure) {
+          return that._loadShippingAddresses(oItem.id, sProcedure);
+        }).then(function (aAddresses) {
+          if (aAddresses && aAddresses.length) {
+            oContext.setProperty(ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.addressId, aAddresses[0].id);
+          }
+        });
+      });
+    },
+
+    onSectionCancelPress: async function (sSectionId) {
       var oContext = this.getView().getBindingContext();
       if (oContext) {
-        EditRequestService.cancel(oContext);
+        await EditRequestService.cancel(oContext);
       }
+      if (sSectionId === "items") {
+        var oTable = this._byIdInSection("items", "itemsTable");
+        await this._deleteEmptyItemRows(oTable && oTable.getBinding("items"));
+      }
+      if (sSectionId === "details") {
+        var oEnrichModel = this.getView().getModel("createEnrich");
+        oEnrichModel.setProperty("/notes", oEnrichModel.getProperty("/notesOriginal") || "");
+        this._bNotesNeedsCreate = false;
+        this._destroyNotesWriteBinding();
+      }
+      Messaging.removeAllMessages();
       this._endEditSession(sSectionId);
+    },
+
+    onDetailStatusChange: function (oEvent) {
+      var oSelect = oEvent.getSource();
+      var oSelectedItem = oSelect.getSelectedItem();
+      var oContext = oSelect.getBindingContext();
+      if (!oContext || !oSelectedItem) {
+        return;
+      }
+      var oStatusContext = oSelectedItem.getBindingContext("enums");
+      var sStatus = oStatusContext && oStatusContext.getProperty("text");
+      if (!sStatus) {
+        return;
+      }
+      var pUpdate = oContext.setProperty(ServiceSchema.headerProperties.userStatus, sStatus);
+      if (pUpdate && pUpdate.catch) {
+        pUpdate.catch(function () {});
+      }
     },
 
     // Sections whose display Text reads a code's expanded to-one nav-property
@@ -427,19 +687,41 @@ sap.ui.define([
       if (!oContext) {
         return;
       }
+      var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
+      var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
+      if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding)) {
+        MessageToast.show(oBundle.getText("itemsIncompleteItemsError"));
+        return;
+      }
+      var pRemoveEmptyItems = sSectionId === "items"
+        ? this._deleteEmptyItemRows(oItemsBinding)
+        : Promise.resolve();
       // Session Prompt (Detail View Adjustments) 3.1: the "details" section's
       // own Save is also the only trigger for propagating a changed/mixed
       // header Priority selection down onto every item - staged into the same
       // "vrEdit" group EditRequestService.save is about to submitBatch, so it
       // rides along in the very same request as the header PATCH below.
       var oPriorityModel = this.getView().getModel("priorityState");
-      var oPropagatePromise = Promise.resolve();
-      if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
-        oPropagatePromise = this._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
-      }
-      oPropagatePromise.then(function () {
+      var oStagePromise = sSectionId === "details"
+        ? this._stageHeaderNotes(oContext)
+        : Promise.resolve();
+      pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
+        if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
+          return that._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
+        }
+      }).then(function () {
         return EditRequestService.save(oContext);
       }).then(function () {
+        if (sSectionId === "details" && that._bNotesNeedsCreate) {
+          return CreateOrderService.saveNotes(oContext, that.getView().getModel("createEnrich").getProperty("/notes"));
+        }
+      }).then(function () {
+        if (sSectionId === "details") {
+          var oEnrichModel = that.getView().getModel("createEnrich");
+          oEnrichModel.setProperty("/notesOriginal", oEnrichModel.getProperty("/notes") || "");
+          that._bNotesNeedsCreate = false;
+          that._destroyNotesWriteBinding();
+        }
         MessageToast.show(oBundle.getText("editSaveSuccess"));
         if (that._aSectionsNeedingFullReload.indexOf(sSectionId) !== -1) {
           that._reloadHeaderContext(oContext.getPath());
@@ -454,7 +736,14 @@ sap.ui.define([
         if (sSectionId === "items") {
           that._computeHeaderTaxAmount();
         }
+        if (that._bStartNewAfterSave) {
+          that._bStartNewAfterSave = false;
+          that.byId("newOrderBtn").setEnabled(true);
+          that._oRouter.navTo("create", {}, false);
+        }
       }, function (oError) {
+        that._bStartNewAfterSave = false;
+        that.byId("newOrderBtn").setEnabled(true);
         if (oError.isConflict) {
           that._showConflictDialog(oContext, sSectionId);
         } else {
@@ -477,7 +766,13 @@ sap.ui.define([
       this.getView().unbindElement();
       this.getView().bindElement({
         path: sPath,
-        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup }
+        parameters: {
+          $$updateGroupId: ServiceSchema.editUpdateGroup,
+          $select: ServiceSchema.headerProperties.salesOrderType
+        },
+        events: {
+          dataReceived: this._syncOrderUiFromContext.bind(this)
+        }
       });
     },
 
@@ -490,64 +785,139 @@ sap.ui.define([
       return oPanel && Fragment.byId(oPanel.getId(), sControlId);
     },
 
-    onItemsAddRow: function () {
+    onItemsAddMore: function () {
       var oTable = this._byIdInSection("items", "itemsTable");
       var oBinding = oTable && oTable.getBinding("items");
       if (!oBinding) {
         return;
       }
-      var oNewRowData = {
-        Product: "",
-        // RequestedQuantity is Nullable="false" AND Edm.Decimal (design/so.xml)
-        // - never leave it null even transiently, must be the STRING "0", not
-        // the number 0, or the POST's own error response comes back malformed
-        // (confirmed live, same as onProdQtyChange's own decimal-string
-        // requirement below).
-        RequestedQuantity: "0",
-        RequestedQuantityUnit: ServiceSchema.createPayloadUom,
-        // Nullable="false" (design/so.xml) - seeded here too, not just on
-        // change (onProdQtyChange/onFundTypeChange), so a row never carries
-        // an unset Int32.
-        ZZVFCQTY: 0,
-        ZZ317QTY: 0,
-        ZZSTATEQTY: 0,
-        ZZCHIPQTY: 0,
-        ZZPANQTY: 0,
-        ZZRESQTY: 0
-      };
-      // Ancillary Items & Opt-Out session prompt §3.1: once the Items table
-      // has already switched to the real sticky session's own `_Item` list
-      // (this._bItemsSessionBound, see _bindItemsTableToSession), a newly
-      // added row IS that real list - there's no more need for a client-side
-      // placeholder SalesOrderItem (the model resolves the server-assigned
-      // one once this row's own create() settles under $auto).
-      if (this._bItemsSessionBound) {
-        // This binding's own group is $auto (unlike the pre-session scratch
-        // list's deferred "vrCreate") - a plain create() would POST an empty
-        // row to the backend the instant "Add Item" is clicked, 400ing
-        // (confirmed live). bInactive keeps it purely local until the user
-        // actually edits a field (requires $$ownRequest: true, already set
-        // by _rebindItemsGroup).
-        // Priority is already locked by the time this branch runs (the first
-        // posted item locked it) - stamp today's frozen value now, since a
-        // later PATCH to DeliveryPriority 422s once this row posts.
-        var sLockedPriority = this.getView().getModel("priorityState").getProperty("/value");
-        if (sLockedPriority) {
-          oNewRowData[ServiceSchema.itemProperties.deliveryPriority] = sLockedPriority;
-        }
-        // Live-test fix (round 18): bAtEnd (3rd arg) true - new rows append
-        // at the bottom of the table, not the top.
-        oBinding.create(oNewRowData, false, true, true);
-      } else {
-        // Pre-session (still the local, deferred, never-submitted scratch
-        // list): keep the existing client-only SD-style placeholder number
-        // (10, 20, 30...) so the row doesn't display blank until Save.
-        oNewRowData.SalesOrderItem = this._computeNextItemNumber(oBinding);
-        // Live-test fix (round 18): bAtEnd (2nd positional arg after
-        // bSkipRefresh) true - append at the bottom, matching the
-        // session-bound branch above.
-        oBinding.create(oNewRowData, false, true);
+      this._addItemRows(oBinding, 10);
+    },
+
+    _addInitialCreateItemRows: function () {
+      if (!this._bInitialCreateItemRowsPending) {
+        return;
       }
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (oBinding) {
+        this._bInitialCreateItemRowsPending = false;
+        this._addItemRows(oBinding, 10, false);
+      }
+    },
+
+    _addItemsToMinimum: function (oBinding) {
+      if (!oBinding || !oBinding.requestContexts) {
+        return;
+      }
+      oBinding.requestContexts(0, 10).then(function (aContexts) {
+        var oFlags = this.getView().getModel("sectionFlags");
+        var oTable = this._byIdInSection("items", "itemsTable");
+        var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
+        if (!oTable || oTable.getBinding("items") !== oBinding || !oFlags.getProperty("/items/editing") || !oAddMoreButton || !oAddMoreButton.getEnabled()) {
+          return;
+        }
+        var iRowsToAdd = Math.max(0, 10 - aContexts.length);
+        if (iRowsToAdd) {
+          this._addItemRows(oBinding, iRowsToAdd);
+        }
+      }.bind(this)).catch(function () {});
+    },
+
+    onItemsTableUpdateFinished: function (oEvent) {
+      var oTable = oEvent.getSource();
+      var oViewport = this._byIdInSection("items", "itemsViewport");
+      var oTableDom = oTable.getDomRef();
+      if (!oViewport || !oTableDom) {
+        return;
+      }
+      var oHeader = oTableDom.querySelector(".sapMListTblHeader");
+      var iHeight = oHeader ? oHeader.getBoundingClientRect().height : 0;
+      var aItems = oTable.getItems();
+      aItems.slice(0, 10).forEach(function (oItem) {
+        var oItemDom = oItem.getDomRef();
+        if (oItemDom) {
+          iHeight += oItemDom.getBoundingClientRect().height;
+          var oPopinRow = oItemDom.nextElementSibling;
+          if (oPopinRow && oPopinRow.classList.contains("sapMListTblSubRow")) {
+            iHeight += oPopinRow.getBoundingClientRect().height;
+          }
+        }
+      });
+      var oViewportDom = oViewport.getDomRef();
+      var iScrollbarHeight = oViewportDom && oViewportDom.scrollWidth > oViewportDom.clientWidth ? 16 : 0;
+      if (aItems.length <= 10) {
+        iHeight = oTableDom.getBoundingClientRect().height;
+      }
+      oViewport.setHeight(Math.ceil(iHeight + iScrollbarHeight + 8) + "px");
+    },
+
+    _addItemRows: function (oBinding, iCount, bAtEnd) {
+      if (!oBinding) {
+        return;
+      }
+      var aRows = [];
+      var oProps = ServiceSchema.itemProperties;
+      var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
+      var bInactive = this._bItemsSessionBound || !bCreateMode;
+      var iNextItemNumber = parseInt(this._computeNextItemNumber(oBinding), 10);
+      for (var iIndex = 0; iIndex < iCount; iIndex += 1) {
+        var oNewRowData = {};
+        oNewRowData[oProps.material] = "";
+        oNewRowData[oProps.quantity] = "0";
+        oNewRowData[oProps.unit] = ServiceSchema.createPayloadUom;
+        oNewRowData[oProps.vfcQty] = 0;
+        oNewRowData[oProps.qty317] = 0;
+        oNewRowData[oProps.stateQty] = 0;
+        oNewRowData[oProps.chipQty] = 0;
+        oNewRowData[oProps.panQty] = 0;
+        oNewRowData[oProps.resQty] = 0;
+        if (this._bItemsSessionBound) {
+          var sLockedPriority = this.getView().getModel("priorityState").getProperty("/value");
+          if (sLockedPriority) {
+            oNewRowData[ServiceSchema.itemProperties.deliveryPriority] = sLockedPriority;
+          }
+        } else if (bCreateMode) {
+          oNewRowData[oProps.itemNumber] = ("000000" + iNextItemNumber).slice(-6);
+          iNextItemNumber += 10;
+        }
+        aRows.push(oNewRowData);
+      }
+      if (bAtEnd === false && !this._bItemsSessionBound) {
+        aRows.reverse().forEach(function (oRowData) {
+          this._handleItemCreatePromise(oBinding.create(oRowData, false, false));
+        }, this);
+        return;
+      }
+      aRows.forEach(function (oRowData) {
+        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, bInactive));
+      }, this);
+    },
+
+    _handleItemCreatePromise: function (oContext) {
+      oContext.created().catch(function (oError) {
+        if (oError.canceled) {
+          return;
+        }
+        var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), this.getResourceBundle());
+        aSectionIds.forEach(function (sId) {
+          this._oSectionFactory.expandSection(sId);
+        }, this);
+        this._openMessagePopover();
+      }.bind(this));
+    },
+
+    _deleteEmptyItemRows: function (oBinding) {
+      var oProps = ServiceSchema.itemProperties;
+      var aContexts = oBinding && oBinding.getCurrentContexts ? oBinding.getCurrentContexts() : [];
+      var aDeletes = aContexts.filter(function (oContext) {
+        return oContext.isTransient && oContext.isTransient()
+          && !oContext.getProperty(oProps.material)
+          && !oContext.getProperty(oProps.higherLevelItem);
+      }).map(function (oContext) {
+        return oContext.delete();
+      });
+      return Promise.all(aDeletes);
     },
 
     // Client-side-only SD-style numbering (10, 20, 30...) for a newly-added
@@ -572,10 +942,12 @@ sap.ui.define([
     // away for immediate feedback, ahead of the batch save that would
     // otherwise be the only place the backend defaults it from the material.
     onItemNdcValueHelpRequest: function (oEvent) {
+      var oInput = oEvent.getSource();
       var oBundle = this.getResourceBundle();
-      var oRowContext = oEvent.getSource().getBindingContext();
-      this._openProductValueHelpDialog(oBundle.getText("ndcCodePickerTitle"), function (oItem) {
+      var oRowContext = oInput.getBindingContext();
+      this._openProductValueHelpDialog(oBundle.getText("filterNdc"), function (oItem) {
         this._applyNdcPick(oRowContext, oItem);
+        this._setNdcValueState(oInput, true);
       }.bind(this));
     },
 
@@ -584,6 +956,10 @@ sap.ui.define([
     // §3.4) - same raw Product row object either way.
     _applyNdcPick: function (oRowContext, oItem) {
       var oProps = ServiceSchema.productProperties;
+      var sPreviousNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material);
+      if (sPreviousNdc && sPreviousNdc !== oItem[oProps.id]) {
+        this._clearFundTypeSelection(oRowContext);
+      }
       oRowContext.setProperty(ServiceSchema.itemProperties.material, oItem[oProps.id]);
       oRowContext.setProperty(ServiceSchema.itemProperties.itemText, oItem[oProps.text]);
       // Client requirement (2026-09-01): ZI_PRODUCTSTDVH_EXT - carry the NDC's
@@ -596,6 +972,7 @@ sap.ui.define([
       if (oItem[oProps.baseUnit]) {
         oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
       }
+      this._refreshFundTypeValueHelp(oRowContext);
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -655,45 +1032,47 @@ sap.ui.define([
       this._setNdcValueState(oInput, true);
     },
 
-    // Issue Batch 9-30-001 §3.4 (documented, accepted risk - see NOTES.md):
-    // the NDC Input's own "value" is a DIRECT two-way binding to the real
-    // Product property (Items.fragment.xml), unlike Provider's separate
-    // display-buffer model - free text typed here can reach the backend via
-    // its own PATCH before a suggestion/VH selection validates it.
-    // Live-test (2026-10-01): typing/pasting a full NDC and tabbing out
-    // (no suggestion/VH pick) left Text/Brand/UOM unpopulated. Root cause:
-    // the OLD "sValue === sCurrent means valid, do nothing" check was
-    // always true here regardless of HOW the value got in - the two-way
-    // binding already commits the typed value into Product before this
-    // handler even runs, so comparing against it can never catch a plain
-    // manual type. Now always looks the value up by exact Product id and,
-    // if found, applies it the same way a suggestion/VH pick would
-    // (_applyNdcPick) - harmless if this "change" followed a suggestion
-    // pick that already applied the same row (just a redundant re-fetch of
-    // the same values). Error state is the fallback for no match.
+    // Resolve typed Product IDs before writing them; an empty value must not
+    // clear an already-selected item.
     onItemNdcChange: function (oEvent) {
       var that = this;
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
-      var sValue = oEvent.getParameter("value");
-      if (!oRowContext || !sValue) {
-        this._setNdcValueState(oInput, true);
+      var sValue = (oEvent.getParameter("value") || "").trim();
+      if (!oRowContext) {
         return;
       }
       var oProps = ServiceSchema.productProperties;
+      var sPreviousNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material) || "";
+      if (!sValue) {
+        oInput.setValue(sPreviousNdc);
+        if (sPreviousNdc) {
+          oInput.setValueState("Error");
+          oInput.setValueStateText(this.getResourceBundle().getText("ndcCannotClear"));
+        } else {
+          this._setNdcValueState(oInput, true);
+        }
+        return;
+      }
       var oLookupBinding = oRowContext.getModel().bindList(
         "/" + ServiceSchema.entitySets.product, undefined, undefined,
         [new Filter(oProps.id, FilterOperator.EQ, sValue)],
         { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") }
       );
       oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
+        if (oInput.getValue().trim() !== sValue) {
+          return;
+        }
         if (aContexts.length) {
           that._applyNdcPick(oRowContext, aContexts[0].getObject());
+          oInput.setValue(aContexts[0].getProperty(oProps.id));
           that._setNdcValueState(oInput, true);
         } else {
+          oInput.setValue(sPreviousNdc);
           that._setNdcValueState(oInput, false);
         }
       }).catch(function () {
+        oInput.setValue(sPreviousNdc);
         that._setNdcValueState(oInput, false);
       });
     },
@@ -711,10 +1090,93 @@ sap.ui.define([
       return aList.filter(function (oEntry) { return oEntry.key === sFundTypeKey; })[0];
     },
 
+    _getRowFundTypeSelect: function (oRow) {
+      return oRow && oRow.getCells().filter(function (oCell) {
+        var oBinding = oCell.getBinding && oCell.getBinding("selectedKey");
+        return oBinding && oBinding.getPath() === ServiceSchema.itemProperties.fundType;
+      })[0];
+    },
+
+    _getFundTypeSelectForContext: function (oRowContext) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var sPath = oRowContext && oRowContext.getPath();
+      var oRow = oTable && oTable.getItems().filter(function (oItem) {
+        var oContext = oItem.getBindingContext();
+        return oContext && oContext.getPath() === sPath;
+      })[0];
+      return this._getRowFundTypeSelect(oRow);
+    },
+
+    _bindFundTypeValueHelp: function (oSelect, sNdc, sOrderIntention) {
+      var oRowContext = oSelect && oSelect.getBindingContext();
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.fundTypeValueHelpProperties;
+      if (!oRowContext) {
+        return null;
+      }
+      sNdc = sNdc === undefined
+        ? oRowContext.getProperty(ServiceSchema.itemProperties.material)
+        : sNdc;
+      sOrderIntention = sOrderIntention === undefined
+        ? oRowContext.getProperty(ServiceSchema.itemProperties.orderIntention)
+        : sOrderIntention;
+      var sFilterKey = [oRowContext.getPath(), sNdc || "", sOrderIntention || ""].join("|");
+      if (oSelect.data("fundTypeFilterKey") === sFilterKey) {
+        return oSelect.getBinding("items");
+      }
+      oSelect.data("fundTypeFilterKey", sFilterKey);
+      oSelect.unbindAggregation("items");
+      if (!sNdc || !sOrderIntention) {
+        return null;
+      }
+      oSelect.bindAggregation("items", {
+        path: "po>/" + oSchema.entitySets.fundTypeValueHelp,
+        parameters: {
+          $select: [oProps.fundType, oProps.fundTypeText].join(",")
+        },
+        filters: [
+          new Filter(oProps.ndc, FilterOperator.EQ, sNdc),
+          new Filter(oProps.orderIntention, FilterOperator.EQ, sOrderIntention)
+        ],
+        template: new CoreItem({
+          key: "{po>" + oProps.fundType + "}",
+          text: "{po>" + oProps.fundTypeText + "}"
+        })
+      });
+      return oSelect.getBinding("items");
+    },
+
+    onFundTypeModelContextChange: function (oEvent) {
+      this._bindFundTypeValueHelp(oEvent.getSource());
+    },
+
+    _refreshFundTypeValueHelp: function (oRowContext, sNdc, sOrderIntention) {
+      return this._bindFundTypeValueHelp(
+        this._getFundTypeSelectForContext(oRowContext),
+        sNdc,
+        sOrderIntention
+      );
+    },
+
+    _clearFundTypeSelection: function (oRowContext) {
+      if (!oRowContext || !oRowContext.getProperty(ServiceSchema.itemProperties.fundType)) {
+        return [];
+      }
+      var aPending = [oRowContext.setProperty(ServiceSchema.itemProperties.fundType, "")];
+      this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
+        if (oEntry.targetField) {
+          aPending.push(oRowContext.setProperty(oEntry.targetField, 0));
+        }
+      });
+      FundLogicService.cacheAllocation(oRowContext);
+      return aPending;
+    },
+
     onProdQtyChange: function( oEvent) {
       var that = this;
       var oRowContext = oEvent.getSource().getBindingContext();
       var sQty = oEvent.getParameter('value');
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       // ZZVFCQTY/ZZ317QTY/etc. are Edm.Int32 (design/so.xml) - RequestedQuantity
       // is Edm.Decimal, so this Input's own "value" here is that type's
       // formatted decimal string (e.g. "67.000"); sending that verbatim
@@ -730,13 +1192,16 @@ sap.ui.define([
       // must send the raw decimal STRING (sQty), never the rounded iValue
       // integer, or the deep-create POST fails the same malformed-XML way
       // the Int32 comment above warns about.
-      var aPending = [oRowContext.setProperty(ServiceSchema.itemProperties.quantity, sQty)];
+      var aPending = [];
       // A2/A4: which quantity mirror gets the value now follows the row's own
       // fundType selection (see onFundTypeChange) instead of always ZZSTATEQTY.
       var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
       if (oFundType && oFundType.targetField) {
         aPending.push(oRowContext.setProperty(oFundType.targetField, iValue));
       }
+      // Quantity is the field that can complete and activate an inactive row,
+      // so write it only after its allocation mirror is already staged.
+      aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.quantity, sQty));
       // Issue Batch 9-30-001 §2: snapshot the six ZZ*QTY fields right after
       // writing one of them - see FundLogicService.js's own cache comment.
       FundLogicService.cacheAllocation(oRowContext);
@@ -746,11 +1211,11 @@ sap.ui.define([
       // and any already-inserted ancillary child rows' quantities as a side
       // effect of this PATCH - only a real, already-posted row (not still a
       // local scratch row) can have such children yet.
-      if (oRowContext.isTransient && !oRowContext.isTransient()) {
-        Promise.all(aPending).then(function () {
-          return that._refreshItemsBinding();
-        });
-      }
+      Promise.all(aPending).then(function () {
+        return bPersisted ? that._refreshItemsBinding() : undefined;
+      }).catch(function (oError) {
+        that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      });
     },
 
     // Items fundType (MaterialGroup2) change - mirrors the row's current
@@ -761,13 +1226,18 @@ sap.ui.define([
       var oSelectedItem = oEvent.getParameter("selectedItem");
       var sKey = oSelectedItem ? oSelectedItem.getKey() : oEvent.getSource().getSelectedKey();
       var oRowContext = oEvent.getSource().getBindingContext();
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       var iQty = Math.round(parseFloat(oRowContext.getProperty(ServiceSchema.itemProperties.quantity)));
       var iValue = isNaN(iQty) ? 0 : iQty;
+      var aPending = [];
       this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
         if (oEntry.targetField) {
-          oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0);
+          aPending.push(oRowContext.setProperty(oEntry.targetField, oEntry.key === sKey ? iValue : 0));
         }
       });
+      // Fund type can complete and activate an inactive row. Its mirror fields
+      // must be staged before this final business-property write.
+      aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.fundType, sKey));
       // Issue Batch 9-30-001 §2: same snapshot as onProdQtyChange above.
       FundLogicService.cacheAllocation(oRowContext);
       // Fund Split dialog session prompt, Trigger 1: selecting SPLIT opens the
@@ -778,9 +1248,50 @@ sap.ui.define([
       // event shouldn't be reachable otherwise - guarded anyway so the dialog
       // can never auto-open from a display-mode row.
       if (FundLogicService.isSplitFund(sKey) && this.getView().getModel("sectionFlags").getProperty("/items/editing")) {
-        this._getFundSplitDialog().open(oRowContext, "edit");
+        this._getFundSplitDialog().open(oRowContext, "edit").then(function () {
+          this._checkItemRowComplete(oRowContext);
+        }.bind(this));
+      } else {
+        this._checkItemRowComplete(oRowContext);
       }
-      this._checkItemRowComplete(oRowContext);
+      Promise.all(aPending).catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
+    },
+
+    _handleItemFieldUpdateError: function (oError, oRowContext, bPersisted) {
+      // A transient row's created() rejection is already surfaced by
+      // _onItemCreateActivate. Only independently PATCHed persisted rows need
+      // extraction here; both paths still consume the property promises.
+      if (!bPersisted) {
+        return;
+      }
+      var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), this.getResourceBundle());
+      if (this.getView().getModel("sectionFlags").getProperty("/createMode")
+          && this._bItemsSessionBound && this._hasHttpStatus(oError, 404)) {
+        this._revertItemsToScratch();
+        if (this._oCreateSession) {
+          this._oCreateSession.opened = false;
+          this._oCreateSession.plainContext = null;
+          this._oCreateSession.pending = null;
+        }
+      }
+      aSectionIds.forEach(function (sId) {
+        this._oSectionFactory.expandSection(sId);
+      }, this);
+      this._openMessagePopover();
+    },
+
+    _hasHttpStatus: function (oError, iStatus) {
+      var oCurrent = oError;
+      while (oCurrent) {
+        if (Number(oCurrent.status || oCurrent.statusCode || oCurrent.httpStatus) === iStatus
+            || String(oCurrent.message || "").indexOf(String(iStatus)) !== -1) {
+          return true;
+        }
+        oCurrent = oCurrent.cause;
+      }
+      return false;
     },
 
     // Fund Split dialog session prompt, Trigger 2 (item Action menu): mode is
@@ -812,27 +1323,34 @@ sap.ui.define([
     onOrderIntentionChange: function (oEvent) {
       var sIntention = oEvent.getParameter("selectedItem").getKey();
       var oRowContext = oEvent.getSource().getBindingContext();
-      var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
-      if (oFundType && !formatter.fundTypeItemEnabled(sIntention, oFundType.pediatricOnly, oFundType.disabled)) {
-        oRowContext.setProperty(ServiceSchema.itemProperties.fundType, "");
-        this.getView().getModel("fundTypes").getProperty("/list").forEach(function (oEntry) {
-          if (oEntry.targetField) {
-            oRowContext.setProperty(oEntry.targetField, 0);
-          }
-        });
-      }
-      this._checkItemRowComplete(oRowContext);
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+      var sFundType = oRowContext.getProperty(ServiceSchema.itemProperties.fundType);
+      var oBinding = this._refreshFundTypeValueHelp(oRowContext, undefined, sIntention);
+      var pAllowed = sFundType && oBinding
+        ? oBinding.requestContexts(0, 100).then(function (aContexts) {
+          return aContexts.some(function (oContext) {
+            return oContext.getProperty(ServiceSchema.providerOrderService.fundTypeValueHelpProperties.fundType) === sFundType;
+          });
+        }).catch(function () { return true; })
+        : Promise.resolve(!sFundType);
+      pAllowed.then(function (bAllowed) {
+        var aPending = bAllowed ? [] : this._clearFundTypeSelection(oRowContext);
+        // Intention can complete and activate an inactive row, so dependent
+        // fund cleanup must be staged before this final write.
+        aPending.push(oRowContext.setProperty(ServiceSchema.itemProperties.orderIntention, sIntention));
+        this._checkItemRowComplete(oRowContext);
+        return Promise.all(aPending);
+      }.bind(this)).catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
     },
 
     // A row only "completes" (and gets posted for real) once NDC + quantity +
     // fund type + order intention are ALL set - reverted back to this after
     // live-testing an NDC-only rule raced the row's own follow-up field
     // edits against the backend (repo memory, round 23 live-test rounds
-    // 2/3). A row still incomplete when "Add Item" is clicked is NOT force-
-    // posted (round 24 live-test: the backend accepts a zero-quantity create
-    // but never durably persists it, 404ing on any later edit) - it just
-    // stays inactive/transient in the table, which never gets removed by
-    // adding another row, so nothing is lost by leaving it incomplete.
+    // 2/3). Incomplete rows remain inactive because the backend accepts a
+    // zero-quantity create without durably persisting it, causing later 404s.
     _isScratchRowComplete: function (oRowContext) {
       var oProps = ServiceSchema.itemProperties;
       var fQty = parseFloat(oRowContext.getProperty(oProps.quantity));
@@ -842,7 +1360,7 @@ sap.ui.define([
         && !!oRowContext.getProperty(oProps.orderIntention);
     },
 
-    // bInactive create() (onItemsAddRow, post-session-bound branch) only
+    // bInactive create() (_addItemRows, post-session-bound branch) only
     // defers the row's FIRST edit - without this handler it would activate
     // (and auto-POST via $auto) after just one field, still missing the
     // other 3 mandatory ones. Keep re-deferring (preventDefault) on every
@@ -906,6 +1424,9 @@ sap.ui.define([
     // against the backend, so an ordinary setProperty() above already PATCHed
     // it under the session's own $auto group; nothing extra to do here.
     _checkItemRowComplete: function (oRowContext) {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
       if (!oRowContext || !oRowContext.isTransient || !oRowContext.isTransient()) {
         return;
       }
@@ -1062,7 +1583,7 @@ sap.ui.define([
     // Re-creates any scratch rows stashed by _migrateRemainingScratchRows
     // (still incomplete when another row's completion triggered the switch
     // to the real session list) as new inactive rows on that same list -
-    // same bInactive create() onItemsAddRow already uses for item 2+, so the
+    // same bInactive create() _addItemRows uses for later rows, so the
     // user's partial entry (NDC/quantity/etc.) survives and can still be
     // completed normally.
     _recreatePendingIncompleteRows: function (oBinding) {
@@ -1072,11 +1593,10 @@ sap.ui.define([
         return;
       }
       aPending.forEach(function (oRowData) {
-        // Edm.Decimal - must stay/become a STRING, see onItemsAddRow's own
-        // RequestedQuantity comment.
+        // Edm.Decimal values must remain strings.
         oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
-        oBinding.create(oRowData, false, true, true);
-      });
+        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, true));
+      }, this);
     },
 
     // Issue Batch 9-30-001 §5 follow-up (live evidence, 2026-09-30): once
@@ -1114,7 +1634,7 @@ sap.ui.define([
       var oNewBinding = oTable.getBinding("items");
       if (oNewBinding) {
         // A just-`bindItems()`-created binding hasn't resolved its own
-        // length yet (unlike onItemsAddRow's bAtEnd:true, which only ever
+        // length yet (unlike _addItemRows's bAtEnd:true, which only ever
         // runs long after the Table's own rendering cycle has already
         // resolved it) - create(..., bAtEnd:true) here throws synchronously
         // ("Must know the final length to create at the end"). Insert at
@@ -1126,10 +1646,23 @@ sap.ui.define([
           oRowData.SalesOrderItem = ("000000" + ((iIndex + 1) * 10)).slice(-6);
         });
         aRowData.slice().reverse().forEach(function (oRowData) {
-          oNewBinding.create(oRowData, false, false);
-        });
+          this._handleItemCreatePromise(oNewBinding.create(oRowData, false, false));
+        }, this);
       }
       FundLogicService.clearAllocationCache();
+    },
+
+    _resetItemsTableForCreate: function () {
+      var oItemsMeta = this.getView().getModel("itemsMeta");
+      oItemsMeta.setProperty("/childParents", {});
+
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return;
+      }
+      oTable.setBindingContext(this.getView().getBindingContext());
+      this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
+      this._rebindItemsGroup(this._sItemsUpdateGroup);
     },
 
     // Re-derives the {"<parentItemNumber>": true} childParents map (itemsMeta
@@ -1341,6 +1874,7 @@ sap.ui.define([
           // refresh, then delete the row itself - whatever ancillary rows
           // still remain are the backend's own to reconcile when the parent
           // line goes, not ours to delete client-side.
+          var bReleasesNdcAddGate = that._ownsNdcAddGate(oRowContext);
           var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
           var bHasChildren = that._getAncillaryChildContexts(sItemNumber).length > 0;
           var pChain = bHasChildren
@@ -1363,6 +1897,9 @@ sap.ui.define([
             : oRowContext.delete();
           pChain
             .then(function () {
+              if (bReleasesNdcAddGate) {
+                that._releaseNdcAddGate();
+              }
               MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
             })
             .catch(function (oError) {
@@ -1435,6 +1972,7 @@ sap.ui.define([
     _setCreateMode: function (bOn) {
       var oFlags = this.getView().getModel("sectionFlags");
       oFlags.setProperty("/createMode", bOn);
+      this._resetProviderInventoryState();
       // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): all createMode
       // sections are editable immediately — there is no separate
       // "bootstrapped" state anymore (the scratch context from _onCreateMatched
@@ -1443,8 +1981,8 @@ sap.ui.define([
         oFlags.setProperty("/" + sId + "/editing", bOn);
       });
       if (bOn) {
-        this.getView().getModel("ioh").setProperty("/rows", []);
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
+        this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
         this.getView().getModel("createState").setProperty("/priorityLocked", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
@@ -1492,14 +2030,19 @@ sap.ui.define([
     // real service value helps, see Details.fragment.xml) can bind items/text
     // directly without a runtime i18n lookup in the XML.
     _createEnumsModel: function () {
-      var oBundle = this.getResourceBundle();
-      function resolve(aList) {
-        return aList.map(function (oEntry) {
-          return { key: oEntry.key, text: oBundle.getText(oEntry.i18nKey) };
-        });
-      }
+      var oOrderContextModel = this.getOwnerComponent().getModel("orderContext");
+      var aCreateStatusOptions = oOrderContextModel.getProperty("/createStatusOptions") || [];
+      var aEditStatusOptions = oOrderContextModel.getProperty("/editStatusOptions") || [];
       return new JSONModel({
-        STATUS: resolve(Enums.STATUS)
+        STATUS: this._resolveEnumOptions(aCreateStatusOptions.length ? aCreateStatusOptions : Enums.STATUS),
+        EDIT_STATUS: this._resolveEnumOptions(aEditStatusOptions.length ? aEditStatusOptions : Enums.EDIT_STATUS)
+      });
+    },
+
+    _resolveEnumOptions: function (aOptions) {
+      var oBundle = this.getResourceBundle();
+      return aOptions.map(function (oEntry) {
+        return { key: oEntry.key, text: oBundle.getText(oEntry.i18nKey) };
       });
     },
 
@@ -1507,7 +2050,7 @@ sap.ui.define([
     // Items.fragment.xml's MaterialGroup2 Select binds items/change against -
     // targetFieldKey is resolved here to the real property name
     // (ServiceSchema.itemProperties) so onFundTypeChange/onProdQtyChange/
-    // onItemsAddRow never hand-maintain a second copy of that mapping.
+    // _addItemRows never hand-maintain a second copy of that mapping.
     _createFundTypesModel: function () {
       var oBundle = this.getResourceBundle();
       return new JSONModel({
@@ -1531,16 +2074,16 @@ sap.ui.define([
       return {
         providerName: "",
         providerAddress: "",
+        providerAddressId: "",
         contactId: "",
         contactName: "",
         employeeResponsibleId: this._getCurrentUserId(),
         employeeResponsibleName: this._getCurrentUserFullName(),
-        status: "",
+        status: this.getOwnerComponent().getModel("orderContext").getProperty("/createStatusDefault") || "",
         shipToPartyId: "",
         shipToPartyName: "",
-        // Issue Batch 9-30-001 \u00a73.1: local-only createMode Notes buffer -
-        // no backend write path yet, see Details.fragment.xml's own comment.
-        notes: ""
+        notes: "",
+        notesOriginal: ""
       };
     },
 
@@ -1670,6 +2213,215 @@ sap.ui.define([
       oDialog.open();
     },
 
+    _openProviderValueHelpDialog: function (fnApply) {
+      var oBundle = this.getResourceBundle();
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oArea = ServiceSchema.salesArea;
+      var sSearchMode = ProviderSearchService.defaultMode;
+      var iRowPageSize = 50;
+      var iRowLimit = iRowPageSize;
+      var iLoadRequest = 0;
+      var bHasMoreRows = true;
+      var bRowsLoading = false;
+      var aFields = ProviderSearchService.modes[0].fields;
+      var oBasicSearch = new SearchField({
+        width: "100%",
+        placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+      });
+      var aFieldControls = aFields.map(function (oField) {
+        return { definition: oField, control: new Input() };
+      });
+      var oValueHelpModel = new JSONModel({ rows: [] });
+      var fnGetFieldValues = function () {
+        var mFieldValues = {};
+        aFieldControls.forEach(function (oFieldControl) {
+          mFieldValues[oFieldControl.definition.path] = oFieldControl.control.getValue();
+        });
+        return mFieldValues;
+      };
+      var oTable = new GridTable({
+        selectionMode: "Single",
+        selectionBehavior: "RowOnly",
+        rowMode: new AutoRowMode({ minRowCount: 7, maxRowCount: 7 }),
+        threshold: 100,
+        enableColumnReordering: false,
+        rowSelectionChange: function (oEvent) {
+          var oContext = oEvent.getParameter("rowContext");
+          if (oContext) {
+            var oRow = oContext.getObject();
+            fnApply({
+              id: oRow[oProps.customer],
+              fullName: oRow[oProps.customerName],
+              address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+                .filter(function (sPart) { return !!sPart; })
+                .join(", "),
+              salesOrganization: oRow[oProps.salesOrganization],
+              distributionChannel: oRow[oProps.distributionChannel],
+              division: oRow[oProps.division]
+            });
+            oDialog.close();
+          }
+        }
+      }).addStyleClass("detailSingleSelectValueHelpTable");
+      oTable.setBusyIndicatorDelay(0);
+      oTable.setModel(oValueHelpModel);
+      var fnSetResultColumns = function (aColumns) {
+        oTable.getColumns().forEach(function (oColumn) {
+          oTable.removeColumn(oColumn);
+          oColumn.destroy();
+        });
+        aColumns.forEach(function (oColumn) {
+          oTable.addColumn(new GridColumn({
+            label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+            template: new Text({ text: "{" + oColumn.path + "}" }),
+            width: oColumn.width
+          }));
+        });
+      };
+      fnSetResultColumns(ProviderSearchService.modes[0].columns);
+      var oDialog = new ValueHelpDialog({
+        title: oBundle.getText("providerId"),
+        key: oProps.customer,
+        descriptionKey: oProps.customerName,
+        contentWidth: "78rem",
+        contentHeight: "47rem",
+        draggable: true,
+        resizable: true,
+        supportMultiselect: false,
+        supportRanges: false,
+        supportRangesOnly: false,
+        cancel: function () {
+          oDialog.close();
+        },
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      }).addStyleClass("providerValueHelpDialog");
+      var fnBindRows = function (bPreserveSelection) {
+        if (!bPreserveSelection) {
+          oTable.clearSelection();
+        }
+        var iCurrentRequest = ++iLoadRequest;
+        bRowsLoading = true;
+        oTable.setNoData(new BusyIndicator({ size: "1.5rem" }).addStyleClass("providerTableLoadingIndicator"));
+        oTable.setBusy(true);
+        ProviderSearchService.loadRows(
+          this.getView().getModel(),
+          this.getOwnerComponent().getModel("po"),
+          sSearchMode,
+          fnGetFieldValues(),
+          oBasicSearch.getValue(),
+          [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)],
+          iRowLimit
+        ).then(function (aRows) {
+          if (iCurrentRequest !== iLoadRequest) {
+            return;
+          }
+          bHasMoreRows = typeof aRows.hasMore === "boolean" ? aRows.hasMore : aRows.length >= iRowLimit;
+          oValueHelpModel.setProperty("/rows", aRows);
+          if (!oTable.getBinding("rows")) {
+            oTable.bindRows("/rows");
+          }
+          oDialog.update();
+        }).catch(function () {
+          if (iCurrentRequest !== iLoadRequest) {
+            return;
+          }
+          bHasMoreRows = false;
+          oValueHelpModel.setProperty("/rows", []);
+          MessageToast.show(oBundle.getText("providerSearchLoadError"));
+        }).finally(function () {
+          if (iCurrentRequest === iLoadRequest) {
+            bRowsLoading = false;
+            oTable.setBusy(false);
+            oTable.setNoData(null);
+          }
+        });
+      }.bind(this);
+      var fnResetAndBindRows = function () {
+        iRowLimit = iRowPageSize;
+        bHasMoreRows = true;
+        fnBindRows(false);
+      };
+      var oFilterBar = new FilterBar({
+        advancedMode: true,
+        filterBarExpanded: true,
+        showGoOnFB: true,
+        search: fnResetAndBindRows
+      }).addStyleClass("providerSearchValueHelpFilterBar");
+      oFilterBar.setBasicSearch(oBasicSearch);
+      oBasicSearch.attachSearch(fnResetAndBindRows);
+      var fnAddFieldControls = function () {
+        aFieldControls.forEach(function (oFieldControl, iIndex) {
+          if (iIndex === 2) {
+            oFilterBar.addFilterGroupItem(new FilterGroupItem({
+              groupName: "providerValueHelp",
+              name: "searchModeSpacer",
+              label: "",
+              visibleInFilterBar: true,
+              control: new Input().addStyleClass("providerSearchModeSpacer")
+            }));
+          }
+          oFilterBar.addFilterGroupItem(new FilterGroupItem({
+            groupName: "providerValueHelp",
+            name: oFieldControl.definition.path,
+            label: oBundle.getText(oFieldControl.definition.labelKey),
+            visibleInFilterBar: true,
+            control: oFieldControl.control
+          }));
+        });
+      };
+      var oSearchModeSelect = new Select({
+        selectedKey: sSearchMode,
+        items: ProviderSearchService.modes.map(function (oMode) {
+          return new CoreItem({ key: oMode.key, text: oBundle.getText(oMode.labelKey) });
+        }),
+        change: function (oEvent) {
+          sSearchMode = oEvent.getParameter("selectedItem").getKey();
+          var oMode = ProviderSearchService.modes.find(function (oSearchMode) {
+            return oSearchMode.key === sSearchMode;
+          });
+          oFilterBar.getFilterGroupItems().slice(1).forEach(function (oItem) {
+            oFilterBar.removeFilterGroupItem(oItem);
+            oItem.destroy();
+          });
+          fnSetResultColumns(oMode.columns);
+          aFields = oMode.fields;
+          aFieldControls = aFields.map(function (oField) {
+            return { definition: oField, control: new Input() };
+          });
+          fnAddFieldControls();
+          fnResetAndBindRows();
+        }
+      }).addStyleClass("providerSearchModeSelect");
+      oFilterBar.addFilterGroupItem(new FilterGroupItem({
+        groupName: "providerValueHelp",
+        name: "searchMode",
+        label: oBundle.getText("providerSearchFor"),
+        visibleInFilterBar: true,
+        control: oSearchModeSelect
+      }));
+      fnAddFieldControls();
+      oDialog.setFilterBar(oFilterBar);
+      oDialog.setTable(oTable);
+      oTable.setSelectionMode("Single");
+      oTable.setSelectionBehavior("RowOnly");
+      oTable.attachFirstVisibleRowChanged(function (oEvent) {
+        var iLoadedRows = oValueHelpModel.getProperty("/rows").length;
+        var iVisibleRows = oTable.getVisibleRowCount() || 8;
+        if (!bRowsLoading && bHasMoreRows && iLoadedRows &&
+            oEvent.getParameter("firstVisibleRow") + iVisibleRows >= iLoadedRows - 5) {
+          iRowLimit += iRowPageSize;
+          fnBindRows(true);
+        }
+      });
+      ValueHelpTableFitter.attach(oDialog, oTable, ResizeHandler);
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+      ValueHelpTableFitter.fit(oDialog, oTable);
+      fnResetAndBindRows();
+    },
+
     // Session Prompt (Detail View Adjustments) 3.5: Contact VH REWIRED off the
     // old `/StandardPartnerContactInfo` source (superseded - it 501'd on any
     // standalone query anyway) onto the new custom service's
@@ -1686,13 +2438,14 @@ sap.ui.define([
     // BusinessPartnerPerson, displays BusinessPartnerPerson_Text.
     _openProviderContactValueHelpDialog: function (sTitle, sProviderId, fnApply) {
       var that = this;
+      var oBundle = this.getResourceBundle();
       var oProps = ServiceSchema.providerOrderService.providerContactProperties;
       var oModel = this.getView().getModel("po");
       var oToday = new Date();
       var oListBinding = oModel.bindList("/" + ServiceSchema.providerOrderService.entitySets.providerContact, undefined, undefined,
         new Filter(oProps.businessPartnerCompany, FilterOperator.EQ, sProviderId), {
           $select: [oProps.businessPartnerPerson, oProps.businessPartnerPersonText,
-            oProps.validityStartDate, oProps.validityEndDate].join(",")
+            oProps.relationshipCategory, oProps.validityStartDate, oProps.validityEndDate].join(",")
         });
 
       oListBinding.requestContexts(0, 500).then(function (aContexts) {
@@ -1702,35 +2455,167 @@ sap.ui.define([
           return (!oStart || oStart <= oToday) && (!oEnd || oEnd >= oToday);
         });
         var oPickerModel = new JSONModel({ rows: aValidRows });
-        var oDialog = new SelectDialog({
-          title: sTitle,
-          growing: true,
-          items: {
-            path: "picker>/rows",
-            template: new StandardListItem({
-              title: "{picker>" + oProps.businessPartnerPersonText + "}",
-              description: "{picker>" + oProps.businessPartnerPerson + "}"
-            })
-          },
-          search: function (oEvent) {
-            var sValue = oEvent.getParameter("value");
-            var oBinding = oEvent.getSource().getBinding("items");
-            oBinding.filter(sValue ? new Filter(oProps.businessPartnerPersonText, FilterOperator.Contains, sValue) : []);
-          },
-          confirm: function (oEvent) {
-            var oSelectedItem = oEvent.getParameter("selectedItem");
-            if (oSelectedItem) {
-              fnApply(oSelectedItem.getBindingContext("picker").getObject());
+        var aFields = [
+          { path: oProps.businessPartnerPerson, labelKey: "contactHelpId" },
+          { path: oProps.businessPartnerPersonText, labelKey: "contactHelpName" },
+          { path: oProps.relationshipCategory, labelKey: "contactHelpRelationshipCategory" }
+        ];
+        var oBasicSearch = new SearchField({
+          width: "100%",
+          placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+        });
+        var aFieldControls = aFields.map(function (oField) {
+          return { definition: oField, control: new Input() };
+        });
+        var oSelectionModel = new JSONModel({ key: "" });
+        var oSelectedContact = null;
+        var fnSelectContact = function (oContact) {
+          oSelectedContact = oContact;
+          oSelectionModel.setProperty("/key", oSelectedContact[oProps.businessPartnerPerson]);
+          oDialog.setTokens([]);
+          oDialog.setTokens([new Token({
+            key: oSelectedContact[oProps.businessPartnerPerson],
+            text: oSelectedContact[oProps.businessPartnerPersonText] +
+              " (" + oSelectedContact[oProps.businessPartnerPerson] + ")"
+          })]);
+        };
+        var fnGetFilters = function () {
+          var aFilters = [];
+          var sSearchValue = oBasicSearch.getValue();
+          if (sSearchValue) {
+            aFilters.push(new Filter({
+              filters: aFields.map(function (oField) {
+                return new Filter(oField.path, FilterOperator.Contains, sSearchValue);
+              }),
+              and: false
+            }));
+          }
+          aFieldControls.forEach(function (oFieldControl) {
+            var sValue = oFieldControl.control.getValue();
+            if (sValue) {
+              aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
             }
-            oDialog.destroy();
+          });
+          return aFilters;
+        };
+        var oTable = new GridTable({
+          selectionMode: "Single",
+          selectionBehavior: "RowOnly",
+          rowMode: new AutoRowMode({ minRowCount: 8 }),
+          enableColumnReordering: false,
+          rowSelectionChange: function (oEvent) {
+            var oContext = oEvent.getParameter("rowContext");
+            if (oContext) {
+              fnSelectContact(oContext.getObject());
+            }
+          }
+        }).addStyleClass("detailSingleSelectValueHelpTable");
+        oTable.setModel(oPickerModel, "picker");
+        oTable.setModel(oSelectionModel, "contactSelection");
+        oTable.addColumn(new GridColumn({
+          label: new Text(),
+          width: "3rem",
+          hAlign: "Center",
+          template: new RadioButton({
+            groupName: "contactSelection",
+            selected: {
+              parts: [
+                { path: "contactSelection>/key", targetType: "any" },
+                { path: "picker>" + oProps.businessPartnerPerson, targetType: "any" }
+              ],
+              formatter: function (sSelectedKey, sContactId) {
+                return sSelectedKey === sContactId;
+              }
+            },
+            select: function (oEvent) {
+              if (!oEvent.getParameter("selected")) {
+                return;
+              }
+              var oContext = oEvent.getSource().getBindingContext("picker");
+              if (oContext) {
+                fnSelectContact(oContext.getObject());
+                oTable.setSelectedIndex(oContext.getIndex());
+              }
+            }
+          })
+        }));
+        [
+          { path: oProps.businessPartnerPerson, labelKey: "contactHelpId", width: "11rem" },
+          { path: oProps.businessPartnerPersonText, labelKey: "contactHelpName", width: "22rem" },
+          { path: oProps.relationshipCategory, labelKey: "contactHelpRelationshipCategory", width: "12rem" },
+          { path: oProps.validityStartDate, labelKey: "contactHelpValidFrom", width: "10rem" },
+          { path: oProps.validityEndDate, labelKey: "contactHelpValidTo", width: "10rem" }
+        ].forEach(function (oColumn) {
+          oTable.addColumn(new GridColumn({
+            label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+            template: new Text({ text: "{picker>" + oColumn.path + "}" }),
+            width: oColumn.width
+          }));
+        });
+        var oDialog = new ValueHelpDialog({
+          title: sTitle,
+          key: oProps.businessPartnerPerson,
+          descriptionKey: oProps.businessPartnerPersonText,
+          contentWidth: "66rem",
+          contentHeight: "47rem",
+          draggable: true,
+          resizable: true,
+          supportMultiselect: true,
+          supportRanges: false,
+          supportRangesOnly: false,
+          ok: function () {
+            if (!oSelectedContact) {
+              return;
+            }
+            fnApply(oSelectedContact);
+            oDialog.close();
           },
           cancel: function () {
+            oDialog.close();
+          },
+          tokenRemove: function () {
+            oSelectedContact = null;
+            oSelectionModel.setProperty("/key", "");
+            oTable.clearSelection();
+            oDialog.setTokens([]);
+          },
+          afterClose: function () {
             oDialog.destroy();
           }
         });
-        oDialog.setModel(oPickerModel, "picker");
+        var fnBindRows = function () {
+          oSelectedContact = null;
+          oSelectionModel.setProperty("/key", "");
+          oTable.clearSelection();
+          oDialog.setTokens([]);
+          oTable.bindRows({ path: "picker>/rows", filters: fnGetFilters() });
+        };
+        var oFilterBar = new FilterBar({
+          advancedMode: true,
+          filterBarExpanded: true,
+          showGoOnFB: true,
+          search: fnBindRows
+        });
+        oFilterBar.setBasicSearch(oBasicSearch);
+        oBasicSearch.attachSearch(fnBindRows);
+        aFieldControls.forEach(function (oFieldControl) {
+          oFilterBar.addFilterGroupItem(new FilterGroupItem({
+            groupName: "contactValueHelp",
+            name: oFieldControl.definition.path,
+            label: oBundle.getText(oFieldControl.definition.labelKey),
+            visibleInFilterBar: true,
+            control: oFieldControl.control
+          }));
+        });
+        oDialog.setFilterBar(oFilterBar);
+        oDialog.setTable(oTable);
+        oTable.setSelectionMode("Single");
+        oTable.setSelectionBehavior("RowOnly");
         that.getView().addDependent(oDialog);
         oDialog.open();
+        fnBindRows();
+      }).finally(function () {
+        oListBinding.destroy();
       });
     },
 
@@ -1741,60 +2626,173 @@ sap.ui.define([
     // picked row's RequestedQuantityUnit (onItemNdcValueHelpRequest) so Items
     // UOM can go back to being read-only.
     _openProductValueHelpDialog: function (sTitle, fnApply) {
+      var oBundle = this.getResourceBundle();
       var oProps = ServiceSchema.productProperties;
-      var oDialog = new SelectDialog({
+      var aFields = [
+        { path: oProps.id, labelKey: "productHelpProductId" },
+        { path: oProps.text, labelKey: "productHelpProduct" },
+        { path: oProps.industryStandardName, labelKey: "productHelpBrand" }
+      ];
+      var oBasicSearch = new SearchField({
+        width: "100%",
+        placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+      });
+      var aFieldControls = aFields.map(function (oField) {
+        return { definition: oField, control: new Input() };
+      });
+      var fnGetFilters = function () {
+        var aFilters = [];
+        var sSearchValue = oBasicSearch.getValue();
+        if (sSearchValue) {
+          aFilters.push(new Filter({
+            filters: aFields.map(function (oField) {
+              return new Filter(oField.path, FilterOperator.Contains, sSearchValue);
+            }),
+            and: false
+          }));
+        }
+        aFieldControls.forEach(function (oFieldControl) {
+          var sValue = oFieldControl.control.getValue();
+          if (sValue) {
+            aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
+          }
+        });
+        return aFilters;
+      };
+      var oTable = new GridTable({
+        selectionMode: "Single",
+        selectionBehavior: "RowOnly",
+        rowMode: new AutoRowMode({ minRowCount: 8 }),
+        threshold: 100,
+        enableColumnReordering: false,
+        rowSelectionChange: function (oEvent) {
+          var oContext = oEvent.getParameter("rowContext");
+          if (oContext) {
+            fnApply(oContext.getObject());
+            oDialog.close();
+          }
+        }
+      }).addStyleClass("detailSingleSelectValueHelpTable");
+      [
+        { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
+        { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
+        { path: oProps.group, labelKey: "productHelpBaseCategory", width: "10rem" },
+        { path: oProps.industryStandardName, labelKey: "productHelpBrand", width: "10rem" }
+      ].forEach(function (oColumn) {
+        oTable.addColumn(new GridColumn({
+          label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+          template: oColumn.path ? new Text({ text: "{" + oColumn.path + "}" }) : new Text(),
+          width: oColumn.width
+        }));
+      });
+      var oDialog = new ValueHelpDialog({
         title: sTitle,
-        growing: true,
-        items: {
+        key: oProps.id,
+        descriptionKey: oProps.text,
+        contentWidth: "66rem",
+        contentHeight: "47rem",
+        draggable: true,
+        resizable: true,
+        supportMultiselect: false,
+        supportRanges: false,
+        supportRangesOnly: false,
+        cancel: function () {
+          oDialog.close();
+        },
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      });
+      var fnBindRows = function () {
+        oTable.clearSelection();
+        oTable.bindRows({
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
             $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
           },
-          template: new StandardListItem({
-            title: "{" + oProps.id + "}",
-            description: "{" + oProps.text + "}"
-          })
-        },
-        search: function (oEvent) {
-          var sValue = oEvent.getParameter("value");
-          var oBinding = oEvent.getSource().getBinding("items");
-          oBinding.filter(sValue ? new Filter({
-            filters: [
-              new Filter(oProps.id, FilterOperator.Contains, sValue),
-              new Filter(oProps.text, FilterOperator.Contains, sValue)
-            ],
-            and: false
-          }) : []);
-        },
-        confirm: function (oEvent) {
-          var oSelectedItem = oEvent.getParameter("selectedItem");
-          if (oSelectedItem) {
-            fnApply(oSelectedItem.getBindingContext().getObject());
+          filters: fnGetFilters(),
+          events: {
+            dataRequested: function () { oDialog.setBusy(true); },
+            dataReceived: function () {
+              oDialog.setBusy(false);
+              oDialog.update();
+            }
           }
-          oDialog.destroy();
-        },
-        cancel: function () {
-          oDialog.destroy();
-        }
+        });
+      };
+      var oFilterBar = new FilterBar({
+        advancedMode: true,
+        filterBarExpanded: true,
+        showGoOnFB: true,
+        search: fnBindRows
       });
+      oFilterBar.setBasicSearch(oBasicSearch);
+      oBasicSearch.attachSearch(fnBindRows);
+      aFieldControls.forEach(function (oFieldControl) {
+        oFilterBar.addFilterGroupItem(new FilterGroupItem({
+          groupName: "productValueHelp",
+          name: oFieldControl.definition.path,
+          label: oBundle.getText(oFieldControl.definition.labelKey),
+          visibleInFilterBar: true,
+          control: oFieldControl.control
+        }));
+      });
+      oDialog.setFilterBar(oFilterBar);
+      oDialog.setTable(oTable);
+      oTable.setSelectionMode("Single");
+      oTable.setSelectionBehavior("RowOnly");
       this.getView().addDependent(oDialog);
       oDialog.open();
+      fnBindRows();
     },
 
-    // Best-effort Contact prefill after a Provider is picked: was meant to take
-    // the most recent `/StandardPartnerContactInfo` row for that SoldToParty as
-    // a stand-in "main contact", but the backend query provider
-    // (CL_SD_S4H_STD_PARTNER_CONTACT) rejects ANY standalone query on this
-    // entity set with 501 Not Implemented (confirmed live, filtered or not) -
-    // Session Prompt (Detail View Adjustments) 3.5: Contact is now backed by a
-    // DIFFERENT, real, filterable entity set (po>/ProviderContact) - but no
-    // auto-prefill rule was specified (only "clear on provider change"), and a
-    // best-effort auto-pick here would be guessing at ranking criteria never
-    // given - still always left blank for manual selection via the new VH
-    // (onContactValueHelpRequest below).
+    // Prefill the selected Provider's current default contact. The backend's
+    // ABAP "X" flag is exposed by OData as an Edm.Boolean, so the service filter
+    // must compare IsStandardRelationship with true.
     _prefillMainContact: function (sProviderId) {
-      this.getView().getModel("createEnrich").setProperty("/contactName", "");
-      this.getView().getModel("createEnrich").setProperty("/contactId", "");
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      var oProps = ServiceSchema.providerOrderService.providerContactProperties;
+      var iRequest = (this._iContactPrefillRequest || 0) + 1;
+      var oToday = new Date();
+      this._iContactPrefillRequest = iRequest;
+      oEnrichModel.setProperty("/contactName", "");
+      oEnrichModel.setProperty("/contactId", "");
+
+      var oListBinding = this.getView().getModel("po").bindList(
+        "/" + ServiceSchema.providerOrderService.entitySets.providerContact,
+        undefined,
+        undefined,
+        [
+          new Filter(oProps.businessPartnerCompany, FilterOperator.EQ, sProviderId),
+          new Filter(oProps.isStandardRelationship, FilterOperator.EQ, true)
+        ],
+        {
+          $select: [oProps.businessPartnerCompany, oProps.businessPartnerPerson,
+            oProps.businessPartnerPersonText, oProps.validityStartDate,
+            oProps.validityEndDate].join(",")
+        }
+      );
+
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        if (this._iContactPrefillRequest !== iRequest) {
+          return;
+        }
+        var oContact = aContexts.map(function (oContext) {
+          return oContext.getObject();
+        }).find(function (oRow) {
+          var oStart = oRow[oProps.validityStartDate] ? new Date(oRow[oProps.validityStartDate]) : null;
+          var oEnd = oRow[oProps.validityEndDate] ? new Date(oRow[oProps.validityEndDate]) : null;
+          return (!oStart || oStart <= oToday) && (!oEnd || oEnd >= oToday);
+        });
+        if (oContact) {
+          oEnrichModel.setProperty("/contactId", oContact[oProps.businessPartnerPerson]);
+          oEnrichModel.setProperty("/contactName", oContact[oProps.businessPartnerPersonText]);
+        }
+      }.bind(this)).catch(function () {
+        // Keep Contact blank when no default can be loaded; manual value help remains available.
+      }).finally(function () {
+        oListBinding.destroy();
+      });
     },
 
     // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the Provider-first
@@ -1808,12 +2806,11 @@ sap.ui.define([
     // createMode field/row-action per the phased-entry UX.
     onProviderValueHelpRequest: function () {
       var that = this;
-      var oBundle = this.getResourceBundle();
-      // _openShipToPartyValueHelpDialog's fnApply gets a normalized
+      // _openProviderValueHelpDialog's fnApply gets a normalized
       // {id, fullName, address, salesOrganization, distributionChannel,
       // division} shape (composed from CustomerSalesArea's fields), not a raw
       // ServiceSchema property-name lookup.
-      this._openShipToPartyValueHelpDialog(oBundle.getText("providerPickerTitle"), function (oItem) {
+      this._openProviderValueHelpDialog(function (oItem) {
         that._applyProviderPick(oItem);
       });
     },
@@ -1828,12 +2825,368 @@ sap.ui.define([
       oContext.setProperty(ServiceSchema.headerProperties.salesOrganization, oItem.salesOrganization);
       oContext.setProperty(ServiceSchema.headerProperties.distributionChannel, oItem.distributionChannel);
       oContext.setProperty(ServiceSchema.headerProperties.division, oItem.division);
+      this._defaultProviderSalesOffice(oContext, oItem);
       var oEnrichModel = this.getView().getModel("createEnrich");
       oEnrichModel.setProperty("/providerName", oItem.fullName);
       oEnrichModel.setProperty("/providerAddress", oItem.address);
+      oEnrichModel.setProperty("/providerAddressId", "");
+      var oShippingEditModel = this.getView().getModel("shippingEdit");
+      var sDefaultAddressKey = "__providerDefault:" + oItem.id;
+      oShippingEditModel.setProperty("/createAddressKey", "");
+      this._loadShippingAddresses(
+        oItem.id,
+        ServiceSchema.shippingAddressValueHelp.createPartnerDeterminationProcedure,
+        { id: sDefaultAddressKey, address: oItem.address }
+      ).then(function (aAddresses) {
+        if (aAddresses) {
+          oShippingEditModel.setProperty("/createAddressKey", sDefaultAddressKey);
+        }
+      });
       this.getView().getModel("createState").setProperty("/providerChosen", true);
       this._prefillMainContact(oItem.id);
+      this._resetProviderInventoryState();
       this._setProviderValueState(true);
+    },
+
+    _defaultProviderSalesOffice: function (oContext, oProvider) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.customerSalesAreaProperties;
+      var iRequest = (this._iSalesOfficeDefaultRequest || 0) + 1;
+      this._iSalesOfficeDefaultRequest = iRequest;
+      oContext.setProperty(ServiceSchema.headerProperties.salesOffice, "");
+      var oProviderModel = this.getView().getModel("po");
+      if (!oProviderModel) {
+        return;
+      }
+      oProviderModel.getMetaModel().requestObject(
+        "/" + oSchema.entitySets.customerSalesArea + "/" + oProps.salesOffice
+      ).then(function (oSalesOfficeProperty) {
+        if (!oSalesOfficeProperty || this._iSalesOfficeDefaultRequest !== iRequest) {
+          return;
+        }
+        var oBinding = oProviderModel.bindList(
+          "/" + oSchema.entitySets.customerSalesArea,
+          undefined,
+          undefined,
+          [
+            new Filter(oProps.customer, FilterOperator.EQ, oProvider.id),
+            new Filter(oProps.salesOrganization, FilterOperator.EQ, oProvider.salesOrganization),
+            new Filter(oProps.distributionChannel, FilterOperator.EQ, oProvider.distributionChannel),
+            new Filter(oProps.division, FilterOperator.EQ, oProvider.division),
+            new Filter(oProps.isActiveEntity, FilterOperator.EQ, true)
+          ],
+          {
+            $select: oProps.salesOffice,
+            $$groupId: "$direct"
+          }
+        );
+        oBinding.requestContexts(0, 1).then(function (aContexts) {
+          if (this._iSalesOfficeDefaultRequest === iRequest) {
+            oContext.setProperty(
+              ServiceSchema.headerProperties.salesOffice,
+              aContexts.length ? aContexts[0].getProperty(oProps.salesOffice) : ""
+            );
+          }
+        }.bind(this)).catch(function () {
+          // A missing provider sales-area default leaves Sales Office blank and selectable.
+        }).finally(function () {
+          oBinding.destroy();
+        });
+      }.bind(this)).catch(function () {
+        // A stale or misconfigured provider-order model must not query the main service schema.
+      });
+    },
+
+    onCreateShippingAddressChange: function (oEvent) {
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var oAddressContext = oSelectedItem && oSelectedItem.getBindingContext("shippingEdit");
+      if (!oAddressContext) {
+        return;
+      }
+      var sAddressId = oAddressContext.getProperty("id");
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      oEnrichModel.setProperty("/providerAddress", oAddressContext.getProperty("address"));
+      oEnrichModel.setProperty("/providerAddressId", sAddressId.indexOf("__providerDefault:") === 0 ? "" : sAddressId);
+    },
+
+    onInventoryEditListPress: function () {
+      var oContext = this.getView().getBindingContext();
+      var sProviderId = oContext && oContext.getProperty(ServiceSchema.headerProperties.providerId);
+      if (!sProviderId) {
+        MessageToast.show(this.getResourceBundle().getText("inventoryProviderRequired"));
+        return;
+      }
+      this._oSectionFactory.expandSection("inventory");
+      this._loadProviderInventory(sProviderId);
+    },
+
+    _resetProviderInventoryState: function () {
+      this._iProviderIohRequest = (this._iProviderIohRequest || 0) + 1;
+      if (this._oProviderIohListBinding) {
+        this._oProviderIohListBinding.destroy();
+        this._oProviderIohListBinding = null;
+      }
+      this.getView().getModel("ioh").setData({
+        rows: [], busy: false, error: false, editable: false, loaded: false
+      });
+    },
+
+    onTransactionHistorySearch: function (oEvent) {
+      var oTable = this._byIdInSection("transactionHistory", "transactionHistoryTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (!oBinding) {
+        return;
+      }
+      var sQuery = oEvent.getSource().getValue();
+      var aFilters = sQuery ? [new Filter({
+        filters: [
+          new Filter({ path: "delivery", operator: FilterOperator.Contains, value1: sQuery, caseSensitive: false }),
+          new Filter({ path: "transactionType", operator: FilterOperator.Contains, value1: sQuery, caseSensitive: false })
+        ],
+        and: false
+      })] : [];
+      oBinding.filter(aFilters, "Application");
+    },
+
+    // Transaction History (Detail page): deliveries (ProvOrdDelvs) for the saved
+    // sales order. Loads only once the section is expanded; a new order resets it.
+    _refreshTransactionHistory: function () {
+      var oHistoryModel = this.getView().getModel("transactionHistory");
+      var oPanel = this.byId("transactionHistory");
+      var sSalesOrder = oHistoryModel.getProperty("/salesOrder");
+      if (!sSalesOrder || !oPanel || !oPanel.getExpanded()) {
+        return;
+      }
+      if (oHistoryModel.getProperty("/loaded") || oHistoryModel.getProperty("/busy")) {
+        return;
+      }
+      this._loadTransactionHistory(sSalesOrder);
+    },
+
+    _resetTransactionHistoryState: function (sSalesOrder) {
+      this._iTransactionHistoryRequest = (this._iTransactionHistoryRequest || 0) + 1;
+      if (this._oTransactionHistoryListBinding) {
+        this._oTransactionHistoryListBinding.destroy();
+        this._oTransactionHistoryListBinding = null;
+      }
+      this.getView().getModel("transactionHistory").setData({
+        salesOrder: sSalesOrder || "", rows: [], busy: false, error: false, loaded: false
+      });
+    },
+
+    _loadTransactionHistory: function (sSalesOrder) {
+      var oHistoryModel = this.getView().getModel("transactionHistory");
+      var oProps = ServiceSchema.providerOrderService.providerDeliveryProperties;
+      var iRequest = (this._iTransactionHistoryRequest || 0) + 1;
+      this._iTransactionHistoryRequest = iRequest;
+      if (this._oTransactionHistoryListBinding) {
+        this._oTransactionHistoryListBinding.destroy();
+        this._oTransactionHistoryListBinding = null;
+      }
+      oHistoryModel.setData({ salesOrder: sSalesOrder, rows: [], busy: true, error: false, loaded: false });
+
+      var oListBinding = this.getView().getModel("po").bindList(
+        "/" + ServiceSchema.providerOrderService.entitySets.providerDeliveries,
+        undefined,
+        undefined,
+        [new Filter(oProps.salesOrder, FilterOperator.EQ, sSalesOrder)],
+        {
+          $select: [oProps.delivery, oProps.subsequentDocumentCategoryText, oProps.deliveryCreationDate].join(",")
+        }
+      );
+      this._oTransactionHistoryListBinding = oListBinding;
+
+      oListBinding.requestContexts(0, 500).then(function (aContexts) {
+        if (this._iTransactionHistoryRequest !== iRequest) {
+          return;
+        }
+        var aRows = aContexts.map(function (oContext) {
+          var oRow = oContext.getObject();
+          return {
+            delivery: oRow[oProps.delivery],
+            transactionType: oRow[oProps.subsequentDocumentCategoryText],
+            createdOn: oRow[oProps.deliveryCreationDate]
+          };
+        });
+        oHistoryModel.setData({ salesOrder: sSalesOrder, rows: aRows, busy: false, error: false, loaded: true });
+      }.bind(this)).catch(function () {
+        if (this._iTransactionHistoryRequest !== iRequest) {
+          return;
+        }
+        oListBinding.destroy();
+        this._oTransactionHistoryListBinding = null;
+        oHistoryModel.setData({ salesOrder: sSalesOrder, rows: [], busy: false, error: true, loaded: false });
+      }.bind(this));
+    },
+
+    _loadProviderInventory: function (sProviderId) {
+      var oIohModel = this.getView().getModel("ioh");
+      var oProps = ServiceSchema.providerOrderService.providerIohProperties;
+      var iRequest = (this._iProviderIohRequest || 0) + 1;
+      this._iProviderIohRequest = iRequest;
+      if (this._oProviderIohListBinding) {
+        this._oProviderIohListBinding.destroy();
+      }
+      oIohModel.setData({ rows: [], busy: true, error: false, editable: false, loaded: false });
+
+      var oListBinding = this.getView().getModel("po").bindList(
+        "/" + ServiceSchema.providerOrderService.entitySets.providerIoh,
+        undefined,
+        undefined,
+        [new Filter(oProps.soldToParty, FilterOperator.EQ, sProviderId)],
+        {
+          $select: [oProps.soldToParty, oProps.material, oProps.batch,
+            oProps.quantity, oProps.unit, oProps.expirationDate, oProps.brand].join(",")
+        }
+      );
+      this._oProviderIohListBinding = oListBinding;
+
+      oListBinding.requestContexts(0, 500).then(function (aContexts) {
+        if (this._iProviderIohRequest !== iRequest) {
+          return;
+        }
+        var aRows = aContexts.map(function (oContext) {
+            var oRow = oContext.getObject();
+            return {
+              brand: oRow[oProps.brand],
+              ndc: oRow[oProps.material],
+              lot: oRow[oProps.batch],
+              quantity: oRow[oProps.quantity],
+              unit: oRow[oProps.unit],
+              expirationDate: oRow[oProps.expirationDate],
+              isNew: false
+            };
+          });
+        oIohModel.setData({
+          rows: aRows,
+          busy: false,
+          error: false,
+          editable: !!this.getView().getModel("sectionFlags").getProperty("/createMode"),
+          loaded: true
+        });
+      }.bind(this)).catch(function () {
+        if (this._iProviderIohRequest === iRequest) {
+          oListBinding.destroy();
+          this._oProviderIohListBinding = null;
+          oIohModel.setData({ rows: [], busy: false, error: true, editable: false, loaded: false });
+        }
+      }.bind(this));
+    },
+
+    onInventoryInsertRow: function () {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
+      var oIohModel = this.getView().getModel("ioh");
+      var aRows = oIohModel.getProperty("/rows").slice();
+      var oFilter = this._byIdInSection("inventory", "iohFilter");
+      if (oFilter) {
+        oFilter.setValue("");
+      }
+      var oTable = this._byIdInSection("inventory", "iohTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (oBinding) {
+        oBinding.filter([]);
+      }
+      aRows.push({ brand: "", ndc: "", lot: "", quantity: 0, unit: "", expirationDate: "", isNew: true });
+      oIohModel.setProperty("/rows", aRows);
+    },
+
+    onInventoryDeleteRow: function (oEvent) {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
+      var oRowContext = oEvent.getSource().getBindingContext("ioh");
+      if (!oRowContext) {
+        return;
+      }
+      var oIohModel = this.getView().getModel("ioh");
+      var iIndex = Number(oRowContext.getPath().split("/").pop());
+      var aRows = oIohModel.getProperty("/rows").slice();
+      aRows.splice(iIndex, 1);
+      oIohModel.setProperty("/rows", aRows);
+    },
+
+    onInventoryNdcValueHelpRequest: function (oEvent) {
+      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return;
+      }
+      var oRowContext = oEvent.getSource().getBindingContext("ioh");
+      var oProps = ServiceSchema.productProperties;
+      if (!oRowContext) {
+        return;
+      }
+      var iCurrentIndex = Number(oRowContext.getPath().split("/").pop());
+      var aExistingNdcs = this.getView().getModel("ioh").getProperty("/rows").filter(function (oRow, iIndex) {
+        return iIndex !== iCurrentIndex && !!oRow.ndc;
+      }).map(function (oRow) {
+        return oRow.ndc;
+      }).filter(function (sNdc, iIndex, aNdcs) {
+        return aNdcs.indexOf(sNdc) === iIndex;
+      });
+      var aExclusionFilters = aExistingNdcs.map(function (sNdc) {
+        return new Filter(oProps.id, FilterOperator.NE, sNdc);
+      });
+      var oDialog = new SelectDialog({
+        title: this.getResourceBundle().getText("inventoryNdcPickerTitle"),
+        growing: true,
+        items: {
+          path: "/" + ServiceSchema.entitySets.product,
+          parameters: {
+            $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
+          },
+          filters: aExclusionFilters,
+          template: new StandardListItem({
+            title: "{" + oProps.id + "}",
+            description: "{" + oProps.text + "}"
+          }),
+          templateShareable: false
+        },
+        search: function (oSearchEvent) {
+          var sValue = oSearchEvent.getParameter("value");
+          var aFilters = aExclusionFilters.slice();
+          if (sValue) {
+            aFilters.push(new Filter({
+              filters: [
+                new Filter(oProps.id, FilterOperator.Contains, sValue),
+                new Filter(oProps.text, FilterOperator.Contains, sValue)
+              ],
+              and: false
+            }));
+          }
+          oSearchEvent.getSource().getBinding("items").filter(aFilters);
+        },
+        confirm: function (oConfirmEvent) {
+          var oSelectedItem = oConfirmEvent.getParameter("selectedItem");
+          if (oSelectedItem) {
+            var oProduct = oSelectedItem.getBindingContext().getObject();
+            oRowContext.setProperty("ndc", oProduct[oProps.id]);
+            oRowContext.setProperty("brand", oProduct[oProps.industryStandardName] || "");
+            oRowContext.setProperty("unit", oProduct[oProps.baseUnit] || "");
+          }
+          oDialog.destroy();
+        },
+        cancel: function () {
+          oDialog.destroy();
+        }
+      });
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    onInventoryFilter: function (oEvent) {
+      var sValue = oEvent.getParameter("newValue");
+      var oTable = this._byIdInSection("inventory", "iohTable");
+      var oBinding = oTable && oTable.getBinding("items");
+      if (!oBinding) {
+        return;
+      }
+      oBinding.filter(sValue ? new Filter({
+        filters: ["brand", "ndc", "lot", "quantity", "expirationDate"].map(function (sPath) {
+          return new Filter(sPath, FilterOperator.Contains, sValue);
+        }),
+        and: false
+      }) : []);
     },
 
     // Issue Batch 9-30-001 §3.3: Provider typeahead - filters the Input's own
@@ -1992,7 +3345,8 @@ sap.ui.define([
       if (!sProviderId) {
         return;
       }
-      this._openProviderContactValueHelpDialog(oBundle.getText("contactPickerTitle"), sProviderId, function (oItem) {
+      this._openProviderContactValueHelpDialog(oBundle.getText("filterContact"), sProviderId, function (oItem) {
+        this._iContactPrefillRequest = (this._iContactPrefillRequest || 0) + 1;
         var oModel = this.getView().getModel("createEnrich");
         oModel.setProperty("/contactId", oItem[oProps.businessPartnerPerson]);
         oModel.setProperty("/contactName", oItem[oProps.businessPartnerPersonText]);
@@ -2060,16 +3414,130 @@ sap.ui.define([
     // columns exist, but the relative `items` binding simply yields zero rows
     // until a real context exists, giving the designed empty state for free.
     _onSectionContentLoaded: function (sSectionId) {
-      if (sSectionId === "items") {
+      if (sSectionId === "details") {
+        this._attachContactValueHelpActivation();
+        if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+          this._loadHeaderNotes(this.getView().getBindingContext());
+        }
+      } else if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
+        this._addInitialCreateItemRows();
         // 3.3: the Items panel's own contexts are the most convenient point
         // to (re)confirm the header Tax Amount sum once real item data is
         // actually loaded (change mode - createMode items have no server-
         // computed TaxAmount yet, see _computeHeaderTaxAmount doc comment).
         this._computeHeaderTaxAmount();
+      } else if (sSectionId === "transactionHistory") {
+        this._refreshTransactionHistory();
       } else if (sSectionId === "priceTotals") {
         var oTable = this._byIdInSection("priceTotals", "priceTotalsTable");
         PricingColumns.bindTable(oTable, this.getResourceBundle(), ServiceSchema.pricingElements.headerNavigation);
+      }
+    },
+
+    _attachContactValueHelpActivation: function () {
+      var oContactInput = this._byIdInSection("details", "contactInput");
+      if (!oContactInput) {
+        return;
+      }
+      var fnSetNativeReadOnly = function () {
+        var oInputDomRef = oContactInput.getFocusDomRef();
+        if (oInputDomRef) {
+          oInputDomRef.readOnly = true;
+          oInputDomRef.setAttribute("aria-readonly", "true");
+        }
+      };
+      var fnOpenValueHelp = function (oEvent) {
+        if (!this.getView().getModel("createState").getProperty("/providerChosen")) {
+          return;
+        }
+        if (oEvent.target.closest(".sapMInputBaseIconContainer")) {
+          return;
+        }
+        oEvent.preventDefault();
+        this.onContactValueHelpRequest();
+      }.bind(this);
+      oContactInput.addEventDelegate({
+        onAfterRendering: fnSetNativeReadOnly,
+        onclick: fnOpenValueHelp
+      });
+      fnSetNativeReadOnly();
+    },
+
+    _loadHeaderNotes: function (oHeaderContext) {
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      var oText = ServiceSchema.textEntity;
+      var oProps = oText.properties;
+      var iRequest = (this._iNotesRequest || 0) + 1;
+      this._iNotesRequest = iRequest;
+      this._bNotesNeedsCreate = false;
+      oEnrichModel.setProperty("/notes", "");
+      oEnrichModel.setProperty("/notesOriginal", "");
+      if (!oHeaderContext || oHeaderContext.isTransient && oHeaderContext.isTransient()) {
+        return Promise.resolve();
+      }
+      var oBinding = oHeaderContext.getModel().bindList(
+        oText.navigation,
+        oHeaderContext,
+        undefined,
+        [new Filter(oProps.longTextId, FilterOperator.EQ, oText.notesLongTextId)],
+        { $select: [oProps.language, oProps.longTextId, oProps.longText].join(",") }
+      );
+      return oBinding.requestContexts(0, 20).then(function (aContexts) {
+        if (this._iNotesRequest !== iRequest) {
+          return;
+        }
+        var oNotesContext = aContexts.filter(function (oContext) {
+          var sLanguage = oContext.getProperty(oProps.language);
+          return sLanguage === oText.defaultLanguage || sLanguage === "EN";
+        })[0] || aContexts[0];
+        var sNotes = oNotesContext ? oNotesContext.getProperty(oProps.longText) : "";
+        oEnrichModel.setProperty("/notes", sNotes || "");
+        oEnrichModel.setProperty("/notesOriginal", sNotes || "");
+      }.bind(this)).finally(function () {
+        oBinding.destroy();
+      });
+    },
+
+    _stageHeaderNotes: function (oHeaderContext) {
+      var oEnrichModel = this.getView().getModel("createEnrich");
+      var sNotes = oEnrichModel.getProperty("/notes") || "";
+      var sOriginal = oEnrichModel.getProperty("/notesOriginal") || "";
+      if (sNotes === sOriginal) {
+        return Promise.resolve();
+      }
+      this._destroyNotesWriteBinding();
+      var oText = ServiceSchema.textEntity;
+      var oProps = oText.properties;
+      var oBinding = oHeaderContext.getModel().bindList(
+        oText.navigation,
+        oHeaderContext,
+        undefined,
+        [new Filter(oProps.longTextId, FilterOperator.EQ, oText.notesLongTextId)],
+        {
+          $$updateGroupId: ServiceSchema.editUpdateGroup,
+          $select: [oProps.language, oProps.longTextId, oProps.longText].join(",")
+        }
+      );
+      this._oNotesWriteBinding = oBinding;
+      return oBinding.requestContexts(0, 20).then(function (aContexts) {
+        var oNotesContext = aContexts.filter(function (oContext) {
+          var sLanguage = oContext.getProperty(oProps.language);
+          return sLanguage === oText.defaultLanguage || sLanguage === "EN";
+        })[0] || aContexts[0];
+        if (oNotesContext) {
+          this._bNotesNeedsCreate = false;
+          oNotesContext.setProperty(oProps.longText, sNotes);
+        } else if (sNotes) {
+          this._bNotesNeedsCreate = true;
+        }
+      }.bind(this));
+    },
+
+    _destroyNotesWriteBinding: function () {
+      if (this._oNotesWriteBinding) {
+        this._oNotesWriteBinding.destroy();
+        this._oNotesWriteBinding = null;
       }
     },
 
@@ -2285,7 +3753,6 @@ sap.ui.define([
         value: "{addParty>/customerName}",
         editable: false,
         showValueHelp: true,
-        valueHelpOnly: true,
         valueHelpRequest: function () {
           that._openShipToPartyValueHelpDialog(oBundle.getText("partiesInvolvedChoosePartner"), function (oItem) {
             oAddModel.setProperty("/customerId", oItem.id);
@@ -2413,22 +3880,6 @@ sap.ui.define([
       });
     },
 
-    onIohAddRow: function () {
-      var oModel = this.getView().getModel("ioh");
-      var aRows = oModel.getProperty("/rows");
-      aRows.push({ ndc: "", lot: "", quantity: null, expirationDate: null });
-      oModel.setProperty("/rows", aRows);
-    },
-
-    onIohDeleteRow: function (oEvent) {
-      var oModel = this.getView().getModel("ioh");
-      var oRowContext = oEvent.getSource().getBindingContext("ioh");
-      var iIndex = Number(oRowContext.getPath().split("/").pop());
-      var aRows = oModel.getProperty("/rows");
-      aRows.splice(iIndex, 1);
-      oModel.setProperty("/rows", aRows);
-    },
-
     // v5: Cancel is always the scratch-context case — nothing was ever sent
     // to the backend (its group is never submitted), so this is a plain local
     // delete + navigate-back (CreateOrderService.cancel/_destroyCreateContext).
@@ -2459,25 +3910,32 @@ sap.ui.define([
     // v5: Save replays the scratch context for real (CreateOrderService.js#save,
     // steps ①-④) — the order does not exist until that resolves, so any
     // rejection from it means nothing was created; stay in createMode to
-    // retry. Enrichment/IoH failing AFTER that (the order already exists) is
-    // the actual partial-failure case: exit createMode into the saved order
-    // for completion via Change Mode.
+    // retry. Enrichment failing AFTER that (the order already exists) is the
+    // actual partial-failure case: exit createMode into the saved order for
+    // completion via Change Mode.
     onCreateSavePress: function () {
       var that = this;
       var oBundle = this.getResourceBundle();
       var oContext = this.getView().getBindingContext();
       if (!oContext) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         return;
       }
+      var sProviderId = oContext.getProperty(ServiceSchema.headerProperties.providerId);
 
       // Guard against a double-click firing the ①-④ replay (and its backend
       // SaveChanges commit) twice before setBusy(true)'s overlay blocks input.
       var oSaveBtn = this.getView().byId("createSaveBtn");
       if (oSaveBtn && !oSaveBtn.getEnabled()) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         return;
       }
 
-      if (!oContext.getProperty(ServiceSchema.headerProperties.providerId)) {
+      if (!sProviderId) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         MessageToast.show(oBundle.getText("createRequestFieldRequired"));
         this._oSectionFactory.expandSection("details");
         return;
@@ -2486,8 +3944,34 @@ sap.ui.define([
       var oItemsTable = this._byIdInSection("items", "itemsTable");
       var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
       if (!CreateOrderService.hasMinItems(oItemsBinding)) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
         MessageToast.show(oBundle.getText("createRequestMinItemsError"));
         this._oSectionFactory.expandSection("items");
+        return;
+      }
+      if (CreateOrderService.hasIncompleteItems(oItemsBinding)) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
+        MessageToast.show(oBundle.getText("createRequestIncompleteItemsError"));
+        this._oSectionFactory.expandSection("items");
+        return;
+      }
+
+      var oIohModel = this.getView().getModel("ioh");
+      var oIohData = oIohModel.getData();
+      if (oIohData.busy || oIohData.error) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
+        MessageToast.show(oBundle.getText(oIohData.error ? "inventoryLoadError" : "inventoryLoading"));
+        this._oSectionFactory.expandSection("inventory");
+        return;
+      }
+      if (oIohData.loaded && ProviderInventoryService.hasInvalidRows(oIohData.rows)) {
+        this._bStartNewAfterSave = false;
+        this.byId("newOrderBtn").setEnabled(true);
+        MessageToast.show(oBundle.getText("inventoryRequiredFields"));
+        this._oSectionFactory.expandSection("inventory");
         return;
       }
 
@@ -2497,53 +3981,56 @@ sap.ui.define([
       this.getView().setBusy(true);
       var sNewId;
 
-      // Session Prompt (Detail View Adjustments) 3.1: harvest the createMode
-      // Priority Select's value onto every STILL-TRANSIENT scratch item
-      // context - CreateOrderService.js's item deep-create step copies ALL
-      // own properties of each scratch context (not a fixed whitelist), so
-      // this needs no other change there to actually replay. An already-
-      // posted (session-bound) row must NOT be re-patched here - confirmed
-      // live this field goes backend read-only the instant a row posts, any
-      // later PATCH 422s ("Read-only fields must not be changed"); those rows
-      // already got it stamped once, pre-POST, by _applyCreatePriorityToRow,
-      // and the Priority Select itself is locked from that point on
-      // (createState>/priorityLocked, set in _bindItemsTableToSession).
-      var sCreatePriority = this.getView().getModel("priorityState").getProperty("/value");
-      if (sCreatePriority && oItemsBinding) {
-        oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
-          if (oItemContext.isTransient && oItemContext.isTransient()) {
-            oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority).catch(function () {});
+      Promise.resolve().then(function () {
+        return that._deleteEmptyItemRows(oItemsBinding).then(function () {
+          // Harvest create-mode Priority onto every still-transient item. This
+          // promise boundary also routes synchronous setup failures through the
+          // same cleanup path as rejected backend requests.
+          var sCreatePriority = that.getView().getModel("priorityState").getProperty("/value");
+          if (sCreatePriority && oItemsBinding) {
+            oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
+              if (oItemContext.isTransient && oItemContext.isTransient()) {
+                var pSetPriority = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
+                if (pSetPriority && pSetPriority.catch) {
+                  pSetPriority.catch(function () {});
+                }
+              }
+            });
           }
+          return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession, {
+            shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId")
+          });
         });
-      }
-
-      // "Total Split Qty ... does not match the Order Qty" (SaveChanges) is a
-      // BACKEND-ONLY defect (round 21) - reproduced identically in the
-      // standard SAP "Manage Sales Order V2" Fiori app with ZZVFCQTY never
-      // touched by any client at all, so no client-side reconciliation before
-      // Save can fix it; removed after confirming the backend silently
-      // discards any client PATCH to ZZxxxQTY regardless of timing.
-      CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession)
+      })
         // Step ① succeeded — the order now exists (oNewContext is the real,
         // persisted context; the scratch context is already discarded by
-        // CreateOrderService.save()). Enrichment/IoH failing from here on is a
+        // CreateOrderService.save()). Enrichment failing from here on is a
         // partial-failure: the order stays created.
         .then(function (oResult) {
           var oNewContext = oResult.context;
           sNewId = oResult.orderId;
           var oEnrich = that.getView().getModel("createEnrich").getData();
-          return CreateOrderService.enrich(oNewContext, {
-            contactId: oEnrich.contactId,
-            employeeResponsibleId: oEnrich.employeeResponsibleId,
-            status: oEnrich.status,
-            shipToPartyId: oEnrich.shipToPartyId
+          return CreateOrderService.saveNotes(oNewContext, oEnrich.notes).then(function () {
+            return CreateOrderService.enrich(oNewContext, {
+              contactId: oEnrich.contactId,
+              employeeResponsibleId: oEnrich.employeeResponsibleId,
+              status: oEnrich.status,
+              shipToPartyId: oEnrich.shipToPartyId
+            });
+          }).then(function () {
+            if (!oIohData.loaded) {
+              return { skipped: true };
+            }
+            return ProviderInventoryService.save(
+              sProviderId,
+              oIohData.rows
+            ).then(function (oInventoryResult) {
+              if (oInventoryResult && oInventoryResult.Message) {
+                MessageExtractor.addNote(oInventoryResult.Message, "Success");
+              }
+              return oInventoryResult;
+            });
           }).catch(function (oError) {
-            oError.orderCreatedId = sNewId;
-            throw oError;
-          });
-        })
-        .then(function () {
-          return CreateOrderService.submitIoH(sNewId, that.getView().getModel("ioh").getProperty("/rows")).catch(function (oError) {
             oError.orderCreatedId = sNewId;
             throw oError;
           });
@@ -2551,9 +4038,14 @@ sap.ui.define([
         .then(function () {
           that.getView().setBusy(false);
           MessageToast.show(oBundle.getText("createRequestSuccessToast", [sNewId]));
-          that._completeCreate(sNewId);
+          var bStartNew = !!that._bStartNewAfterSave;
+          that._bStartNewAfterSave = false;
+          that.byId("newOrderBtn").setEnabled(true);
+          that._completeCreate(sNewId, bStartNew);
         }, function (oError) {
           that.getView().setBusy(false);
+          that._bStartNewAfterSave = false;
+          that.byId("newOrderBtn").setEnabled(true);
           if (oSaveBtn) {
             oSaveBtn.setEnabled(true);
           }
@@ -2564,7 +4056,7 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           if (oError && oError.orderCreatedId) {
-            // Enrichment/IoH failed but the order + its edits ARE committed —
+            // Enrichment failed but the order + its edits ARE committed —
             // exit createMode into the saved order; user completes the rest
             // via Change Mode (no compensating deletes). Message Accuracy &
             // Hygiene task: a tracked Messaging note, not a MessageToast, so
@@ -2586,7 +4078,7 @@ sap.ui.define([
     // list (EventBus, channel "app" — Master.controller.js owns its own
     // table; deliberately distinct from the "vrCreate" update-group literal,
     // see CreateOrderService.js/ServiceSchema.js).
-    _completeCreate: function (sNewId) {
+    _completeCreate: function (sNewId, bStartNew) {
       this._oCreateListBinding = null;
       this._oCreateSession = null;
       this._bItemsSessionBound = false;
@@ -2596,7 +4088,11 @@ sap.ui.define([
       FundLogicService.clearAllocationCache();
       this._setCreateMode(false);
       EventBus.getInstance().publish("app", "orderCreated", { orderId: sNewId });
-      this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
+      if (bStartNew) {
+        this._onCreateMatched();
+      } else {
+        this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
+      }
     },
 
     _createSectionFlagsModel: function () {
@@ -2635,7 +4131,11 @@ sap.ui.define([
         return;
       }
       this._destroyCreateContext();
+      this._resetCreateSaveState();
       this._setCreateMode(false);
+      var sHeaderSelect = ["SAP__Messages", ServiceSchema.headerProperties.salesOrderType].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
+        return ServiceSchema.updatableHeaderProperties[sKey];
+      })).join(",");
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
@@ -2646,14 +4146,20 @@ sap.ui.define([
         // default - explicit $select here (not $$inheritExpandSelect, per the
         // workaround bindings already in play on this view) so a change-mode
         // PATCH failure can surface the same detailed backend messages F3893
-        // receives automatically.
-        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: "SAP__Messages" }
+        // receives automatically. Editable fields stay in the parent entity cache.
+        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: sHeaderSelect },
+        events: {
+          dataReceived: this._syncOrderUiFromContext.bind(this)
+        }
       });
+      this._loadHeaderNotes(this.getView().getBindingContext());
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
       this._computeHeaderPriority();
       this._computeHeaderTaxAmount();
       this._oSectionFactory.rebind();
+      this._resetTransactionHistoryState(sId);
+      this._refreshTransactionHistory();
     },
 
     // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the "create" route
@@ -2662,20 +4168,32 @@ sap.ui.define([
     // "detail" route uses. No backend contact happens until Save.
     _onCreateMatched: function () {
       this._destroyCreateContext();
+      this._resetCreateSaveState();
       // A prior "detail" route visit leaves an active bindElement() on the
       // view - an element binding always wins over the plain
       // setBindingContext() below (UI5 propagation rules), so without this
       // every relative field/list would keep showing the last-viewed order.
       this.getView().unbindElement();
-      var oResult = CreateOrderService.enter(this.getView().getModel());
+      var oOrderContextModel = this.getOwnerComponent().getModel("orderContext");
+      var sProviderOrderType = oOrderContextModel.getProperty("/providerOrderType");
+      var oResult = CreateOrderService.enter(
+        this.getView().getModel(),
+        sProviderOrderType,
+        oOrderContextModel.getProperty("/defaults")
+      );
       this._oCreateListBinding = oResult.listBinding;
       this._oCreateSession = oResult.session;
       this._bItemsSessionBound = false;
       this._bPostingFirstItem = false;
       this._aPendingIncompleteRows = [];
+      this._bInitialCreateItemRowsPending = true;
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
+      this._applyOrderUi(sProviderOrderType);
+      this._resetTransactionHistoryState("");
+      this._resetItemsTableForCreate();
+      this._addInitialCreateItemRows();
       this._bindDetailHeader();
       // All createMode-visible sections are expanded/loaded simultaneously —
       // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
@@ -2685,6 +4203,90 @@ sap.ui.define([
           this._oSectionFactory.expandSection(oMeta.id);
         }
       }, this);
+    },
+
+    _applyOrderUi: function (sOrderType) {
+      var oMode = OrderModeConfig.resolveOrderType(sOrderType);
+      var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
+      this.getView().getModel("orderUi").setData(oMode.ui);
+      this.getView().getModel("enums").setProperty("/EDIT_STATUS", this._resolveEnumOptions(aEditStatusOptions));
+      this._loadCategoryOptions(oMode);
+    },
+
+    _loadCategoryOptions: function (oMode) {
+      var oOrderUiModel = this.getView().getModel("orderUi");
+      var iRequestToken = (this._iCategoryRequestToken || 0) + 1;
+
+      this._iCategoryRequestToken = iRequestToken;
+      if (oMode.categoryOptions.length) {
+        oOrderUiModel.setProperty("/category", {
+          limited: true,
+          options: oMode.categoryOptions
+        });
+        if (oMode.createCategoryDefaultKey && this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+          var oCreateContext = this.getView().getBindingContext();
+          if (oCreateContext) {
+            oCreateContext.setProperty(ServiceSchema.headerProperties.category, oMode.createCategoryDefaultKey);
+          }
+        }
+        return;
+      }
+
+      var oListBinding = this.getView().getModel().bindList(
+        "/" + ServiceSchema.entitySets.customerPurchaseOrderType,
+        undefined,
+        undefined,
+        undefined,
+        { $select: ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode + "," + ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText }
+      );
+
+      oOrderUiModel.setProperty("/category", {
+        limited: false,
+        options: []
+      });
+
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        var aServiceOptions = aContexts.map(function (oContext) {
+          return {
+            key: oContext.getProperty(ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode),
+            text: oContext.getProperty(ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText)
+          };
+        });
+
+        oListBinding.destroy();
+        if (this._iCategoryRequestToken !== iRequestToken) {
+          return;
+        }
+
+        oOrderUiModel.setProperty("/category/options", aServiceOptions);
+      }.bind(this), function () {
+        oListBinding.destroy();
+      });
+    },
+
+    _syncOrderUiFromContext: function () {
+      var oContext = this.getView().getBindingContext();
+      this._applyOrderUi(oContext && oContext.getProperty(ServiceSchema.headerProperties.salesOrderType));
+    },
+
+    _onMasterMatched: function () {
+      this._destroyCreateContext();
+      this._resetCreateSaveState();
+      this._setCreateMode(false);
+      Messaging.removeAllMessages();
+    },
+
+    _resetCreateSaveState: function () {
+      this.getView().setBusy(false);
+      var oSaveButton = this.byId("createSaveBtn");
+      if (oSaveButton) {
+        oSaveButton.setEnabled(true);
+      }
+      var oNewButton = this.byId("newOrderBtn");
+      if (oNewButton) {
+        oNewButton.setEnabled(true);
+      }
+      this._bStartNewAfterSave = false;
     },
 
     // Cleans up a previous transient create context (e.g. the user leaves the
@@ -2697,6 +4299,7 @@ sap.ui.define([
         if (oContext && oContext.isTransient && oContext.isTransient()) {
           CreateOrderService.cancel(oContext, this._oCreateSession);
         }
+        MessageExtractor.clearStaleMessages();
         this._oCreateListBinding = null;
         this._oCreateSession = null;
         this._bItemsSessionBound = false;
@@ -2784,7 +4387,9 @@ sap.ui.define([
         oTitle.bindProperty("text", {
           parts: [
             { path: ServiceSchema.headerProperties.salesOrderType },
-            { path: "i18n>" + oTitleMeta.textKey }
+            { path: "i18n>" + oTitleMeta.textKey },
+            { path: "i18n>orderTypeZkb" },
+            { path: "i18n>orderTypeZrep" }
           ],
           formatter: formatter.orderTypeSectionTitle
         });

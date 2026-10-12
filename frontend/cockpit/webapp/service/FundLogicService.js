@@ -126,12 +126,14 @@ sap.ui.define([
     // Edm.Int32 Nullable="false") back onto the row context's own
     // TargetFieldName - the only commit path for the dialog's "Done".
     commitSplit: function (oRowContext, aWorkingRows) {
+      var aPending = [];
       aWorkingRows.forEach(function (oRow) {
         if (oRow.TargetFieldName) {
-          oRowContext.setProperty(oRow.TargetFieldName, oRow.Quantity || 0);
+          aPending.push(oRowContext.setProperty(oRow.TargetFieldName, oRow.Quantity || 0));
         }
       });
       this.cacheAllocation(oRowContext);
+      return Promise.all(aPending);
     },
 
     // Snapshots the row's own six ZZ*QTY fields RIGHT NOW (setProperty already

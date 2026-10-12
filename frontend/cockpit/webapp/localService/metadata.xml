@@ -380,6 +380,7 @@
     <Property Name="SalesDistrict" Type="Edm.String" Nullable="false" MaxLength="6"/>
     <Property Name="SalesOrderDate" Type="Edm.Date"/>
     <Property Name="PurchaseOrderByCustomer" Type="Edm.String" Nullable="false" MaxLength="35"/>
+    <Property Name="ZOrdDesc" Type="Edm.String" Nullable="false" MaxLength="40"/>
     <Property Name="CustomerPurchaseOrderType" Type="Edm.String" Nullable="false" MaxLength="4"/>
     <Property Name="CustomerPurchaseOrderDate" Type="Edm.Date"/>
     <Property Name="PurchaseOrderByShipToParty" Type="Edm.String" Nullable="false" MaxLength="35"/>

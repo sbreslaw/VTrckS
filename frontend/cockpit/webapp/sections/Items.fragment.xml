@@ -8,33 +8,38 @@
        both the "detail" and "create" routes.
        DF-1025: the Rejection Reason column shows in both modes; it is written
        only via bound actions (Computed property), never through this binding. -->
-  <Table id="itemsTable" items="{_Item}" growing="true" growingThreshold="20">
-    <headerToolbar>
-      <OverflowToolbar>
-        <ToolbarSpacer />
-        <Button text="{i18n>editAddItem}" icon="sap-icon://add" visible="{sectionFlags>/items/editing}"
-          enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }" press=".onItemsAddRow" />
-        <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
-        <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
-      </OverflowToolbar>
-    </headerToolbar>
+  <VBox width="100%">
+    <OverflowToolbar class="detailItemsToolbar">
+      <ToolbarSpacer />
+      <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
+      <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
+    </OverflowToolbar>
+    <VBox id="itemsViewport" class="detailItemsViewport">
+    <Table id="itemsTable" width="100%" items="{_Item}" class="detailItemsTable" fixedLayout="true"
+      updateFinished=".onItemsTableUpdateFinished">
     <columns>
-      <Column width="3rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" /></Column>
-      <Column width="4rem" visible="{itemsColumns>/optOut}"><Text text="{i18n>colOptOutAncillary}" /></Column>
+      <Column width="2.5rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" wrapping="true" /></Column>
+      <Column width="4.75rem" visible="{itemsColumns>/optOut}" demandPopin="true" minScreenWidth="1280px">
+        <VBox class="itemsOptOutHeader">
+          <Text text="{i18n>colOptOutPrefix}" wrapping="false" />
+          <Text text="{i18n>colOptOutSuffix}" wrapping="false" />
+          <Text text="{i18n>colAncillary}" wrapping="true" />
+        </VBox>
+      </Column>
       <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
-      <Column width="4rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" /></Column>
-      <Column width="5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" /></Column>
-      <Column width="8rem" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" /></Column>
-      <Column width="15rem" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" /></Column>
-      <Column width="6rem" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" /></Column>
-      <Column width="3rem" visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/orderIntention}"><Text text="{i18n>colOrderIntention}" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/poReference}"><Text text="{i18n>colPoReference}" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/deliveryStatus}"><Text text="{i18n>colDeliveryStatus}" /></Column>
-      <Column width="6rem" hAlign="End" visible="{itemsColumns>/netValue}"><Text text="{i18n>itemNetAmount}" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" /></Column>
+      <Column width="3.5rem" visible="{itemsColumns>/itemNumber}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colItemNumber}" wrapping="true" /></Column>
+      <Column width="4.5rem" visible="{itemsColumns>/exisId}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colExisId}" wrapping="true" /></Column>
+      <Column width="4rem" visible="{itemsColumns>/brand}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colBrand}" wrapping="true" /></Column>
+      <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" wrapping="true" /></Column>
+      <Column width="7rem" visible="{itemsColumns>/ndcDescription}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colNdcDescription}" wrapping="true" /></Column>
+      <Column width="3.5rem" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" wrapping="true" /></Column>
+      <Column width="3rem" visible="{itemsColumns>/uom}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>itemUom}" wrapping="true" /></Column>
+      <Column width="4.5rem" visible="{itemsColumns>/orderIntention}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colOrder}" wrapping="false" /><Text text="{i18n>colIntention}" wrapping="false" /></VBox></Column>
+      <Column width="4rem" visible="{itemsColumns>/fundType}" demandPopin="true" minScreenWidth="1280px"><Text text="{i18n>colFundType}" wrapping="true" /></Column>
+      <Column width="5rem" visible="{itemsColumns>/poReference}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colPo}" wrapping="false" /><Text text="{i18n>colReference}" wrapping="false" /></VBox></Column>
+      <Column width="4.5rem" visible="{itemsColumns>/deliveryStatus}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colDelivery}" wrapping="false" /><Text text="{i18n>colStatus}" wrapping="false" /></VBox></Column>
+      <Column width="4.25rem" hAlign="End" visible="{itemsColumns>/netValue}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colNet}" wrapping="false" /><Text text="{i18n>colAmount}" wrapping="false" /></VBox></Column>
+      <Column width="6.5rem" visible="{itemsColumns>/rejectionReason}" demandPopin="true" minScreenWidth="1280px"><VBox><Text text="{i18n>colRejection}" wrapping="false" /><Text text="{i18n>colReason}" wrapping="false" /></VBox></Column>
     </columns>
     <items>
       <ColumnListItem>
@@ -85,32 +90,15 @@
           <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
-            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" />
-          <!-- Client requirement (2026-09-01): real field (ZZIndustryStandardName),
-               carried over from the NDC's own IndustryStandardName on product
-               selection (onItemNdcValueHelpRequest) - never typed in directly.
-               §3.2: indented for an ancillary child row (HigherLevelItem set). -->
-          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
-          <!-- CRUD Task 2: NDC stays editable only on a newly-added, not-yet-numbered row (Add Item), and only until a Product is chosen - existing/already-numbered items are always locked (late numbering: SalesOrderItem is empty until the create() is saved). One Input, not a Text/Input pair, so this cell always maps 1:1 to the ndcCode column. v5 UX phasing: also locked until a Provider is picked in createMode. §3.2: an ancillary child row is always fully read-only.
-               Live-test fix (round 18): must NOT gate on
-               @$ui5.context.isTransient here (unlike the two OTHER, negated
-               uses of it above/below) - once ANY full-list refresh happens
-               after this row is persisted (onProdQtyChange,
-               onItemOptOutChange, _onItemCreateActivate's
-               created().then(...) all call _refreshItemsBinding ->
-               oBinding.refresh()), every row's context is recreated fresh
-               via GET, so isTransient() (never negated here) resolves to
-               undefined (not false) for rows never created via
-               ODataListBinding#create(); an expression binding that
-               resolves to undefined falls back to the control's property
-               DEFAULT - Input.editable defaults to true - flipping the
-               cell back to editable. !%{Product} alone (always a concrete
-               boolean, being negated) is enough: any already-numbered/
-               persisted row always has a Product, so this still locks
-               correctly and survives refreshes. -->
-          <Input value="{Product}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; !%{Product} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
-            showValueHelp="true" valueHelpOnly="false"
+            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" />
+          <!-- Brand is authoritative from the selected Product. A scratch row
+            cannot resolve _Product until it is posted, so the locally copied
+            ZZIndustryStandardName only bridges that pre-POST interval.
+            §3.2: indented for an ancillary child row (HigherLevelItem set). -->
+          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${_Product/IndustryStandardName} || ${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
+          <Input value="{path: 'Product', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/ndcCode}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
+            showValueHelp="true"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
             suggest=".onItemNdcSuggest"
@@ -127,8 +115,8 @@
                gets a promise to await before refreshing the list for recalculated
                ancillary quantities); a two-way binding's own internal PATCH here would
                race that refresh exactly like the opt-out checkbox's did. -->
-          <Input value="{path: 'RequestedQuantity', mode: 'OneWay'}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
+          <Input value="{path: 'RequestedQuantity', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
                unit EA is not defined" SaveChanges error, see createPayloadUom
@@ -138,25 +126,17 @@
                baseUnit) instead of always defaulting to the hardcoded "EA". -->
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
-          <Select selectedKey="{MaterialGroup1}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
+          <Select selectedKey="{path: 'MaterialGroup1', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
             <core:Item key="MIX" text="Adult, Pediatric" />
           </Select>
-          <!-- MVGR2 - codes confirmed by the client (2026-08-31, matches MaterialGroup2's
-               MaxLength=3). Items bound to the "fundTypes" model (Detail.controller.js#
-               _createFundTypesModel); each entry's targetField drives the quantity mirror
-               in onFundTypeChange. Per-Item enabled combines this row's own MaterialGroup1
-               (Adult/Pediatric gating) with the model's pediatricOnly flag
-               (formatter.fundTypeItemEnabled). Selecting SPL auto-opens the Fund Split
-               dialog in edit mode (onFundTypeChange, Fund Split dialog session prompt). -->
-          <Select selectedKey="{MaterialGroup2}" forceSelection="false" visible="{itemsColumns>/fundType}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
-            items="{fundTypes>/list}" change=".onFundTypeChange">
-            <core:Item key="{fundTypes>key}" text="{fundTypes>text}"
-              enabled="{parts: [{path: 'MaterialGroup1'}, {path: 'fundTypes>pediatricOnly'}, {path: 'fundTypes>disabled'}], formatter: '.formatter.fundTypeItemEnabled', useRawValues: true}" />
-          </Select>
+          <!-- MVGR2 remains MaterialGroup2. Each row binds its values lazily to
+               po>/FundTypeVH, filtered by that row's NDC and Order Intention. -->
+          <Select selectedKey="{path: 'MaterialGroup2', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" visible="{itemsColumns>/fundType}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !!%{MaterialGroup1} &amp;&amp; !%{HigherLevelItem} }"
+            change=".onFundTypeChange" modelContextChange=".onFundTypeModelContextChange" />
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
           <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" visible="{itemsColumns>/netValue}" />
@@ -164,19 +144,24 @@
                only); writes go through the bound SetRejectionReason/RemoveRejectionReason
                actions in onItemRejectionReasonChange. Items come from the JSON
                "rejectionReasons" model: an absolute OData list nested in this row template
-               would pollute _Item's autoExpandSelect $select. Editable only on a posted
-               createMode row (sticky session); change mode stays read-only until the
-               sessionless-action ruling (OPEN_QUESTIONS DF-1025). -->
-          <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'OneWay'}" forceSelection="false" width="100%"
+               would pollute _Item's autoExpandSelect $select. Existing-order edit mode
+               invokes the bound action directly; create mode also honors its session's
+               dynamic operation controls. -->
+          <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
             visible="{itemsColumns>/rejectionReason}"
             items="{rejectionReasons>/list}"
-            editable="{= !!(${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (%{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"
-            tooltip="{= %{sectionFlags>/items/editing} &amp;&amp; !%{sectionFlags>/createMode} ? ${i18n>rejectionReasonChangeModePending} : '' }"
+            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (!${sectionFlags>/createMode} || %{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"
             change=".onItemRejectionReasonChange">
             <core:Item key="{rejectionReasons>key}" text="{rejectionReasons>text}" />
           </Select>
         </cells>
       </ColumnListItem>
     </items>
-  </Table>
+    </Table>
+    </VBox>
+    <Button id="itemsAddMoreButton" text="{i18n>itemsAddMore}" width="100%" class="detailItemsAddMore"
+      visible="{sectionFlags>/items/editing}"
+      enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }"
+      press=".onItemsAddMore" />
+  </VBox>
 </core:FragmentDefinition>

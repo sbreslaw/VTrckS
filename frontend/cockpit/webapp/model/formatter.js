@@ -7,6 +7,16 @@ sap.ui.define([
   var EM_DASH = "\u2014";
 
   var oDateFormat = DateFormat.getDateInstance();
+  var oIohSourceDateFormat = DateFormat.getDateInstance({ pattern: "yyyy-MM-dd", UTC: true });
+  var oIohDisplayDateFormat = DateFormat.getDateInstance({ pattern: "MM/dd/yyyy", UTC: true });
+
+  function formatIsoDate(vValue) {
+    if (!vValue) {
+      return "";
+    }
+    var oDate = vValue instanceof Date ? vValue : oIohSourceDateFormat.parse(vValue);
+    return oDate ? oIohDisplayDateFormat.format(oDate) : vValue;
+  }
 
   function orDash(vValue) {
     if (vValue === null || vValue === undefined || vValue === "") {
@@ -42,13 +52,6 @@ sap.ui.define([
     "2B": "Success",    
     "2C": "None"
   };
-
-  // SalesOrderType -> display label for the Details section title (only ZKB
-  // is a supported order type in this app - see ServiceSchema.js#fixedOrderTypes).
-  var mOrderTypeLabel = {
-    ZKB: "Vaccine Order"
-  };
-
 
   // Extracted as plain functions (not object methods) so status formatting
   // works correctly regardless of how the caller invokes it: some XML fragments
@@ -141,6 +144,13 @@ sap.ui.define([
     return !!bColumnVisible && !sHigherLevelItem;
   }
 
+  function fnCategoryText(sCategoryKey, aOptions) {
+    var oOption = (aOptions || []).find(function (oCategoryOption) {
+      return oCategoryOption.key === sCategoryKey;
+    });
+    return oOption ? oOption.text : sCategoryKey || "";
+  }
+
   return {
     masterRequestId: function (sOrderId) {
       return sOrderId || "";
@@ -180,6 +190,10 @@ sap.ui.define([
       return fnItemOptOutVisible(bColumnVisible, sHigherLevelItem);
     },
 
+    categoryText: function (sCategoryKey, aOptions) {
+      return fnCategoryText(sCategoryKey, aOptions);
+    },
+
     masterCreatedOn: function (sValue) {
       return sValue || "";
     },
@@ -199,11 +213,6 @@ sap.ui.define([
     // BLOCKED-BY-SERVICE: no free-text order description on the header entity.
     masterDescription: function (sValue) {
       return sValue || EM_DASH;
-    },
-
-    masterContact: function (sFullName) {
-      return '*****';
-      // return orDash(sFullName);
     },
 
     masterCreatedAt: function (oValue) {
@@ -228,6 +237,10 @@ sap.ui.define([
       }
       return oValue;
     },
+
+    iohExpirationDate: formatIsoDate,
+
+    transactionDeliveryDate: formatIsoDate,
 
     // Employee Responsible name is not exposed by this service (only the personnel
     // number via the contact-info navigation's ResponsibleEmployee field) — title is BLOCKED-BY-SERVICE.
@@ -276,6 +289,16 @@ sap.ui.define([
       return bHasWarning ? "Critical" : "Neutral";
     },
 
+    messageSubtitle: function (sCode, sAdditionalText, oTechnicalDetails) {
+      var sMessageCode = sCode || (oTechnicalDetails && oTechnicalDetails.code) || "";
+      var sHttpStatus = oTechnicalDetails && oTechnicalDetails.httpStatus;
+      var sTechnicalId = sMessageCode || (sHttpStatus ? ("HTTP " + sHttpStatus) : "");
+      if (sTechnicalId && sAdditionalText && sAdditionalText !== sTechnicalId) {
+        return sTechnicalId + " - " + sAdditionalText;
+      }
+      return sTechnicalId || sAdditionalText || "";
+    },
+
     detailTitle: function (sOrderId, sContact, sPrefix, sFallback) {
       if (!sOrderId) {
         return sFallback;
@@ -294,8 +317,11 @@ sap.ui.define([
     // Section Panel title = "<order type label> <section text>" (e.g. "Vaccine
     // Order Details"/"Vaccine Order Items" for ZKB), falling back to the plain
     // i18n section text for an unmapped/not-yet-known order type.
-    orderTypeSectionTitle: function (sOrderType, sSectionText) {
-      var sLabel = mOrderTypeLabel[sOrderType];
+    orderTypeSectionTitle: function (sOrderType, sSectionText, sZkbLabel, sZrepLabel) {
+      var sLabel = {
+        ZKB: sZkbLabel,
+        ZREP: sZrepLabel
+      }[sOrderType];
       return sLabel ? (sLabel + " " + sSectionText) : sSectionText;
     },
 

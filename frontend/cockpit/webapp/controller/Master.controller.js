@@ -4,43 +4,65 @@ sap.ui.define([
   "sap/ui/model/FilterOperator",
   "sap/ui/model/Sorter",
   "sap/ui/model/json/JSONModel",
+  "sap/ui/core/Element",
   "sap/ui/core/Item",
+  "sap/ui/core/ResizeHandler",
+  "sap/ui/table/Table",
   "sap/ui/table/Column",
+  "sap/ui/table/rowmodes/Auto",
   "sap/m/Text",
   "sap/m/Link",
-  "sap/m/ObjectIdentifier",
   "sap/m/Dialog",
   "sap/m/Button",
+  "sap/m/BusyIndicator",
   "sap/m/Input",
+  "sap/m/Select",
   "sap/m/List",
+  "sap/m/Column",
+  "sap/m/ColumnListItem",
   "sap/m/CustomListItem",
   "sap/m/HBox",
   "sap/m/MessageToast",
+  "sap/m/SearchField",
+  "sap/m/Token",
   "sap/m/p13n/Popup",
   "sap/m/p13n/SelectionPanel",
   "sap/m/p13n/SortPanel",
   "sap/m/p13n/GroupPanel",
   "sap/ui/core/EventBus",
+  "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
+  "sap/ui/comp/filterbar/FilterBar",
+  "sap/ui/comp/filterbar/FilterGroupItem",
+  "sap/ui/comp/library",
+  "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/VariantStore"
+  "cdc/vaccreq/model/VariantStore",
+  "cdc/vaccreq/service/ProviderSearchService",
+  "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
-  Controller, Filter, FilterOperator, Sorter, JSONModel, Item, Column, Text, Link,
-  ObjectIdentifier, Dialog, Button, Input, List, CustomListItem, HBox, MessageToast,
+  Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
+  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, SearchField, Token,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
-  formatter, ServiceSchema, VariantStore
+  ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
+  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
 ) {
   "use strict";
 
   var FILTER_VARIANT_KEY = "masterFilterVariants";
+  var STANDARD_VARIANT_KEY = "*standard*";
   var TABLE_LAYOUT_KEY = "masterTableLayout";
   var COLUMN_VARIANT_KEY = "masterColumnVariants";
+  var FLEX_COLUMN_WEIGHTS = { description: 0.45, provider: 0.45, createdBy: 0.1 };
   // Vaccine Request (requestId) + Description are the frozen, non-hideable,
   // non-movable pair (fixedColumnCount=2) — always first, always visible.
   var FIXED_COLUMN_KEYS = ["requestId", "description"];
   var ROW_COUNT_DEBOUNCE_MS = 400;
   var RESIZE_DEBOUNCE_MS = 400;
-
+  var RangeOperation = compLibrary.valuehelpdialog.ValueHelpRangeOperation;
+  var CONDITION_OPERATIONS = [RangeOperation.EQ, RangeOperation.Contains, RangeOperation.BT,
+    RangeOperation.StartsWith, RangeOperation.EndsWith, RangeOperation.LT, RangeOperation.LE,
+    RangeOperation.GT, RangeOperation.GE, "Empty"];
   return Controller.extend("cdc.vaccreq.controller.Master", {
     formatter: formatter,
 
@@ -51,12 +73,22 @@ sap.ui.define([
       // into the FlexibleColumnLayout's aggregation, so model propagation via
       // this.getView().getModel("view") has not happened yet and returns undefined.
       this._oViewModel = this.getOwnerComponent().getModel("view");
+      this.getView().setModel(new JSONModel({ byOrder: {} }), "masterContacts");
+      this._mMasterContactRequests = {};
       this._aColumnDefs = this._getColumnDefs();
       this._applyFilterAvailability();
       this._populateStatusCodes();
       this._populateSalesOrderTypeItems();
       this._populateValueHelp("filterDeliveryBlockReason", ServiceSchema.entitySets.deliveryBlockReason,
         ServiceSchema.valueHelpProperties.deliveryBlockReasonCode, ServiceSchema.valueHelpProperties.deliveryBlockReasonText);
+      this._configureFilterSuggestions();
+      this._oFilterBarRenderDelegate = {
+        onAfterRendering: function () {
+          clearTimeout(this._iFilterBarActionTimer);
+          this._iFilterBarActionTimer = setTimeout(this._syncFilterBarActions.bind(this), 0);
+        }.bind(this)
+      };
+      this.byId("filterBar").addEventDelegate(this._oFilterBarRenderDelegate);
       // Don't show any rows until the user clicks Go — start with a filter that
       // is guaranteed to match nothing (SalesOrder is a non-nullable key field,
       // never an empty string).
@@ -77,16 +109,911 @@ sap.ui.define([
 
     onExit: function () {
       EventBus.getInstance().unsubscribe("app", "orderCreated", this._onOrderCreated, this);
+      if (this._sMasterResizeHandlerId) {
+        ResizeHandler.deregister(this._sMasterResizeHandlerId);
+        this._sMasterResizeHandlerId = null;
+      }
+      if (this._oFilterBarRenderDelegate) {
+        this.byId("filterBar").removeEventDelegate(this._oFilterBarRenderDelegate);
+        this._oFilterBarRenderDelegate = null;
+      }
+      clearTimeout(this._iMasterTableFitTimer);
+      clearTimeout(this._iFilterBarActionTimer);
+    },
+
+    onAfterRendering: function () {
+      if (!this._sMasterResizeHandlerId) {
+        this._sMasterResizeHandlerId = ResizeHandler.register(
+          this.byId("masterPage"),
+          this._scheduleMasterTableFit.bind(this)
+        );
+      }
+      this._scheduleMasterTableFit();
+    },
+
+    _syncFilterBarActions: function () {
+      var sFilterBarId = this.byId("filterBar").getId();
+      var oAdaptFiltersButton = Element.getElementById(sFilterBarId + "-btnFilters");
+      if (oAdaptFiltersButton) {
+        oAdaptFiltersButton.setText(
+          this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("adaptFilters")
+        );
+      }
+    },
+
+    _configureFilterSuggestions: function () {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var aConfigs = [
+        {
+          controlId: "filterProviderPin",
+          modelName: "po",
+          entitySet: ServiceSchema.providerOrderService.entitySets.soldToDetails,
+          key: ServiceSchema.providerOrderService.soldToDetailsProperties.identificationNumber,
+          description: ServiceSchema.providerOrderService.soldToDetailsProperties.soldToParty,
+          filterValueKey: ServiceSchema.providerOrderService.soldToDetailsProperties.soldToParty,
+          keyLabel: "providerPinHelpIdentificationNumber",
+          descriptionLabel: "providerPinHelpSoldToParty",
+          showDescriptionInToken: false,
+          suggestionModelName: "providerPinSuggestions",
+          loadSuggestions: this._loadProviderPinRows.bind(this)
+        },
+        {
+          controlId: "filterRequestId",
+          entitySet: ServiceSchema.entitySets.header,
+          key: ServiceSchema.keys.orderId,
+          description: ServiceSchema.headerProperties.providerName,
+          keyLabel: "colRequestId",
+          descriptionLabel: "colProvider"
+        },
+        {
+          controlId: "filterProvider",
+          entitySet: ServiceSchema.entitySets.customerSalesArea,
+          key: ServiceSchema.customerSalesAreaProperties.customer,
+          description: ServiceSchema.customerSalesAreaProperties.customerName,
+          keyLabel: "providerHelpId",
+          descriptionLabel: "providerHelpName"
+        },
+        {
+          controlId: "filterNdc",
+          entitySet: ServiceSchema.entitySets.product,
+          key: ServiceSchema.productProperties.id,
+          description: ServiceSchema.productProperties.text,
+          keyLabel: "productHelpProductId",
+          descriptionLabel: "productHelpProduct"
+        }
+      ];
+
+      aConfigs.forEach(function (oConfig) {
+        var oInput = this.byId(oConfig.controlId);
+        oInput.data("suggestionConfig", oConfig);
+        if (oConfig.loadSuggestions) {
+          oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
+        }
+        oInput.setShowSuggestion(true);
+        oInput.setFilterSuggests(false);
+        oInput.setStartSuggestion(1);
+        oInput.addSuggestionColumn(new MColumn({
+          header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
+        }));
+        oInput.addSuggestionColumn(new MColumn({
+          header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
+        }));
+        oInput.attachSuggest(this.onFilterSuggest, this);
+        oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+      }, this);
+    },
+
+    onFilterSuggest: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var oConfig = oInput.data("suggestionConfig");
+      var oBinding = oInput.getBinding("suggestionRows");
+      if (!oBinding) {
+        var sSuggestionModelName = oConfig.suggestionModelName || oConfig.modelName;
+        var sModelPrefix = sSuggestionModelName ? sSuggestionModelName + ">" : "";
+        var aSelect = [oConfig.key, oConfig.description, oConfig.filterValueKey].filter(function (sPath, iIndex, aPaths) {
+          return sPath && aPaths.indexOf(sPath) === iIndex;
+        });
+        oInput.bindAggregation("suggestionRows", {
+          path: sModelPrefix + "/" + (oConfig.loadSuggestions ? "rows" : oConfig.entitySet),
+          parameters: oConfig.loadSuggestions ? undefined : { $select: aSelect.join(",") },
+          templateShareable: false,
+          template: new ColumnListItem({
+            cells: [
+              new Text({ text: "{" + sModelPrefix + oConfig.key + "}" }),
+              new Text({ text: "{" + sModelPrefix + oConfig.description + "}" })
+            ]
+          })
+        });
+        oBinding = oInput.getBinding("suggestionRows");
+      }
+
+      var sValue = (oEvent.getParameter("suggestValue") || "").trim();
+      if (oConfig.loadSuggestions) {
+        var iRequest = (oInput.data("suggestionRequest") || 0) + 1;
+        oInput.data("suggestionRequest", iRequest);
+        oConfig.loadSuggestions(sValue, {}).then(function (aRows) {
+          if (oInput.data("suggestionRequest") === iRequest) {
+            oInput.getModel(oConfig.suggestionModelName).setProperty("/rows", aRows);
+          }
+        }).catch(function () {
+          if (oInput.data("suggestionRequest") === iRequest) {
+            oInput.getModel(oConfig.suggestionModelName).setProperty("/rows", []);
+          }
+        });
+        return;
+      }
+      oBinding.filter(sValue ? new Filter({
+        filters: [
+          new Filter(oConfig.key, FilterOperator.Contains, sValue),
+          new Filter(oConfig.description, FilterOperator.Contains, sValue)
+        ],
+        and: false
+      }) : []);
+    },
+
+    onFilterSuggestionSelected: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var oConfig = oInput.data("suggestionConfig");
+      var oRow = oEvent.getParameter("selectedRow");
+      var oContext = oRow && oRow.getBindingContext(oConfig.suggestionModelName || oConfig.modelName);
+      var sKey = oContext && oContext.getProperty(oConfig.key);
+      if (!sKey) {
+        return;
+      }
+      var sDescription = oContext.getProperty(oConfig.description);
+      var sFilterValue = oConfig.filterValueKey ? oContext.getProperty(oConfig.filterValueKey) : sKey;
+      var oRange = {
+        exclude: false,
+        operation: RangeOperation.EQ,
+        value1: sFilterValue,
+        displayValue: sKey
+      };
+      var bAlreadySelected = oInput.getTokens().some(function (oToken) {
+        var oTokenRange = oToken.data("range");
+        return oTokenRange && oTokenRange.value1 === sFilterValue;
+      });
+      if (!bAlreadySelected) {
+        oInput.addToken(new Token({
+          key: sKey,
+          text: oConfig.showDescriptionInToken !== false && sDescription ? sKey + " (" + sDescription + ")" : sKey
+        }).data("range", oRange));
+      }
+      oInput.setValue("");
+    },
+
+    _scheduleMasterTableFit: function () {
+      clearTimeout(this._iMasterTableFitTimer);
+      clearTimeout(this._iFilterBarActionTimer);
+      this._iMasterTableFitTimer = setTimeout(function () {
+        if (!this._isMasterPageVisible()) {
+          return;
+        }
+        this._syncFilterBarActions();
+        this._fitMasterTableToViewport();
+      }.bind(this), 0);
+      this._iFilterBarActionTimer = setTimeout(function () {
+        if (this._isMasterPageVisible()) {
+          this._syncFilterBarActions();
+        }
+      }.bind(this), 100);
+    },
+
+    _isMasterPageVisible: function () {
+      var oPageDomRef = this.byId("masterPage").getDomRef();
+      var oPageRect = oPageDomRef && oPageDomRef.getBoundingClientRect();
+      return !!oPageRect && !!oPageRect.width && !!oPageRect.height
+        && oPageRect.right > 0 && oPageRect.left < window.innerWidth;
+    },
+
+    _fitMasterTableToViewport: function () {
+      var oTable = this.byId("requestsTable");
+      var oRowMode = this.byId("requestsRowMode");
+      var oTableDomRef = oTable && oTable.getDomRef();
+      if (!oTableDomRef || !oRowMode) {
+        return;
+      }
+      var oTableRect = oTableDomRef.getBoundingClientRect();
+      var oRenderedRow = oTableDomRef.querySelector(".sapUiTableTr");
+      var iRowHeight = oRenderedRow ? oRenderedRow.getBoundingClientRect().height : (oRowMode.getRowContentHeight() || 32);
+      var iRenderedRowsHeight = oRowMode.getRowCount() * iRowHeight;
+      var iTableChromeHeight = Math.max(0, oTableRect.height - iRenderedRowsHeight);
+      var iAvailableHeight = window.innerHeight - oTableRect.top - 16;
+      var iVisibleRows = Math.max(4, Math.floor((iAvailableHeight - iTableChromeHeight) / iRowHeight));
+      if (oRowMode.getRowCount() !== iVisibleRows) {
+        oRowMode.setRowCount(iVisibleRows);
+      }
+
+      var oColumnViewport = oTableDomRef.querySelector(".sapUiTableCtrlScr");
+      if (oColumnViewport) {
+        var fRootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize);
+        var fnToPixels = function (sWidth) {
+          var fWidth = parseFloat(sWidth) || 0;
+          return /rem$/.test(sWidth) ? fWidth * fRootFontSize : fWidth;
+        };
+        var aRenderedColumns = oTable.getColumns().filter(function (oColumn) {
+          return !!oColumn.getDomRef();
+        });
+        var iBaselineWidth = aRenderedColumns.reduce(function (iWidth, oColumn) {
+          return iWidth + fnToPixels(oColumn.data("baselineWidth"));
+        }, 0);
+        var iAvailableWidth = Math.floor(oColumnViewport.getBoundingClientRect().width) - 2;
+        var iSpareWidth = Math.max(0, iAvailableWidth - iBaselineWidth);
+        var fVisibleWeight = aRenderedColumns.reduce(function (fWeight, oColumn) {
+          return fWeight + (FLEX_COLUMN_WEIGHTS[oColumn.data("colKey")] || 0);
+        }, 0);
+
+        aRenderedColumns.forEach(function (oColumn) {
+          var sKey = oColumn.data("colKey");
+          var fWeight = FLEX_COLUMN_WEIGHTS[sKey] || 0;
+          if (!fWeight) {
+            return;
+          }
+          var iTargetWidth = Math.floor(fnToPixels(oColumn.data("baselineWidth")) +
+            (fVisibleWeight ? iSpareWidth * fWeight / fVisibleWeight : 0));
+          if (Math.abs(oColumn.getDomRef().getBoundingClientRect().width - iTargetWidth) > 1) {
+            oColumn.setWidth(iTargetWidth + "px");
+          }
+        });
+        oTable.toggleStyleClass("masterResultsTableNoHorizontalScroll", iBaselineWidth <= iAvailableWidth);
+      }
+    },
+
+    onNdcFilterValueHelpRequest: function () {
+      var oProps = ServiceSchema.productProperties;
+      this._openStandardEntityValueHelp(this.byId("filterNdc"), {
+        title: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("filterNdc"),
+        entitySet: ServiceSchema.entitySets.product,
+        key: oProps.id,
+        descriptionKey: oProps.text,
+        select: [oProps.id, oProps.text, oProps.industryStandardName],
+        searchPaths: [oProps.id, oProps.text, oProps.industryStandardName],
+        fields: [
+          { path: oProps.id, labelKey: "productHelpProductId" },
+          { path: oProps.text, labelKey: "productHelpProduct" },
+          { path: oProps.industryStandardName, labelKey: "productHelpBrand" }
+        ],
+        columns: [
+          { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
+          { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
+          { path: null, labelKey: "productHelpBaseCategory", width: "10rem" },
+          { path: oProps.industryStandardName, labelKey: "productHelpBrand", width: "10rem" }
+        ]
+      });
+    },
+
+    _openStandardEntityValueHelp: function (oInput, oConfig) {
+      var that = this;
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var oValueHelpModel = oConfig.loadRows ? new JSONModel({ rows: [] }) : null;
+      var sSearchMode = oConfig.defaultSearchMode;
+      var iRowPageSize = oConfig.rowPageSize || 50;
+      var iRowLimit = iRowPageSize;
+      var iLoadRequest = 0;
+      var bHasMoreRows = true;
+      var bRowsLoading = false;
+      var oBasicSearch = new SearchField({
+        width: "100%",
+        placeholder: oBundle.getText("valueHelpSearchPlaceholder")
+      });
+      var aFieldControls = [];
+      var fnCreateFieldControls = function (aFields) {
+        aFieldControls = aFields.map(function (oField) {
+          return { definition: oField, control: new Input() };
+        });
+      };
+      var oInitialSearchMode = (oConfig.searchModes || []).find(function (oMode) {
+        return oMode.key === sSearchMode;
+      });
+      fnCreateFieldControls(oInitialSearchMode ? oInitialSearchMode.fields : oConfig.fields);
+      var fnGetFilters = function () {
+        var aFilters = [];
+        var sSearchValue = oBasicSearch.getValue();
+        if (sSearchValue) {
+          aFilters.push(new Filter({
+            filters: oConfig.searchPaths.map(function (sPath) {
+              return new Filter(sPath, FilterOperator.Contains, sSearchValue);
+            }),
+            and: false
+          }));
+        }
+        aFieldControls.forEach(function (oFieldControl) {
+          var sValue = oFieldControl.control.getValue();
+          if (sValue) {
+            aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
+          }
+        });
+        return aFilters;
+      };
+      var oTable = new GridTable({
+        selectionMode: "MultiToggle",
+        rowMode: new AutoRowMode({
+          minRowCount: oConfig.maxVisibleRows || 8,
+          maxRowCount: oConfig.maxVisibleRows
+        }),
+        threshold: 100,
+        enableColumnReordering: false
+      });
+      oTable.setBusyIndicatorDelay(0);
+      if (oValueHelpModel) {
+        oTable.setModel(oValueHelpModel);
+      } else if (oConfig.modelName) {
+        oTable.setModel(this.getOwnerComponent().getModel(oConfig.modelName));
+      }
+      var fnSetColumns = function (aColumns) {
+        oTable.removeAllColumns().forEach(function (oColumn) { oColumn.destroy(); });
+        aColumns.forEach(function (oColumn) {
+          oTable.addColumn(new Column({
+            label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+            template: oColumn.path ? new Text({ text: "{" + oColumn.path + "}" }) : new Text(),
+            width: oColumn.width
+          }));
+        });
+      };
+      fnSetColumns(oInitialSearchMode ? oInitialSearchMode.columns : oConfig.columns);
+      var oDialog = new ValueHelpDialog({
+        title: oConfig.title,
+        contentWidth: oConfig.contentWidth || "66rem",
+        contentHeight: "47rem",
+        draggable: true,
+        resizable: true,
+        key: oConfig.key,
+        descriptionKey: oConfig.descriptionKey,
+        supportMultiselect: true,
+        supportRanges: oConfig.supportRanges !== false,
+        supportRangesOnly: false,
+        ok: function (oOkEvent) {
+          var mFilterValues = {};
+          oTable.getSelectedIndices().forEach(function (iIndex) {
+            var oContext = oTable.getContextByIndex(iIndex);
+            if (oContext && oConfig.filterValueKey) {
+              mFilterValues[oContext.getProperty(oConfig.key)] = oContext.getProperty(oConfig.filterValueKey);
+            }
+          });
+          oInput.removeAllTokens();
+          oOkEvent.getParameter("tokens").forEach(function (oToken, iIndex) {
+            var oExistingRange = oToken.data("range");
+            if (oExistingRange) {
+              oInput.addToken(that._createConditionToken(oExistingRange, iIndex));
+              return;
+            }
+            var sDisplayValue = oToken.getKey() || oToken.data("longKey");
+            var oRange = {
+              exclude: false,
+              operation: RangeOperation.EQ,
+              value1: mFilterValues[sDisplayValue] || sDisplayValue,
+              displayValue: sDisplayValue
+            };
+            oInput.addToken(that._createConditionToken(oRange, iIndex));
+          });
+          oInput.setValue("");
+          oDialog.close();
+        },
+        cancel: function () {
+          oDialog.close();
+        },
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      });
+      if (oConfig.styleClass) {
+        oDialog.addStyleClass(oConfig.styleClass);
+      }
+      var fnBindRows = function (bIncremental) {
+        if (oConfig.loadRows) {
+          var mFieldValues = {};
+          aFieldControls.forEach(function (oFieldControl) {
+            mFieldValues[oFieldControl.definition.path] = oFieldControl.control.getValue();
+          });
+          var iCurrentRequest = ++iLoadRequest;
+          bRowsLoading = true;
+          oTable.setNoData(new BusyIndicator({ size: "1.5rem" }).addStyleClass("providerTableLoadingIndicator"));
+          oTable.setBusy(true);
+          oConfig.loadRows(oBasicSearch.getValue(), mFieldValues, sSearchMode, iRowLimit)
+            .then(function (aRows) {
+              if (iCurrentRequest !== iLoadRequest) {
+                return;
+              }
+              bHasMoreRows = !oConfig.progressiveRows ||
+                (typeof aRows.hasMore === "boolean" ? aRows.hasMore : aRows.length >= iRowLimit);
+              oValueHelpModel.setProperty("/rows", aRows);
+              if (!oTable.getBinding("rows")) {
+                oTable.bindRows("/rows");
+              }
+              oDialog.update();
+            })
+            .catch(function () {
+              if (iCurrentRequest !== iLoadRequest) {
+                return;
+              }
+              bHasMoreRows = false;
+              oValueHelpModel.setProperty("/rows", []);
+              MessageToast.show(oBundle.getText(oConfig.loadErrorKey || "providerPinHelpLoadError"));
+            })
+            .finally(function () {
+              if (iCurrentRequest === iLoadRequest) {
+                bRowsLoading = false;
+                oTable.setBusy(false);
+                oTable.setNoData(null);
+              }
+            });
+          return;
+        }
+        oTable.bindRows({
+          path: "/" + oConfig.entitySet,
+          parameters: { $select: oConfig.select.join(",") },
+          filters: fnGetFilters(),
+          events: {
+            dataRequested: function () { oDialog.setBusy(true); },
+            dataReceived: function () {
+              oDialog.setBusy(false);
+              oDialog.update();
+            }
+          }
+        });
+      };
+      var fnResetAndBindRows = function () {
+        iRowLimit = iRowPageSize;
+        bHasMoreRows = true;
+        fnBindRows();
+      };
+      var oFilterBar = new FilterBar({
+        advancedMode: true,
+        filterBarExpanded: true,
+        showGoOnFB: true,
+        search: fnResetAndBindRows
+      }).addStyleClass(oConfig.searchModes ? "providerSearchValueHelpFilterBar" : "");
+      oFilterBar.setBasicSearch(oBasicSearch);
+      oBasicSearch.attachSearch(fnResetAndBindRows);
+      var fnAddFieldControls = function () {
+        aFieldControls.forEach(function (oFieldControl, iIndex) {
+          if (oConfig.searchModes && iIndex === 2) {
+            oFilterBar.addFilterGroupItem(new FilterGroupItem({
+              groupName: "valueHelp",
+              name: "searchModeSpacer",
+              label: "",
+              visibleInFilterBar: true,
+              control: new Input().addStyleClass("providerSearchModeSpacer")
+            }));
+          }
+          oFilterBar.addFilterGroupItem(new FilterGroupItem({
+            groupName: "valueHelp",
+            name: oFieldControl.definition.path,
+            label: oBundle.getText(oFieldControl.definition.labelKey),
+            visibleInFilterBar: true,
+            control: oFieldControl.control
+          }));
+        });
+      };
+      if (oConfig.searchModes) {
+        var oSearchModeSelect = new Select({
+          selectedKey: sSearchMode,
+          items: oConfig.searchModes.map(function (oMode) {
+            return new Item({ key: oMode.key, text: oBundle.getText(oMode.labelKey) });
+          }),
+          change: function (oEvent) {
+            sSearchMode = oEvent.getParameter("selectedItem").getKey();
+            var oMode = oConfig.searchModes.find(function (oSearchMode) {
+              return oSearchMode.key === sSearchMode;
+            });
+            oFilterBar.getFilterGroupItems().slice(1).forEach(function (oItem) {
+              oFilterBar.removeFilterGroupItem(oItem);
+              oItem.destroy();
+            });
+            fnSetColumns(oMode.columns);
+            fnCreateFieldControls(oMode.fields);
+            fnAddFieldControls();
+            fnResetAndBindRows();
+          }
+        }).addStyleClass("providerSearchModeSelect");
+        oFilterBar.addFilterGroupItem(new FilterGroupItem({
+          groupName: "valueHelp",
+          name: "searchMode",
+          label: oBundle.getText("providerSearchFor"),
+          visibleInFilterBar: true,
+          control: oSearchModeSelect
+        }));
+      }
+      fnAddFieldControls();
+      oDialog.setFilterBar(oFilterBar);
+      oDialog.setTable(oTable);
+      oDialog.setRangeKeyFields([{ label: oConfig.title, key: oConfig.key, type: "string" }]);
+      oDialog.setIncludeRangeOperations(CONDITION_OPERATIONS);
+      oDialog.setExcludeRangeOperations(CONDITION_OPERATIONS);
+      oDialog.setTokens(oInput.getTokens().map(function (oToken) { return oToken.clone(); }));
+      if (oConfig.progressiveRows) {
+        oTable.attachFirstVisibleRowChanged(function (oEvent) {
+          var iLoadedRows = oValueHelpModel.getProperty("/rows").length;
+          var iVisibleRows = oTable.getVisibleRowCount() || 8;
+          if (!bRowsLoading && bHasMoreRows && iLoadedRows &&
+              oEvent.getParameter("firstVisibleRow") + iVisibleRows >= iLoadedRows - 5) {
+            iRowLimit += iRowPageSize;
+            fnBindRows(true);
+          }
+        });
+      }
+      if (oConfig.fitTableRows) {
+        ValueHelpTableFitter.attach(oDialog, oTable, ResizeHandler);
+      }
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+      if (oConfig.fitTableRows) {
+        ValueHelpTableFitter.fit(oDialog, oTable);
+      }
+      fnResetAndBindRows();
+    },
+
+    _loadProviderPinRows: function (sBasicSearch, mFieldValues, sAdditionalFilter) {
+      var oProps = ServiceSchema.providerOrderService.soldToDetailsProperties;
+      var sSoldToParty = oProps.soldToParty;
+      var sIdentificationNumber = oProps.identificationNumber;
+      var aFilters = [];
+      var fnQuote = function (sValue) {
+        return "'" + String(sValue).replace(/'/g, "''") + "'";
+      };
+      var fnContains = function (sProperty, sValue) {
+        return "contains(" + sProperty + "," + fnQuote(sValue) + ")";
+      };
+      if (sBasicSearch) {
+        aFilters.push("(" + fnContains(sIdentificationNumber, sBasicSearch) + " or " +
+          fnContains(sSoldToParty, sBasicSearch) + ")");
+      }
+      if (sAdditionalFilter) {
+        aFilters.push("(" + sAdditionalFilter + ")");
+      }
+      [sIdentificationNumber, sSoldToParty].forEach(function (sProperty) {
+        if (mFieldValues[sProperty]) {
+          aFilters.push(fnContains(sProperty, mFieldValues[sProperty]));
+        }
+      });
+      var sApply = (aFilters.length ? "filter(" + aFilters.join(" and ") + ")/" : "") +
+        "groupby((" + sSoldToParty + "," + sIdentificationNumber + "))";
+      var oDataSource = this.getOwnerComponent().getManifestObject()
+        .getEntry("/sap.app/dataSources/providerOrderService");
+      var oQuery = new URLSearchParams();
+      oQuery.set("$apply", sApply);
+      oQuery.set("$orderby", sIdentificationNumber);
+      oQuery.set("$top", "200");
+      var sClient = new URLSearchParams(window.location.search).get("sap-client");
+      if (sClient) {
+        oQuery.set("sap-client", sClient);
+      }
+      return fetch(oDataSource.uri + ServiceSchema.providerOrderService.entitySets.soldToDetails + "?" + oQuery.toString(), {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      }).then(function (oResponse) {
+        if (!oResponse.ok) {
+          throw new Error("Provider PIN request failed with HTTP " + oResponse.status);
+        }
+        return oResponse.json();
+      }).then(function (oData) {
+        return oData.value || [];
+      });
+    },
+
+    _providerPinConditionExpression: function (oCondition) {
+      var sProperty = ServiceSchema.providerOrderService.soldToDetailsProperties.identificationNumber;
+      var fnQuote = function (sValue) {
+        return "'" + String(sValue == null ? "" : sValue).replace(/'/g, "''") + "'";
+      };
+      var sValue1 = fnQuote(oCondition.value1);
+      var sValue2 = fnQuote(oCondition.value2);
+      return {
+        EQ: sProperty + " eq " + sValue1,
+        Empty: sProperty + " eq ''",
+        Contains: "contains(" + sProperty + "," + sValue1 + ")",
+        BT: "(" + sProperty + " ge " + sValue1 + " and " + sProperty + " le " + sValue2 + ")",
+        StartsWith: "startswith(" + sProperty + "," + sValue1 + ")",
+        EndsWith: "endswith(" + sProperty + "," + sValue1 + ")",
+        LT: sProperty + " lt " + sValue1,
+        LE: sProperty + " le " + sValue1,
+        GT: sProperty + " gt " + sValue1,
+        GE: sProperty + " ge " + sValue1
+      }[oCondition.operation] || sProperty + " eq " + sValue1;
+    },
+
+    _resolveProviderPinFilters: function () {
+      var aConditions = this._getInputConditions("filterProviderPin");
+      var sProviderIdPath = ServiceSchema.headerProperties.providerId;
+      var oProps = ServiceSchema.providerOrderService.soldToDetailsProperties;
+      var aIncludeFilters = [];
+      var aExcludeFilters = [];
+      var aPending = aConditions.map(function (oCondition) {
+        if (oCondition.displayValue) {
+          var oResolvedFilter = new Filter(sProviderIdPath,
+            oCondition.exclude ? FilterOperator.NE : FilterOperator.EQ, oCondition.value1);
+          (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oResolvedFilter);
+          return Promise.resolve();
+        }
+        return this._loadProviderPinRows("", {}, this._providerPinConditionExpression(oCondition)).then(function (aRows) {
+          var aProviderIds = aRows.map(function (oRow) {
+            return oRow[oProps.soldToParty];
+          }).filter(function (sProviderId, iIndex, aIds) {
+            return sProviderId && aIds.indexOf(sProviderId) === iIndex;
+          });
+          if (!aProviderIds.length && !oCondition.exclude) {
+            aIncludeFilters.push(new Filter(sProviderIdPath, FilterOperator.EQ, ""));
+            return;
+          }
+          aProviderIds.forEach(function (sProviderId) {
+            var oFilter = new Filter(sProviderIdPath,
+              oCondition.exclude ? FilterOperator.NE : FilterOperator.EQ, sProviderId);
+            (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oFilter);
+          });
+        });
+      }, this);
+      return Promise.all(aPending).then(function () {
+        var aFilters = [];
+        if (aIncludeFilters.length) {
+          aFilters.push(new Filter({ filters: aIncludeFilters, and: false }));
+        }
+        if (aExcludeFilters.length) {
+          aFilters.push(new Filter({ filters: aExcludeFilters, and: true }));
+        }
+        return aFilters;
+      });
+    },
+
+    onProviderPinValueHelpRequest: function () {
+      var oProps = ServiceSchema.providerOrderService.soldToDetailsProperties;
+      this._openStandardEntityValueHelp(this.byId("filterProviderPin"), {
+        title: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("filterProviderPin"),
+        modelName: "po",
+        entitySet: ServiceSchema.providerOrderService.entitySets.soldToDetails,
+        loadRows: this._loadProviderPinRows.bind(this),
+        key: oProps.identificationNumber,
+        descriptionKey: oProps.soldToParty,
+        filterValueKey: oProps.soldToParty,
+        showDescriptionInToken: false,
+        select: [oProps.identificationNumber, oProps.soldToParty],
+        searchPaths: [oProps.identificationNumber, oProps.soldToParty],
+        fields: [
+          { path: oProps.identificationNumber, labelKey: "providerPinHelpIdentificationNumber" },
+          { path: oProps.soldToParty, labelKey: "providerPinHelpSoldToParty" }
+        ],
+        columns: [
+          { path: oProps.identificationNumber, labelKey: "providerPinHelpIdentificationNumber", width: "18rem" },
+          { path: oProps.soldToParty, labelKey: "providerPinHelpSoldToParty", width: "12rem" }
+        ]
+      });
+    },
+
+    onConditionValueHelpRequest: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var sControlId = oInput.getId().split("--").pop();
+      var oConfig = this._getConditionFieldConfig(sControlId);
+      var oDialog = new ValueHelpDialog({
+        title: oConfig.label,
+        key: "value",
+        supportMultiselect: true,
+        supportRanges: true,
+        supportRangesOnly: true,
+        afterOpen: function () {
+          setTimeout(function () {
+            // ValueHelpDialog 1.136 has no public default-operation API and
+            // otherwise commits Contains even when the ComboBox displays EQ.
+            var aStringOperations = oDialog._oFilterPanel && oDialog._oFilterPanel._oConditionPanel &&
+              oDialog._oFilterPanel._oConditionPanel._oTypeOperations.string.Include;
+            if (aStringOperations && aStringOperations.indexOf(RangeOperation.EQ) > 0) {
+              aStringOperations.splice(aStringOperations.indexOf(RangeOperation.EQ), 1);
+              aStringOperations.unshift(RangeOperation.EQ);
+            }
+            var oOperatorComboBox = oDialog.findAggregatedObjects(true, function (oControl) {
+              return oControl.isA("sap.m.ComboBox") && oControl.getItemByKey(RangeOperation.EQ) &&
+                oControl.getItemByKey(RangeOperation.Contains);
+            })[0];
+            if (oOperatorComboBox && !oOperatorComboBox.getItemByKey("Empty")) {
+              var aOperatorItems = oOperatorComboBox.getItems();
+              var iExcludeIndex = aOperatorItems.findIndex(function (oOperatorItem, iIndex) {
+                return iIndex > 0 && !oOperatorItem.getKey();
+              });
+              oOperatorComboBox.insertItem(new Item({
+                key: "Empty",
+                text: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("conditionOperatorEmpty")
+              }), iExcludeIndex);
+            }
+            if (oOperatorComboBox && !oInput.getTokens().length) {
+              var oEqualItem = oOperatorComboBox.getItemByKey(RangeOperation.EQ);
+              oOperatorComboBox.setSelectedItem(oEqualItem);
+              oOperatorComboBox.fireSelectionChange({ selectedItem: oEqualItem });
+              oOperatorComboBox.fireChange({ selectedItem: oEqualItem });
+            }
+          }.bind(this), 100);
+        }.bind(this),
+        ok: function (oOkEvent) {
+          oInput.removeAllTokens();
+          oOkEvent.getParameter("tokens").forEach(function (oToken) {
+            oInput.addToken(oToken.clone());
+          });
+          oInput.setValue("");
+          oDialog.close();
+        },
+        cancel: function () {
+          oDialog.close();
+        },
+        afterClose: function () {
+          oDialog.destroy();
+        }
+      });
+      oDialog.setRangeKeyFields([{ label: oConfig.label, key: "value", type: "string" }]);
+      oDialog.setIncludeRangeOperations(CONDITION_OPERATIONS);
+      oDialog.setExcludeRangeOperations(CONDITION_OPERATIONS);
+      oDialog.setTokens(oInput.getTokens().map(function (oToken) {
+        return oToken.clone();
+      }));
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    _getConditionFieldConfig: function (sControlId) {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      return {
+        filterProviderPin: {
+          label: oBundle.getText("filterProviderPin"),
+          path: ServiceSchema.headerProperties.providerId,
+          selectionOnly: true
+        },
+        filterRequestId: { label: oBundle.getText("filterRequestId"), path: ServiceSchema.keys.orderId },
+        filterExisId: { label: oBundle.getText("filterExisId"), path: ServiceSchema.headerProperties.exisId },
+        filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId }
+      }[sControlId];
+    },
+
+    _pushConditionFilters: function (aFilters, sControlId) {
+      var oInput = this.byId(sControlId);
+      var oConfig = this._getConditionFieldConfig(sControlId);
+      if (!oConfig.path) {
+        return;
+      }
+      var aConditions = oInput.getTokens().map(function (oToken) {
+        return oToken.data("range");
+      }).filter(Boolean);
+      if (!aConditions.length && oInput.getValue() && !oConfig.selectionOnly) {
+        aConditions.push({ exclude: false, operation: RangeOperation.EQ, value1: oInput.getValue() });
+      }
+      var aIncludeFilters = [];
+      var aExcludeFilters = [];
+      aConditions.forEach(function (oCondition) {
+        var oFilter = this._createConditionFilter(oConfig.path, oCondition);
+        if (oFilter) {
+          (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oFilter);
+        }
+      }, this);
+      if (aIncludeFilters.length) {
+        aFilters.push(new Filter({ filters: aIncludeFilters, and: false }));
+      }
+      if (aExcludeFilters.length) {
+        aFilters.push(new Filter({ filters: aExcludeFilters, and: true }));
+      }
+    },
+
+    _createConditionFilter: function (sPath, oCondition) {
+      var sOperator = oCondition.operation;
+      if (sOperator === "Empty") {
+        return new Filter(sPath, oCondition.exclude ? FilterOperator.NE : FilterOperator.EQ, "");
+      }
+      if (oCondition.exclude) {
+        sOperator = {
+          EQ: FilterOperator.NE,
+          Contains: FilterOperator.NotContains,
+          BT: FilterOperator.NB,
+          StartsWith: FilterOperator.NotStartsWith,
+          EndsWith: FilterOperator.NotEndsWith,
+          LT: FilterOperator.GE,
+          LE: FilterOperator.GT,
+          GT: FilterOperator.LE,
+          GE: FilterOperator.LT
+        }[sOperator];
+      }
+      return sOperator ? new Filter(sPath, sOperator, oCondition.value1, oCondition.value2) : null;
+    },
+
+    _getInputConditions: function (sControlId) {
+      var oInput = this.byId(sControlId);
+      var aConditions = oInput.getTokens().map(function (oToken) {
+        return oToken.data("range") || {
+          exclude: false,
+          operation: RangeOperation.EQ,
+          value1: oToken.getKey()
+        };
+      });
+      if (!aConditions.length && oInput.getValue()) {
+        aConditions.push({ exclude: false, operation: RangeOperation.EQ, value1: oInput.getValue() });
+      }
+      return aConditions;
+    },
+
+    _pushNdcConditionFilters: function (aFilters) {
+      var aIncludeFilters = [];
+      var aExcludeFilters = [];
+      var sVariable = "item";
+      var sPath = sVariable + "/" + ServiceSchema.itemProperties.material;
+      this._getInputConditions("filterNdc").forEach(function (oCondition) {
+        var oFilter = this._createConditionFilter(sPath, oCondition);
+        if (oFilter) {
+          (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oFilter);
+        }
+      }, this);
+      if (aIncludeFilters.length) {
+        aFilters.push(new Filter({
+          path: ServiceSchema.navigation.headerToItems,
+          operator: FilterOperator.Any,
+          variable: sVariable,
+          condition: new Filter({ filters: aIncludeFilters, and: false })
+        }));
+      }
+      if (aExcludeFilters.length) {
+        aFilters.push(new Filter({
+          path: ServiceSchema.navigation.headerToItems,
+          operator: FilterOperator.All,
+          variable: sVariable,
+          condition: new Filter({ filters: aExcludeFilters, and: true })
+        }));
+      }
+    },
+
+    onProviderFilterValueHelpRequest: function () {
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      this._openStandardEntityValueHelp(this.byId("filterProvider"), {
+        title: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("providerHelpId"),
+        contentWidth: "78rem",
+        entitySet: ServiceSchema.entitySets.customerSalesArea,
+        loadRows: function (sBasicSearch, mFieldValues, sSearchMode, iRowLimit) {
+          return ProviderSearchService.loadRows(
+            this.getOwnerComponent().getModel(),
+            this.getOwnerComponent().getModel("po"),
+            sSearchMode,
+            mFieldValues,
+            sBasicSearch,
+            [],
+            iRowLimit
+          );
+        }.bind(this),
+        searchModes: ProviderSearchService.modes,
+        defaultSearchMode: ProviderSearchService.defaultMode,
+        progressiveRows: true,
+        rowPageSize: 50,
+        maxVisibleRows: 7,
+        fitTableRows: true,
+        styleClass: "providerValueHelpDialog",
+        loadErrorKey: "providerSearchLoadError",
+        key: oProps.customer,
+        descriptionKey: oProps.customerName,
+        select: [oProps.customer, oProps.customerName, oProps.postalCode, oProps.cityName, oProps.countryText],
+        searchPaths: [oProps.customer, oProps.customerName, oProps.postalCode, oProps.cityName, oProps.countryText],
+        fields: [
+          { path: oProps.customer, labelKey: "providerHelpId" },
+          { path: oProps.customerName, labelKey: "providerHelpName" },
+          { path: oProps.postalCode, labelKey: "providerHelpPostalCode" },
+          { path: oProps.cityName, labelKey: "providerHelpCity" },
+          { path: oProps.countryText, labelKey: "providerHelpCountry" }
+        ],
+        columns: [
+          { path: oProps.customer, labelKey: "providerHelpId", width: "9rem" },
+          { path: oProps.customerName, labelKey: "providerHelpName", width: "22rem" },
+          { path: oProps.postalCode, labelKey: "providerHelpPostalCode", width: "10rem" },
+          { path: oProps.cityName, labelKey: "providerHelpCity", width: "12rem" },
+          { path: oProps.countryText, labelKey: "providerHelpCountry", width: "12rem" }
+        ]
+      });
     },
 
     onSearch: function () {
-      var aFilters = [];
-      var oView = this.getView();
+      var iSearchRequest = (this._iSearchRequest || 0) + 1;
+      this._iSearchRequest = iSearchRequest;
+      this._oViewModel.setProperty("/masterBusy", true);
+      this._resolveProviderPinFilters().then(function (aFilters) {
+        if (this._iSearchRequest !== iSearchRequest) {
+          return;
+        }
+        var oView = this.getView();
 
-      this._pushIfValue(aFilters, ServiceSchema.keys.orderId, oView.byId("filterRequestId").getValue(), FilterOperator.Contains);
-      this._pushIfValue(aFilters, ServiceSchema.headerProperties.exisId, oView.byId("filterExisId").getValue(), FilterOperator.Contains);
-      this._pushOrFilter(aFilters, [ServiceSchema.headerProperties.providerId, ServiceSchema.headerProperties.providerName],
-        oView.byId("filterProvider").getValue());
+      this._pushConditionFilters(aFilters, "filterRequestId");
+      this._pushConditionFilters(aFilters, "filterExisId");
+      this._pushConditionFilters(aFilters, "filterProvider");
+      this._pushIfValue(aFilters,
+        ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee,
+        oView.byId("filterEmployeeResponsible").getValue(), FilterOperator.EQ);
+      this._pushNdcConditionFilters(aFilters);
       this._pushIfValue(aFilters, ServiceSchema.headerProperties.createdBy, oView.byId("filterCreatedBy").getValue(), FilterOperator.Contains);
 
       // Contact: RUNTIME-BLOCKED-BY-SERVICE — do not filter or expand
@@ -149,7 +1076,17 @@ sap.ui.define([
         oBinding.filter(aFilters);
       }
 
-      this._oViewModel.setProperty("/masterHasSearch", true);
+        this._oViewModel.setProperty("/masterHasSearch", true);
+      }.bind(this)).catch(function () {
+        if (this._iSearchRequest === iSearchRequest) {
+          MessageToast.show(this.getOwnerComponent().getModel("i18n").getResourceBundle()
+            .getText("providerPinHelpLoadError"));
+        }
+      }.bind(this)).finally(function () {
+        if (this._iSearchRequest === iSearchRequest) {
+          this._oViewModel.setProperty("/masterBusy", false);
+        }
+      }.bind(this));
     },
 
     onFilterBarClear: function () {
@@ -164,16 +1101,66 @@ sap.ui.define([
       });
     },
 
+    onMasterRowActionPress: function (oEvent) {
+      var oContext = oEvent.getSource().getBindingContext();
+      if (oContext) {
+        this._navigateToOrder(oContext.getProperty(ServiceSchema.keys.orderId));
+      }
+    },
+
     // updateFinished doesn't exist on sap.ui.table.Table; rowsUpdated fires
-    // after the row set is (re)rendered, including after the interactive
-    // row-count drag handle changes visibleRowCount.
+    // after the row set is (re)rendered, including after viewport fitting
+    // changes the fixed row mode's row count.
     onRowsUpdated: function () {
       var oTable = this.byId("requestsTable");
       var oBinding = oTable.getBinding("rows");
       if (oBinding) {
         this._oViewModel.setProperty("/masterCount", oBinding.getCount());
       }
+      this._loadVisibleMasterContacts();
       this._persistVisibleRowCount();
+    },
+
+    _loadVisibleMasterContacts: function () {
+      if (!this._oViewModel.getProperty("/masterHasSearch")) {
+        return;
+      }
+      var oTable = this.byId("requestsTable");
+      var oContactModel = this.getView().getModel("masterContacts");
+      var oODataModel = this.getView().getModel();
+      var oProps = ServiceSchema.headerPartnerProperties;
+      var aSelect = [ServiceSchema.keys.orderId, oProps.partnerFunction, oProps.fullName,
+        oProps.contactPerson, oProps.phone, oProps.email].join(",");
+      oTable.getRows().forEach(function (oRow) {
+        var oContext = oRow.getBindingContext();
+        var sOrderId = oContext && oContext.getProperty(ServiceSchema.keys.orderId);
+        if (!sOrderId || this._mMasterContactRequests[sOrderId]) {
+          return;
+        }
+        this._mMasterContactRequests[sOrderId] = true;
+        var sEscapedOrderId = String(sOrderId).replace(/'/g, "''");
+        var sPath = "/" + ServiceSchema.entitySets.headerPartner +
+          "(SalesOrder='" + sEscapedOrderId + "',PartnerFunction='AP')";
+        var oContactBinding = oODataModel.bindContext(sPath, undefined, { $select: aSelect });
+        var fnSetContact = function (oContact) {
+          var mContacts = Object.assign({}, oContactModel.getProperty("/byOrder"));
+          mContacts[sOrderId] = oContact;
+          oContactModel.setProperty("/byOrder", mContacts);
+        };
+        oContactBinding.requestObject().then(function (oContact) {
+          var sContactPerson = oContact[oProps.contactPerson];
+          var sName = oContact[oProps.fullName] || (sContactPerson && sContactPerson !== "0" ? sContactPerson : "");
+          var aDetails = [oContact[oProps.email], oContact[oProps.phone]].filter(Boolean);
+          fnSetContact({
+            display: sName || "",
+            tooltip: aDetails.length ? [sName].concat(aDetails).filter(Boolean).join(" · ") : (sName || "")
+          });
+        }).catch(function () {
+          fnSetContact({ display: "", tooltip: "" });
+        }).finally(function () {
+          oContactBinding.destroy();
+        });
+      }, this);
     },
 
     // CRUD Task 1 v3 (In-Place Create): the Create dialog is removed — creation
@@ -198,6 +1185,114 @@ sap.ui.define([
       if (oBinding) {
         oBinding.refresh();
       }
+    },
+
+    onCopySelectedOrder: function () {
+      var oTable = this.byId("requestsTable");
+      var aSelectedIndices = oTable.getSelectedIndices();
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      if (aSelectedIndices.length !== 1) {
+        MessageToast.show(oBundle.getText("masterCopySelectOne"));
+        return;
+      }
+      var oContext = oTable.getContextByIndex(aSelectedIndices[0]);
+      var sOrderId = oContext && oContext.getProperty(ServiceSchema.keys.orderId);
+      if (!sOrderId) {
+        return;
+      }
+      navigator.clipboard.writeText(sOrderId).then(function () {
+        MessageToast.show(oBundle.getText("masterCopySuccess", [sOrderId]));
+      });
+    },
+
+    onMasterTableDensityChange: function (oEvent) {
+      var oItem = oEvent.getParameter("item");
+      this.byId("requestsRowMode").setRowContentHeight(oItem && oItem.getKey() === "cozy" ? 48 : 32);
+      this._scheduleMasterTableFit();
+    },
+
+    onMasterExport: function () {
+      this._exportMasterRows("ProviderOrders.xlsx");
+    },
+
+    onMasterExportAs: function () {
+      var that = this;
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var sDefaultName = "ProviderOrders_" + new Date().toISOString().slice(0, 10) + ".xlsx";
+      var oDialog;
+      var oInput = new Input({
+        value: sDefaultName,
+        placeholder: oBundle.getText("masterExportFileName"),
+        liveChange: function () {
+          oInput.setValueState("None");
+        },
+        submit: function () {
+          exportWithName();
+        }
+      });
+      function exportWithName() {
+        var sFileName = oInput.getValue().trim();
+        if (!sFileName) {
+          oInput.setValueState("Error");
+          oInput.setValueStateText(oBundle.getText("masterExportFileNameRequired"));
+          return;
+        }
+        if (!/\.xlsx$/i.test(sFileName)) {
+          sFileName += ".xlsx";
+        }
+        oDialog.close();
+        that._exportMasterRows(sFileName);
+      }
+      oDialog = new Dialog({
+        title: oBundle.getText("masterExportAsTitle"),
+        contentWidth: "24rem",
+        content: [oInput],
+        beginButton: new Button({
+          text: oBundle.getText("masterExport"),
+          press: exportWithName
+        }),
+        endButton: new Button({
+          text: oBundle.getText("cancel"),
+          press: function () { oDialog.close(); }
+        }),
+        afterOpen: function () {
+          oInput.focus();
+          oInput.selectText(0, sDefaultName.length - ".xlsx".length);
+        },
+        afterClose: function () { oDialog.destroy(); }
+      }).addStyleClass("sapUiContentPadding");
+      this.getView().addDependent(oDialog);
+      oDialog.open();
+    },
+
+    _exportMasterRows: function (sFileName) {
+      var oTable = this.byId("requestsTable");
+      var oBinding = oTable.getBinding("rows");
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var aRows = oBinding && oBinding.getAllCurrentContexts
+        ? oBinding.getAllCurrentContexts().map(function (oContext) { return oContext.getObject(); })
+        : oTable.getRows().map(function (oRow) {
+          return oRow.getBindingContext() && oRow.getBindingContext().getObject();
+        }).filter(Boolean);
+      if (!aRows.length) {
+        MessageToast.show(oBundle.getText("masterExportNoData"));
+        return;
+      }
+      var oSpreadsheet = new Spreadsheet({
+        workbook: {
+          columns: [
+            { label: oBundle.getText("colRequestId"), property: ServiceSchema.keys.orderId },
+            { label: oBundle.getText("colDescription"), property: ServiceSchema.headerProperties.description },
+            { label: oBundle.getText("colProvider"), property: ServiceSchema.headerProperties.providerName },
+            { label: oBundle.getText("colStatus"), property: ServiceSchema.headerProperties.userStatus },
+            { label: oBundle.getText("colCreatedAt"), property: ServiceSchema.headerProperties.createdOn },
+            { label: oBundle.getText("colCreatedBy"), property: ServiceSchema.headerProperties.createdBy }
+          ]
+        },
+        dataSource: aRows,
+        fileName: sFileName
+      });
+      oSpreadsheet.build().finally(function () { oSpreadsheet.destroy(); });
     },
 
     // TODO-VERIFY at runtime: columnMove event parameter names ("column"/"newPos")
@@ -245,8 +1340,7 @@ sap.ui.define([
     },
 
     _persistVisibleRowCount: function () {
-      var oTable = this.byId("requestsTable");
-      var iCount = oTable.getVisibleRowCount();
+      var iCount = this.byId("requestsRowMode").getRowCount();
       if (iCount === this._iLastPersistedRowCount) {
         return;
       }
@@ -261,12 +1355,26 @@ sap.ui.define([
 
     _onRouteMatched: function () {
       this._oViewModel.setProperty("/masterBusy", false);
+      this._scheduleMasterTableFit();
     },
 
-    _pushIfValue: function (aFilters, sPath, sValue, sOperator) {
-      if (sValue) {
-        aFilters.push(new Filter(sPath, sOperator, sValue));
+    _pushIfValue: function (aFilters, sPath, sValue, sOperator, sValueTo) {
+      if (sValue && (sOperator !== FilterOperator.BT || sValueTo)) {
+        aFilters.push(new Filter(sPath, sOperator, sValue, sValueTo));
       }
+    },
+
+    _pushAnyFilter: function (aFilters, sNavigationPath, sProperty, sValue, sOperator) {
+      if (!sValue) {
+        return;
+      }
+      var sVariable = "item";
+      aFilters.push(new Filter({
+        path: sNavigationPath,
+        operator: FilterOperator.Any,
+        variable: sVariable,
+        condition: new Filter(sVariable + "/" + sProperty, sOperator, sValue)
+      }));
     },
 
     // Guaranteed-empty filter used to keep the master list unpopulated until the
@@ -276,12 +1384,12 @@ sap.ui.define([
       return [new Filter(ServiceSchema.keys.orderId, FilterOperator.EQ, "")];
     },
 
-    _pushOrFilter: function (aFilters, aPaths, sValue) {
+    _pushOrFilter: function (aFilters, aPaths, sValue, sOperator) {
       if (!sValue) {
         return;
       }
       var aOrFilters = aPaths.map(function (sPath) {
-        return new Filter(sPath, FilterOperator.Contains, sValue);
+        return new Filter(sPath, sOperator, sValue);
       });
       aFilters.push(new Filter({ filters: aOrFilters, and: false }));
     },
@@ -289,20 +1397,6 @@ sap.ui.define([
     _applyFilterAvailability: function () {
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
       var sTooltip = oBundle.getText("availableWithE008Service");
-
-      // NDC Code: item-level material, not filterable on the master list via
-      // this service (same limitation as the repoint prompt's original NDC note).
-      this.byId("filterNdc").setEnabled(false);
-      this.byId("filterNdc").setTooltip(sTooltip);
-
-      // Provider PIN: provider-master field, pending the custom E008 service.
-      this.byId("filterProviderPin").setEnabled(false);
-      this.byId("filterProviderPin").setTooltip(sTooltip);
-
-      // Employee Responsible: RUNTIME-BLOCKED-BY-SERVICE, same root cause as
-      // Contact below — see NOTES.md.
-      this.byId("filterEmployeeResponsible").setEnabled(false);
-      this.byId("filterEmployeeResponsible").setTooltip(sTooltip);
 
       // Contact: RUNTIME-BLOCKED-BY-SERVICE — filtering/expanding
       // _SoldToPartyContactInfo on the master LIST crashes the backend
@@ -380,9 +1474,6 @@ sap.ui.define([
           key: "requestId", i18nKey: "colRequestId", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
-            // Provider Order column is the sole navigation trigger (item 3):
-            // a plain Link with a click/press handler, replacing the former
-            // row-action chevron (rowActionTemplate/RowActionItem, removed).
             return new Link({
               text: { path: ServiceSchema.keys.orderId, formatter: formatter.masterRequestId },
               press: function (oEvent) {
@@ -395,19 +1486,30 @@ sap.ui.define([
           }
         },
         {
-          key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "50rem",
+          key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "14rem",
+          sortPath: ServiceSchema.headerProperties.description,
           createCell: function () {
-            return new Text({ text: { path: ServiceSchema.headerProperties.description, formatter: formatter.masterDescription.bind(formatter) } });
-            // return new Text({ text: formatter.masterDescription() });
+            return new Text({
+              wrapping: false,
+              text: { path: ServiceSchema.headerProperties.description, formatter: formatter.masterDescription.bind(formatter) }
+            });
           }
         },
         {
-          key: "provider", i18nKey: "colProvider", hAlign: "Begin", width: "14rem",
+          key: "provider", i18nKey: "colProvider", hAlign: "Begin", width: "18rem",
           sortPath: ServiceSchema.headerProperties.providerId,
           createCell: function () {
-            return new ObjectIdentifier({
-              title: { path: ServiceSchema.headerProperties.providerName },
-              text: { path: ServiceSchema.headerProperties.providerId }
+            return new Text({
+              wrapping: false,
+              text: {
+                parts: [
+                  { path: ServiceSchema.headerProperties.providerName },
+                  { path: ServiceSchema.headerProperties.providerId }
+                ],
+                formatter: function (sName, sId) {
+                  return sName ? sName + (sId ? " (" + sId + ")" : "") : (sId || "—");
+                }
+              }
             });
           }
         },
@@ -415,70 +1517,90 @@ sap.ui.define([
           key: "status", i18nKey: "colStatus", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.headerProperties.userStatus,
           createCell: function () {
-            // return new Text({ text: { path: ServiceSchema.headerProperties.userStatus }});
-            return new ObjectIdentifier({
-              title: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusText.bind(formatter) },
-              // text: { path: ServiceSchema.headerProperties.userStatus }
-              text: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusCode.bind(formatter) }
+            return new Text({
+              wrapping: false,
+              text: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusText.bind(formatter) }
             });
           }
         },
         {
-          key: "contact", i18nKey: "colContact", hAlign: "Begin", width: "12rem",
+          key: "contact", i18nKey: "colContact", hAlign: "Begin", width: "10rem",
+          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
-            // RUNTIME-BLOCKED-BY-SERVICE: expanding _SoldToPartyContactInfo on
-            // the master LIST (multiple header rows at once) causes a backend
-            // 500 ASSERTION_FAILED dump in the custom provider
-            // CL_SD_S4H_STD_PARTNER_CONTACT=CM002 (confirmed live 2026-08-03 via
-            // ST22 short dump, see NOTES.md) — independent of which fields are
-            // selected. Do not rebind without re-verifying against the live
-            // backend first.
-            // return new ObjectIdentifier({
-            //   title: {
-            //     path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
-            //     formatter: formatter.masterContact
-            //   },
-            //   text: { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.phone }
-            // });
-
-            // return new Text({ text: { 
-            //   path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName,
-            //   formatter: formatter.masterContact
-            // } });
-            return new Text({ text: formatter.masterContact() });
+            return new Text({
+              wrapping: false,
+              text: {
+                parts: [
+                  { path: ServiceSchema.keys.orderId },
+                  { path: "masterContacts>/byOrder" }
+                ],
+                formatter: function (sOrderId, mContacts) {
+                  return (mContacts && mContacts[sOrderId] && mContacts[sOrderId].display) || "";
+                }
+              },
+              tooltip: {
+                parts: [
+                  { path: ServiceSchema.keys.orderId },
+                  { path: "masterContacts>/byOrder" }
+                ],
+                formatter: function (sOrderId, mContacts) {
+                  return (mContacts && mContacts[sOrderId] && mContacts[sOrderId].tooltip) || "";
+                }
+              }
+            });
           }
         },
         {
           key: "createdAt", i18nKey: "colCreatedAt", hAlign: "Begin", width: "9rem",
           sortPath: ServiceSchema.headerProperties.createdOn,
           createCell: function () {
-            return new Text({ text: { path: ServiceSchema.headerProperties.createdOn, formatter: formatter.masterCreatedAt } });
+            return new Text({
+              wrapping: false,
+              text: { path: ServiceSchema.headerProperties.createdOn, formatter: formatter.masterCreatedAt }
+            });
           }
         },
         {
-          key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", width: "12rem",
+          key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", width: "8rem",
+          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             // RUNTIME-BLOCKED-BY-SERVICE: selecting ResponsibleEmployee via the
             // _SoldToPartyContactInfo navigation causes a backend 500
             // ASSERTION_FAILED dump on this service (confirmed live 2026-08-03,
             // see NOTES.md) — do not add this property back to any $expand
             // without re-verifying against the live backend first.
-            return new ObjectIdentifier({
-              title: formatter.masterEmployeeResponsibleTitle(),
-              text: formatter.masterEmployeeResponsibleTitle()
-            });
+            return new Text({ text: formatter.masterEmployeeResponsibleTitle(), wrapping: false });
           }
         },
         {
-          key: "createdBy", i18nKey: "colCreatedBy", hAlign: "Begin", width: "12rem",
+          key: "createdBy", i18nKey: "colCreatedBy", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.headerProperties.createdBy,
           createCell: function () {
-            return new ObjectIdentifier({
-              title: {
-                path: ServiceSchema.navigation.headerToCreatedByUser + "/" + ServiceSchema.createdByUserProperties.name,
-                formatter: formatter.masterCreatedByTitle
-              },
-              text: { path: ServiceSchema.headerProperties.createdBy }
+            return new HBox({
+              width: "100%",
+              alignItems: "Center",
+              justifyContent: "SpaceBetween",
+              items: [
+                new Text({
+                  wrapping: false,
+                  text: {
+                    parts: [
+                      { path: ServiceSchema.navigation.headerToCreatedByUser + "/" + ServiceSchema.createdByUserProperties.name },
+                      { path: ServiceSchema.headerProperties.createdBy }
+                    ],
+                    formatter: function (sName, sId) {
+                      var sTitle = formatter.masterCreatedByTitle(sName);
+                      return sTitle !== "—" ? sTitle + (sId ? " (" + sId + ")" : "") : (sId || "—");
+                    }
+                  }
+                }),
+                new Button({
+                  icon: "sap-icon://slim-arrow-right",
+                  type: "Transparent",
+                  tooltip: "{i18n>sectionDetails}",
+                  press: that.onMasterRowActionPress.bind(that)
+                })
+              ]
             });
           }
         }
@@ -489,6 +1611,21 @@ sap.ui.define([
       var oData = VariantStore.load(TABLE_LAYOUT_KEY);
       var oSaved = oData.variants && oData.variants.layout;
       if (oSaved && oSaved.order && oSaved.order.length) {
+        if (oSaved.widths && oSaved.widths.description === "50rem") {
+          oSaved.widths.description = "14rem";
+        }
+        if (oSaved.widths && ["8rem", "12rem", "16rem"].indexOf(oSaved.widths.createdBy) !== -1) {
+          oSaved.widths.createdBy = "10rem";
+        }
+        if (oSaved.widths && ["10rem", "12rem"].indexOf(oSaved.widths.employeeResponsible) !== -1) {
+          oSaved.widths.employeeResponsible = "8rem";
+        }
+        if (oSaved.widths && oSaved.widths.contact === "12rem") {
+          oSaved.widths.contact = "10rem";
+        }
+        if (!oSaved.rowCount || oSaved.rowCount > 10) {
+          oSaved.rowCount = 10;
+        }
         return oSaved;
       }
       return {
@@ -498,7 +1635,7 @@ sap.ui.define([
           oAcc[oDef.key] = oDef.width;
           return oAcc;
         }, {}),
-        rowCount: 12
+        rowCount: 10
       };
     },
 
@@ -571,21 +1708,25 @@ sap.ui.define([
 
       oTable.removeAllColumns();
       aVisibleDefs.forEach(function (oDef) {
+        var sWidth = (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem";
         var oColumn = new Column({
           label: new Text({ text: oBundle.getText(oDef.i18nKey) }),
           template: oDef.createCell(),
           hAlign: oDef.hAlign || "Begin",
-          width: (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem",
+          width: sWidth,
           resizable: true,
-          autoResizable: true
+          autoResizable: true,
+          sortProperty: oDef.sortPath || "",
+          showSortMenuEntry: true
         });
         oColumn.data("colKey", oDef.key);
+        oColumn.data("baselineWidth", sWidth);
         oTable.addColumn(oColumn);
       });
 
       // oTable.setFixedColumnCount(Math.min(FIXED_COLUMN_KEYS.length, aVisibleDefs.length));
-      oTable.setVisibleRowCount(oLayout.rowCount || 12);
-      this._iLastPersistedRowCount = oLayout.rowCount || 12;
+      this.byId("requestsRowMode").setRowCount(oLayout.rowCount || 10);
+      this._iLastPersistedRowCount = oLayout.rowCount || 10;
 
       oTable.bindRows({
         path: "/" + ServiceSchema.entitySets.header,
@@ -839,16 +1980,17 @@ sap.ui.define([
       oDialog.open();
     },
 
-    // --- FilterBar search variants (Phase 2 Prompt v2, item B). Deliberately a
-    // small custom Select + Save/Manage pattern rather than sap.m.VariantManagement
-    // or sap.ui.fl: this app is not running behind a live FLP flex-persistence
-    // backend yet, and this keeps persistence swappable via VariantStore.js. ---
+    // --- FilterBar search variants. The standard sap.ui.comp variant UI is
+    // backed by the app's swappable VariantStore persistence adapter. ---
 
     _getVariantControlDefs: function () {
       return [
-        { id: "filterRequestId", type: "value" },
-        { id: "filterExisId", type: "value" },
-        { id: "filterProvider", type: "value" },
+        { id: "filterProviderPin", type: "conditions" },
+        { id: "filterRequestId", type: "conditions" },
+        { id: "filterExisId", type: "conditions" },
+        { id: "filterProvider", type: "conditions" },
+        { id: "filterEmployeeResponsible", type: "value" },
+        { id: "filterNdc", type: "conditions" },
         { id: "filterShipToParty", type: "value" },
         { id: "filterCreatedBy", type: "value" },
         { id: "filterJurisdiction", type: "value" },
@@ -869,6 +2011,14 @@ sap.ui.define([
         }
         switch (oDef.type) {
           case "value": oValues[oDef.id] = oControl.getValue(); break;
+          case "conditions":
+            oValues[oDef.id] = {
+              value: oControl.getValue(),
+              ranges: oControl.getTokens().map(function (oToken) {
+                return oToken.data("range");
+              }).filter(Boolean)
+            };
+            break;
           case "key": oValues[oDef.id] = oControl.getSelectedKey(); break;
           case "keys": oValues[oDef.id] = oControl.getSelectedKeys(); break;
           case "dateRange":
@@ -894,7 +2044,10 @@ sap.ui.define([
         var vValue = oValues[oDef.id];
         switch (oDef.type) {
           case "value": oControl.setValue(vValue || ""); break;
-          case "key": oControl.setSelectedKey(vValue || ""); break;
+          case "conditions":
+            this._applyConditionValues(oControl, vValue);
+            break;
+          case "key": oControl.setSelectedKey(vValue || oDef.defaultValue || ""); break;
           case "keys": oControl.setSelectedKeys(vValue || []); break;
           case "dateRange":
             oControl.setDateValue(vValue && vValue.from ? new Date(vValue.from) : null);
@@ -902,28 +2055,70 @@ sap.ui.define([
             break;
           default: break;
         }
-      });
+      }, this);
+    },
+
+    _applyConditionValues: function (oControl, vValue) {
+      var oConditionState = typeof vValue === "string" ? { value: vValue, ranges: [] } : (vValue || {});
+      oControl.setValue(oConditionState.value || "");
+      oControl.removeAllTokens();
+      (oConditionState.ranges || []).forEach(function (oRange, iIndex) {
+        oControl.addToken(this._createConditionToken(oRange, iIndex));
+      }, this);
+    },
+
+    _createConditionToken: function (oRange, iIndex) {
+      var sDisplayValue = oRange.displayValue || oRange.value1;
+      var sText = {
+        EQ: "=" + sDisplayValue,
+        Empty: "<empty>",
+        Contains: "*" + sDisplayValue + "*",
+        BT: sDisplayValue + "..." + oRange.value2,
+        StartsWith: sDisplayValue + "*",
+        EndsWith: "*" + sDisplayValue,
+        LT: "<" + sDisplayValue,
+        LE: "<=" + sDisplayValue,
+        GT: ">" + sDisplayValue,
+        GE: ">=" + sDisplayValue
+      }[oRange.operation] || oRange.operation + " " + sDisplayValue;
+      if (oRange.displayValue && oRange.operation === RangeOperation.EQ && !oRange.exclude) {
+        sText = sDisplayValue;
+      }
+      sText = oRange.exclude ? "!(" + sText + ")" : sText;
+      return new Token({ key: "condition-" + iIndex, text: sText }).data("range", oRange);
     },
 
     _refreshVariantsModel: function () {
       var oData = VariantStore.load(FILTER_VARIANT_KEY);
-      var aItems = Object.keys(oData.variants || {}).map(function (sName) {
-        return { key: sName, text: sName };
-      });
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var aItems = [{
+        key: STANDARD_VARIANT_KEY,
+        title: oBundle.getText("standardVariant"),
+        changeable: false,
+        remove: false,
+        rename: false
+      }].concat(Object.keys(oData.variants || {}).map(function (sName) {
+        return { key: sName, title: sName, changeable: true, remove: true, rename: true };
+      }));
       var oModel = this.getView().getModel("variants");
       if (oModel) {
         oModel.setData({ items: aItems });
       } else {
         this.getView().setModel(new JSONModel({ items: aItems }), "variants");
       }
-      if (oData.lastSelectedKey) {
-        this.byId("filterVariantSelect").setSelectedKey(oData.lastSelectedKey);
-      }
+      this.byId("filterVariantManagement").setSelectedKey(oData.lastSelectedKey || STANDARD_VARIANT_KEY);
     },
 
     onVariantSelect: function (oEvent) {
-      var sKey = oEvent.getParameter("selectedItem") && oEvent.getParameter("selectedItem").getKey();
+      var sKey = oEvent.getParameter("key");
       if (!sKey) {
+        return;
+      }
+      if (sKey === STANDARD_VARIANT_KEY) {
+        this._applyVariantValues({});
+        this.byId("filterMaxHits").setValue(50);
+        VariantStore.setLastSelectedKey(FILTER_VARIANT_KEY, null);
+        this.onSearch();
         return;
       }
       var oData = VariantStore.load(FILTER_VARIANT_KEY);
@@ -932,81 +2127,35 @@ sap.ui.define([
       this.onSearch();
     },
 
-    onVariantSaveAs: function () {
-      var that = this;
-      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-      var oInput = new Input({ placeholder: oBundle.getText("variantNameLabel") });
-      var oDialog = new Dialog({
-        title: oBundle.getText("variantSaveDialogTitle"),
-        content: [oInput],
-        beginButton: new Button({
-          text: oBundle.getText("ok"),
-          press: function () {
-            var sName = oInput.getValue().trim();
-            if (!sName) {
-              return;
-            }
-            VariantStore.saveVariant(FILTER_VARIANT_KEY, sName, that._captureVariantValues());
-            that._refreshVariantsModel();
-            that.byId("filterVariantSelect").setSelectedKey(sName);
-            oDialog.close();
-          }
-        }),
-        endButton: new Button({
-          text: oBundle.getText("cancel"),
-          press: function () { oDialog.close(); }
-        }),
-        afterClose: function () { oDialog.destroy(); }
-      });
-      this.getView().addDependent(oDialog);
-      oDialog.open();
+    onVariantSave: function (oEvent) {
+      var sName = (oEvent.getParameter("name") || "").trim();
+      if (!sName) {
+        return;
+      }
+      VariantStore.saveVariant(FILTER_VARIANT_KEY, sName, this._captureVariantValues());
+      this._refreshVariantsModel();
+      this.byId("filterVariantManagement").setSelectedKey(sName);
     },
 
-    onVariantManage: function () {
-      var that = this;
-      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+    onVariantManage: function (oEvent) {
       var oData = VariantStore.load(FILTER_VARIANT_KEY);
-      var aNames = Object.keys(oData.variants || {});
-
-      var oList = new List({
-        items: aNames.map(function (sName) {
-          return new CustomListItem({
-            content: [
-              new HBox({
-                alignItems: "Center",
-                justifyContent: "SpaceBetween",
-                width: "100%",
-                items: [
-                  new Text({ text: sName }),
-                  new Button({
-                    icon: "sap-icon://delete",
-                    type: "Transparent",
-                    tooltip: oBundle.getText("variantDelete"),
-                    press: function () {
-                      VariantStore.deleteVariant(FILTER_VARIANT_KEY, sName);
-                      that._refreshVariantsModel();
-                      oDialog.close();
-                    }
-                  })
-                ]
-              }).addStyleClass("sapUiTinyMargin")
-            ]
-          });
-        })
+      (oEvent.getParameter("renamed") || []).forEach(function (oRename) {
+        if (oData.variants[oRename.key] && oRename.name) {
+          oData.variants[oRename.name] = oData.variants[oRename.key];
+          delete oData.variants[oRename.key];
+          if (oData.lastSelectedKey === oRename.key) {
+            oData.lastSelectedKey = oRename.name;
+          }
+        }
       });
-
-      var oDialog = new Dialog({
-        title: oBundle.getText("variantManageDialogTitle"),
-        contentWidth: "24rem",
-        content: [oList],
-        endButton: new Button({
-          text: oBundle.getText("close"),
-          press: function () { oDialog.close(); }
-        }),
-        afterClose: function () { oDialog.destroy(); }
+      (oEvent.getParameter("deleted") || []).forEach(function (sKey) {
+        delete oData.variants[sKey];
+        if (oData.lastSelectedKey === sKey) {
+          oData.lastSelectedKey = null;
+        }
       });
-      this.getView().addDependent(oDialog);
-      oDialog.open();
+      VariantStore.save(FILTER_VARIANT_KEY, oData);
+      this._refreshVariantsModel();
     }
   });
 });

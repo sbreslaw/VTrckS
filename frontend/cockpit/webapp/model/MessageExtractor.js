@@ -26,7 +26,13 @@ sap.ui.define([
     OrganizationDivision: "orgData",
     Product: "items",
     RequestedQuantity: "items",
-    RequestedQuantityUnit: "items"
+    RequestedQuantityUnit: "items",
+    Material: "inventory",
+    Batch: "inventory",
+    Quantity: "inventory",
+    Unit: "inventory",
+    ExpirationDate: "inventory",
+    Brand: "inventory"
   };
 
   // Message Accuracy & Hygiene task (this file's own header comment above is
@@ -182,24 +188,14 @@ sap.ui.define([
     return sText;
   }
 
-  // Gap 4 - code fidelity: the MessageItem template in Detail.controller.js
-  // (_openMessagePopover) does not bind a "code" property, so the only way
-  // the user actually sees it today is appended to the text; the raw code
-  // is also stashed in technicalDetails.code (below), both for dedup
-  // matching and in case a future popover template renders it directly.
-  function withCode(sText, sCode) {
-    return sCode ? (sText + " (" + sCode + ")") : sText;
-  }
-
   // Gap 2 - dedupe at extraction time: an existing message (ours from an
   // earlier detail in this SAME error body, or the V4 model's own
   // auto-added technical message for this failure - see NOTES.md "Step-0:
   // does the V4 model auto-add its own messages") already covering the same
   // (target, raw text[, code]) triple means skip, not duplicate. Matches on
-  // text via substring rather than equality: OUR OWN message carries the
-  // raw text embedded inside a decorated string (item/field prefix + code
-  // suffix, see attributeText/withCode above), while a model-auto message
-  // would carry the bare raw text only.
+  // text via substring rather than equality: OUR OWN message may carry the
+  // raw text inside an item/field-prefixed string (see attributeText above),
+  // while a model-auto message would carry the bare raw text only.
   function isDuplicate(sTarget, sRawText, sCode) {
     if (!sRawText) {
       return false;
@@ -326,9 +322,10 @@ sap.ui.define([
         if (isDuplicate(sFullTarget, sRawText, sCode)) {
           return;
         }
-        var sDisplayText = withCode(attributeText(sRawText || "Unknown error", sTarget, oBundle), sCode);
+        var sDisplayText = attributeText(sRawText || "Unknown error", sTarget, oBundle);
         Messaging.addMessages(new Message({
           message: sDisplayText,
+          code: sCode,
           type: mapSeverity(vNumericSeverity),
           target: sFullTarget,
           technical: !sFullTarget,

@@ -1,9 +1,11 @@
 sap.ui.define([
   "sap/ui/core/Messaging",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator",
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor"
-], function (Messaging, ServiceSchema, Enums, MessageExtractor) {
+], function (Messaging, Filter, FilterOperator, ServiceSchema, Enums, MessageExtractor) {
   "use strict";
 
   // CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — reinstates
@@ -51,7 +53,7 @@ sap.ui.define([
   // Sales Order" app) ever sends on create. This whitelist is the ONLY
   // fields actually harvested onto the create payload (cleanItemPayload
   // below) - the six ZZ*QTY mirrors are Nullable="false" Int32s and must
-  // always be present (onItemsAddRow seeds them to 0).
+  // always be present (_addItemRows seeds them to 0).
   var ITEM_PROPERTIES = [
     ServiceSchema.itemProperties.material,
     ServiceSchema.itemProperties.quantity,
@@ -91,6 +93,9 @@ sap.ui.define([
   // response). Never lets a discard failure mask the original error.
   // TODO-VERIFY on first live forced-failure test (v5 verification trace).
   function discardSession(oModel, sReason) {
+    if (oModel.hasPendingChanges(CREATE_REPLAY_GROUP)) {
+      oModel.resetChanges(CREATE_REPLAY_GROUP);
+    }
     var oDiscardAction = oModel.bindContext(ServiceSchema.discardAction + "(...)");
     var pDiscard = oDiscardAction.execute(CREATE_REPLAY_GROUP);
     // Issue Batch 9-30-001 §5: submitBatch()'s OWN returned promise also
@@ -111,8 +116,12 @@ sap.ui.define([
   // way, see "UX phasing + triad sourcing" (v5 amendment) for why these come
   // off the scratch header data rather than the fixed salesArea constant.
   function buildCreateActionParams(oScratchData) {
+    var sOrderType = oScratchData[ServiceSchema.headerProperties.salesOrderType];
+    if (ServiceSchema.fixedOrderTypes.indexOf(sOrderType) === -1) {
+      sOrderType = ServiceSchema.defaultOrderType;
+    }
     return {
-      SalesOrderType: ServiceSchema.fixedOrderTypes[0],
+      SalesOrderType: sOrderType,
       SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || ServiceSchema.salesArea.salesOrganization,
       DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || ServiceSchema.salesArea.distributionChannel,
       OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || ServiceSchema.salesArea.organizationDivision,
@@ -135,8 +144,72 @@ sap.ui.define([
     return oClean;
   }
 
+  function saveNotes(oHeaderContext, sNotes) {
+    if (!sNotes) {
+      return Promise.resolve();
+    }
+    var oModel = oHeaderContext.getModel();
+    var oText = ServiceSchema.textEntity;
+    var oProps = oText.properties;
+    var oBinding;
+    var oPrepare = oModel.bindContext(oText.prepareForEditAction + "(...)", oHeaderContext, {
+      $$updateGroupId: CREATE_REPLAY_GROUP
+    });
+    var pPrepare = oPrepare.execute(CREATE_REPLAY_GROUP);
+    oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () {});
+    return pPrepare.then(function () {
+      oBinding = oModel.bindList(
+        oText.navigation,
+        oHeaderContext,
+        undefined,
+        [new Filter(oProps.longTextId, FilterOperator.EQ, oText.notesLongTextId)],
+        {
+          $$updateGroupId: CREATE_REPLAY_GROUP,
+          $select: [oProps.language, oProps.languageForEdit, oProps.longTextId,
+            oProps.longTextIdForEdit, oProps.longText].join(",")
+        }
+      );
+      return oBinding.requestContexts(0, 20).then(function (aContexts) {
+        var oNotesContext = aContexts.filter(function (oContext) {
+          var sLanguage = oContext.getProperty(oProps.language);
+          return sLanguage === oText.defaultLanguage || sLanguage === "EN";
+        })[0] || aContexts[0];
+        var pWrite;
+        if (oNotesContext) {
+          pWrite = oNotesContext.setProperty(oProps.longText, sNotes);
+        } else {
+          var oInsertProps = oText.insertProperties;
+          var oPayload = {};
+          oPayload[oInsertProps.language] = oText.defaultLanguage;
+          oPayload[oInsertProps.longTextId] = oText.notesLongTextId;
+          oPayload[oInsertProps.longText] = sNotes;
+          pWrite = oBinding.create(oPayload).created();
+        }
+        var pWriteSubmit = oModel.submitBatch(CREATE_REPLAY_GROUP);
+        return Promise.all([pWrite, pWriteSubmit]).then(function () {
+          var oSave = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
+            $$updateGroupId: CREATE_REPLAY_GROUP,
+            $select: "SAP__Messages"
+          });
+          var pSave = oSave.execute(CREATE_REPLAY_GROUP, true);
+          var pSaveSubmit = oModel.submitBatch(CREATE_REPLAY_GROUP);
+          return Promise.all([pSave, pSaveSubmit]);
+        });
+      });
+    }).catch(function (oError) {
+      return discardSession(oModel, "notes save failed").then(function () {
+        throw oError;
+      });
+    }).finally(function () {
+      if (oBinding) {
+        oBinding.destroy();
+      }
+    });
+  }
+
   var CreateOrderService = {
     UPDATE_GROUP: CREATE_GROUP,
+    saveNotes: saveNotes,
 
     // Exposed so Detail.controller.js can re-seed local scratch rows from
     // an orphaned session's row data (session-death recovery) with the
@@ -155,12 +228,14 @@ sap.ui.define([
     // this same context — save() below then reads whatever is there at that
     // point (the harvested values, or these seeded constants as a fallback
     // only if a picked row somehow lacked them).
-    enter: function (oModel) {
+    enter: function (oModel, sOrderType, oModeDefaults) {
       var oListBinding = oModel.bindList("/" + ServiceSchema.entitySets.header, undefined, undefined, undefined, {
         $$updateGroupId: CREATE_GROUP
       });
       var oInitialData = {};
-      oInitialData[ServiceSchema.headerProperties.salesOrderType] = ServiceSchema.fixedOrderTypes[0];
+      oInitialData[ServiceSchema.headerProperties.salesOrderType] = ServiceSchema.fixedOrderTypes.indexOf(sOrderType) !== -1
+        ? sOrderType
+        : ServiceSchema.defaultOrderType;
       oInitialData[ServiceSchema.headerProperties.salesOrganization] = ServiceSchema.salesArea.salesOrganization;
       oInitialData[ServiceSchema.headerProperties.distributionChannel] = ServiceSchema.salesArea.distributionChannel;
       oInitialData[ServiceSchema.headerProperties.division] = ServiceSchema.salesArea.organizationDivision;
@@ -168,6 +243,12 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.shippingCondition] = ServiceSchema.defaultShippingCondition;
       oInitialData[ServiceSchema.headerProperties.deliveryStatus] = ServiceSchema.defaultDeliveryStatus;
       oInitialData[ServiceSchema.headerProperties.deliveryBlockStatus] = ServiceSchema.defaultDeliveryBlockStatus;
+      Object.keys(oModeDefaults || {}).forEach(function (sDefaultKey) {
+        var sProperty = ServiceSchema.headerProperties[sDefaultKey];
+        if (sProperty && oModeDefaults[sDefaultKey] !== undefined) {
+          oInitialData[sProperty] = oModeDefaults[sDefaultKey];
+        }
+      });
       var oContext = oListBinding.create(oInitialData);
       // Deleting this transient, never-submitted context later (Cancel, or
       // save()'s own cleanup after replay) cancels its still-pending POST,
@@ -296,6 +377,25 @@ sap.ui.define([
       return iValid >= Enums.MIN_ITEMS;
     },
 
+    hasIncompleteItems: function (oItemsBinding) {
+      if (!oItemsBinding || !oItemsBinding.getCurrentContexts) {
+        return false;
+      }
+      var oProps = ServiceSchema.itemProperties;
+      return oItemsBinding.getCurrentContexts().some(function (oContext) {
+        if (oContext.getProperty(oProps.higherLevelItem)) {
+          return false;
+        }
+        if (!oContext.getProperty(oProps.material)) {
+          return false;
+        }
+        var fQty = parseFloat(oContext.getProperty(oProps.quantity));
+        return isNaN(fQty) || fQty <= 0
+          || !oContext.getProperty(oProps.fundType)
+          || !oContext.getProperty(oProps.orderIntention);
+      });
+    },
+
     // Replay the scratch transient context as a real create: ①
     // CreateWithSalesOrderType, ② item deep-creates on the resulting sticky
     // session, ③ SaveChanges (assigns the real key), ④ PATCH of the
@@ -305,7 +405,7 @@ sap.ui.define([
     // uses MessageExtractor.js to parse it) if any step fails; a best-effort
     // DiscardChanges runs first for any failure from step ① onward (v5
     // Required Fix 2).
-    save: function (oScratchContext, oItemsBinding, oSession) {
+    save: function (oScratchContext, oItemsBinding, oSession, oCreateOptions) {
       // Message Accuracy & Hygiene task, Gap 1 - pre-attempt clearing: a
       // stale extractor/technical message from a PRIOR failed save attempt
       // must never carry over and look like part of THIS ①–④ attempt.
@@ -323,7 +423,7 @@ sap.ui.define([
       // ①③④ themselves are otherwise UNCHANGED from the original v5 shape -
       // only WHEN ① ran (here vs. earlier) differs.
       if (oSession && oSession.opened && oSession.plainContext) {
-        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData, oSession);
+        return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData, oSession, oCreateOptions);
       }
 
       // Fallback - session never opened interactively (e.g. Save reached
@@ -389,6 +489,9 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           var aScratchItemContexts = (oItemsBinding && oItemsBinding.getCurrentContexts) ? oItemsBinding.getCurrentContexts() : [];
+          aScratchItemContexts = aScratchItemContexts.filter(function (oItemContext) {
+            return !!oItemContext.getProperty(ServiceSchema.itemProperties.material);
+          });
           // Gap 0 correction (live network evidence): item-level validation
           // messages (e.g. VI-028/FI-759) attach to the _Item entity itself, not
           // the header - the create action's $select above never covered this
@@ -412,7 +515,7 @@ sap.ui.define([
               });
             })
             .then(function () {
-              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession);
+              return CreateOrderService._commitStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions);
             });
         });
     },
@@ -422,7 +525,7 @@ sap.ui.define([
     // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
     // bound context - see the (still-applicable) v5 gotcha comment history
     // above for why a plain canonical-path context is required here instead.
-    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession) {
+    _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions) {
       // v5 gotcha, round 6 (live test, 2026-08-28): without an explicit
       // $$updateGroupId here (unlike its sibling contexts elsewhere in this
       // flow), this operation binding fell back to "$auto" instead of
@@ -500,7 +603,7 @@ sap.ui.define([
           var oNewContext = oModel.bindContext(ServiceSchema.buildHeaderPath(sNewId), undefined, {
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
-          return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData).then(function () {
+          return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
             // Both SaveChanges above and this PATCH just succeeded,
             // each re-running the same backend validation - collapse
             // the resulting exact-duplicate messages (see
@@ -525,12 +628,18 @@ sap.ui.define([
     // Internal — PATCH the non-action header fields onto the new real
     // context, in one batch. Items are deep-created earlier, on the sticky
     // session context, before SaveChanges (see save() above).
-    _replayHeaderProperties: function (oNewContext, oScratchData) {
+    _replayHeaderProperties: function (oNewContext, oScratchData, oCreateOptions) {
       REPLAY_HEADER_PROPERTIES.forEach(function (sProperty) {
         if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "") {
           oNewContext.setProperty(sProperty, oScratchData[sProperty]);
         }
       });
+      if (oCreateOptions && oCreateOptions.shipToAddressId) {
+        oNewContext.setProperty(
+          ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.addressId,
+          oCreateOptions.shipToAddressId
+        );
+      }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
     },
@@ -553,21 +662,6 @@ sap.ui.define([
         oAction.setParameter(sKey, oEnrichmentData[sKey]);
       });
       return oAction.invoke();
-    },
-
-    // Step ③ — IoH deep-create/createFromProposal from the local IoH rows
-    // (CR-002: IoH is a separate, decoupled activity document). BLOCKED-BY-
-    // SERVICE: the IoH BO/companion service (design/prompts/e008_ext_build.md)
-    // is a build prompt only, nothing is activated on-system yet
-    // (ServiceSchema.iohCreateAction is null). Degrades the same way as step
-    // ②: skip, rows stay local-only and are lost on exit — documented, not
-    // silently swallowed (see NOTES.md).
-    submitIoH: function (sSalesDocument, aRows) {
-      if (!ServiceSchema.iohCreateAction) {
-        return Promise.resolve({ skipped: true, reason: "IoH backend not available (design/prompts/e008_ext_build.md, not yet activated)", rows: aRows });
-      }
-      // TODO-VERIFY once the IoH BO/companion service ships: real invocation.
-      return Promise.resolve({ skipped: false, salesDocument: sSalesDocument, rows: aRows });
     }
   };
 

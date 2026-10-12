@@ -21,6 +21,13 @@
                 "settings": {
                     "odataVersion": "4.0"
                 }
+            },
+            "shippingAddressValueHelp": {
+                "uri": "/sap/opu/odata4/sap/c_salesordermanage_srv/srvd_f4/sap/c_sdcustomeraddressvh/0001;ps='srvd-c_salesordermanage_sd-0001';va='com.sap.gateway.srvd.c_salesordermanage_sd.v0001.et-c_salesordershiptoptymng.addressid'/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
             }
         },
         "sourceTemplate": {
@@ -93,6 +100,13 @@
                     "groupId": "$auto"
                 }
             },
+            "shippingAddressVH": {
+                "dataSource": "shippingAddressValueHelp",
+                "settings": {
+                    "operationMode": "Server",
+                    "groupId": "$direct"
+                }
+            },
             "view": {
                 "type": "sap.ui.model.json.JSONModel",
                 "settings": {
@@ -105,6 +119,13 @@
                     }
                 }
             }
+        },
+        "resources": {
+            "css": [
+                {
+                    "uri": "css/style.css"
+                }
+            ]
         },
         "routing": {
             "config": {

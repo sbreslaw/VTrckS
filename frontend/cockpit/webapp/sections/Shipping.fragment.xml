@@ -2,7 +2,7 @@
   xmlns="sap.m" 
   xmlns:core="sap.ui.core" 
   xmlns:f="sap.ui.layout.form" 
-  xmlns:l="sap.ui.layout">
+	xmlns:l="sap.ui.layout">
 	<!-- v5 Required Fix 4: adding a new editable createMode field here requires
 			adding it to ServiceSchema.updatableHeaderProperties -
 			createReplayHeaderProperties is auto-derived from that list, see
@@ -22,7 +22,7 @@
 				columnsXL="2" 
 				columnsL="2" 
 				columnsM="1" 
-				singleContainerFullSize="false"
+				singleContainerFullSize="true"
 			/>
 		</f:layout>
 
@@ -39,27 +39,79 @@
 							</Label>
 						</f:label>
 						<f:fields>
-							<Text text="{_ShipToParty/FullName}" visible="{= !${sectionFlags>/createMode} }">
+							<Text text="{_ShipToParty/FullName}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/shipping/editing} }">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 							</Text>
+							<Input
+								value="{shippingEdit>/providerName}"
+								showValueHelp="true"
+								visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/shipping/editing} }"
+								valueHelpRequest=".onShippingProviderValueHelpRequest">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
 							<!-- CRUD Task 1 v5: no plain header property to PATCH/POST for _ShipToParty
 								(see NOTES.md), so this defaults to and stays in sync with the selected
 								Provider (createEnrich>/providerName) - same VH/handler as the General
 								Data Provider field (Detail.controller.js#onProviderValueHelpRequest). -->
 							<Input
-								value="{createEnrich>/providerName}"
+								value="{path: 'createEnrich>/providerName', mode: 'sap.ui.model.BindingMode.OneWay'}"
 								showValueHelp="true"
-								valueHelpOnly="true"
-								editable="{= !%{createEnrich>/providerName} }"
+								showSuggestion="true"
+								filterSuggests="false"
+								startSuggestion="2"
 								visible="{sectionFlags>/createMode}"
 								valueHelpRequest=".onProviderValueHelpRequest"
+								suggest=".onProviderSuggest"
+								suggestionItemSelected=".onProviderSuggestionSelected"
+								change=".onProviderChange"
 								tooltip="{i18n>providerLockedTooltip}">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 							</Input>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>providerAddress}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/shipping/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<ComboBox
+								selectedKey="{_ShipToParty/AddressID}"
+								busy="{shippingEdit>/busy}"
+								visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/shipping/editing} }"
+								items="{shippingEdit>/addresses}">
+								<core:Item key="{shippingEdit>id}" text="{shippingEdit>address}"/>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
+							<ComboBox
+								selectedKey="{shippingEdit>/createAddressKey}"
+								busy="{shippingEdit>/busy}"
+								enabled="{createState>/providerChosen}"
+								visible="{sectionFlags>/createMode}"
+								selectionChange=".onCreateShippingAddressChange"
+								items="{shippingEdit>/addresses}">
+								<core:Item key="{shippingEdit>id}" text="{shippingEdit>address}"/>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
 						</f:fields>
 					</f:FormElement>
 

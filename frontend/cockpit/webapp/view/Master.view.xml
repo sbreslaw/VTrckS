@@ -5,53 +5,65 @@
   xmlns:f="sap.f"
   xmlns:fb="sap.ui.comp.filterbar"
   xmlns:t="sap.ui.table"
+  xmlns:rowmodes="sap.ui.table.rowmodes"
   xmlns:core="sap.ui.core">
-  <f:DynamicPage id="masterPage" fitContent="true" headerExpanded="true">
+  <f:DynamicPage id="masterPage" class="masterListPage" fitContent="false" headerExpanded="true" toggleHeaderOnTitleClick="true">
     <f:title>
-      <f:DynamicPageTitle>
+      <f:DynamicPageTitle class="masterVariantTitle">
         <f:heading>
-          <Title text="{i18n>masterTitle}" />
+          <VariantManagement
+            id="filterVariantManagement"
+            selectedKey="*standard*"
+            supportApplyAutomatically="false"
+            supportDefault="false"
+            supportFavorites="false"
+            supportPublic="false"
+            select=".onVariantSelect"
+            save=".onVariantSave"
+            manage=".onVariantManage"
+            items="{variants>/items}">
+            <items>
+              <VariantItem
+                key="{variants>key}"
+                title="{variants>title}"
+                changeable="{variants>changeable}"
+                remove="{variants>remove}"
+                rename="{variants>rename}" />
+            </items>
+          </VariantManagement>
         </f:heading>
-        <f:snappedContent>
-          <ObjectStatus text="{= ${view>/masterCount} + ' ' + ${i18n>resultsLabel}}" />
-        </f:snappedContent>
       </f:DynamicPageTitle>
     </f:title>
     <f:header>
-      <f:DynamicPageHeader pinnable="true">
-        <VBox>
-          <items>
-            <OverflowToolbar id="variantToolbar">
-              <Label text="{i18n>variantLabel}" labelFor="filterVariantSelect" />
-              <Select id="filterVariantSelect" width="12rem" change=".onVariantSelect" items="{variants>/items}">
-                <core:Item key="{variants>key}" text="{variants>text}" />
-              </Select>
-              <Button text="{i18n>variantSaveAs}" press=".onVariantSaveAs" />
-              <Button text="{i18n>variantManage}" press=".onVariantManage" />
-              <Button text="{i18n>filterBarClear}" press=".onFilterBarClear" />
-              <ToolbarSpacer />
-            </OverflowToolbar>
-            <fb:FilterBar id="filterBar" search=".onSearch" showFilterConfiguration="true">
+      <f:DynamicPageHeader class="masterFilterHeader" pinnable="true">
+            <fb:FilterBar
+              id="filterBar"
+              class="masterSearchFilterBar"
+              search=".onSearch"
+              showFilterConfiguration="true"
+              showClearOnFB="false"
+              showRestoreOnFB="false"
+              filterBarExpanded="true">
               <fb:filterGroupItems>
                 <!-- Visible-in-bar group (Phase 2 Prompt v2, item B) -->
                 <fb:FilterGroupItem name="providerPin" label="{i18n>filterProviderPin}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
-                    <Input id="filterProviderPin" />
+                    <MultiInput id="filterProviderPin" showValueHelp="true" valueHelpRequest=".onProviderPinValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
-                    <Input id="filterRequestId" />
+                    <MultiInput id="filterRequestId" showValueHelp="true" valueHelpRequest=".onConditionValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="exisId" label="{i18n>filterExisId}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
-                    <Input id="filterExisId" />
+                    <MultiInput id="filterExisId" showValueHelp="true" valueHelpRequest=".onConditionValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="provider" label="{i18n>filterProvider}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
-                    <Input id="filterProvider" />
+                    <MultiInput id="filterProvider" showValueHelp="true" valueHelpRequest=".onProviderFilterValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="employeeResponsible" label="{i18n>filterEmployeeResponsible}" groupName="default" visibleInFilterBar="true">
@@ -61,7 +73,7 @@
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="ndc" label="{i18n>filterNdc}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
-                    <Input id="filterNdc" />
+                    <MultiInput id="filterNdc" showValueHelp="true" valueHelpRequest=".onNdcFilterValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
 
@@ -123,49 +135,67 @@
                 </fb:FilterGroupItem>
               </fb:filterGroupItems>
             </fb:FilterBar>
-          </items>
-        </VBox>
       </f:DynamicPageHeader>
     </f:header>
     <f:content>
-      <VBox fitContainer="true" renderType="Bare" width="100%" height="80%">
+      <VBox class="masterTableShell" renderType="Bare" width="100%">
         <t:Table
           id="requestsTable"
-          selectionMode="Single"
-          alternateRowColors="true"
-          selectionBehavior="RowOnly"
-          visibleRowCountMode="Fixed"
-          visibleRowCount="10"
-          enableGrouping="true"
+          class="masterResultsTable"
+          selectionMode="None"
+          alternateRowColors="false"
+          columnHeaderHeight="32"
           enableColumnReordering="true"
           columnMove=".onColumnMove"
           columnResize=".onColumnResize"
           rowsUpdated=".onRowsUpdated"
-          noData="{= ${view>/masterHasSearch} ? undefined : ${i18n>masterNoDataBeforeSearch} }">
+          >
+          <t:rowMode>
+            <rowmodes:Fixed id="requestsRowMode" rowCount="10" rowContentHeight="32" />
+          </t:rowMode>
+          <t:noData>
+            <IllustratedMessage
+              illustrationType="sapIllus-NoSearchResults"
+              title="{i18n>masterNoDataFoundTitle}"
+              description="{= ${view>/masterHasSearch} ? ${i18n>masterNoDataFoundDescription} : ${i18n>masterNoDataBeforeSearch} }" />
+          </t:noData>
           <t:extension>
-            <OverflowToolbar>
-              <Title text="{= ${i18n>masterTitle} + ' (' + ${view>/masterCount} + ' ' + ${i18n>resultsLabel} + ')'}" level="H3" />
+            <OverflowToolbar class="masterTableToolbar">
+              <Title text="{= ${i18n>masterTitle} + ' (' + ${view>/masterCount} + ')'}" level="H3" />
               <ToolbarSpacer />
               <Button
-                icon="sap-icon://create"
                 text="{i18n>masterCreateButton}"
                 tooltip="{i18n>masterCreateTooltip}"
+                type="Transparent"
                 press=".onCreateRequest" />
+              <ToolbarSeparator />
+              <SegmentedButton selectedKey="compact" selectionChange=".onMasterTableDensityChange">
+                <items>
+                  <SegmentedButtonItem key="cozy" icon="sap-icon://list" tooltip="{i18n>masterDensityCozy}" />
+                  <SegmentedButtonItem key="compact" icon="sap-icon://table-view" tooltip="{i18n>masterDensityCompact}" />
+                </items>
+              </SegmentedButton>
               <Button
-                icon="sap-icon://refresh"
-                text="{i18n>actionRefresh}"
-                tooltip="{i18n>actionRefresh}"
-                press=".onMasterRefresh" />
-              <Label text="{i18n>columnVariantLabel}" labelFor="columnVariantSelect" />
-              <Select id="columnVariantSelect" width="10rem" change=".onColumnVariantSelect" items="{columnVariants>/items}">
+                icon="sap-icon://action-settings"
+                type="Transparent"
+                tooltip="{i18n>tablePersonalize}"
+                press=".onMasterTablePersonalize" />
+              <MenuButton
+                icon="sap-icon://excel-attachment"
+                type="Transparent"
+                tooltip="{i18n>masterExport}">
+                <menu>
+                  <Menu>
+                    <items>
+                      <MenuItem text="{i18n>masterExport}" press=".onMasterExport" />
+                      <MenuItem text="{i18n>masterExportAs}" press=".onMasterExportAs" />
+                    </items>
+                  </Menu>
+                </menu>
+              </MenuButton>
+              <Select id="columnVariantSelect" visible="false" change=".onColumnVariantSelect" items="{columnVariants>/items}">
                 <core:Item key="{columnVariants>key}" text="{columnVariants>text}" />
               </Select>
-              <Button text="{i18n>variantSaveAs}" press=".onColumnVariantSaveAs" />
-              <Button text="{i18n>variantManage}" press=".onColumnVariantManage" />
-              <Button
-                text="{i18n>tablePersonalize}"
-                icon="sap-icon://action-settings"
-                press=".onMasterTablePersonalize" />
             </OverflowToolbar>
           </t:extension>
         </t:Table>

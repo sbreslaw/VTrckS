@@ -20,9 +20,9 @@
 				emptySpanL="0"
 				emptySpanM="0"
 				emptySpanS="0"
-				columnsXL="2" 
-				columnsL="2" 
-				columnsM="1" 
+				columnsXL="3"
+				columnsL="2"
+				columnsM="1"
 				singleContainerFullSize="false"
 			/>
 		</f:layout>
@@ -34,7 +34,7 @@
 						<f:label>
 							<Label text="{i18n>detailRequestId}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -52,23 +52,20 @@
 						<f:label>
 							<Label text="{i18n>colDescription}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
 
 						<f:fields>
-							<!-- Client requirement (2026-09-01): real field, renamed by the
-								backend team (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc - open
-								for entry on Create only - change-mode PATCHability is
-								unconfirmed, see ServiceSchema.js updatableHeaderProperties. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/createMode} }"/>
-								<Input value="{ZOrdDesc}" visible="{sectionFlags>/createMode}"
-									enabled="{createState>/providerChosen}"/>
+								<Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input id="headerDescInput" value="{path: 'ZOrdDesc', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="40" visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
@@ -77,7 +74,7 @@
 						<f:label>
 							<Label text="{i18n>providerId}" required="{sectionFlags>/createMode}">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -100,9 +97,8 @@
 								</layoutData>
 								<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }"/>
 								<Input id="providerInput"
-									value="{path: 'createEnrich>/providerName', mode: 'OneWay'}"
+									value="{path: 'createEnrich>/providerName', mode: 'sap.ui.model.BindingMode.OneWay'}"
 									showValueHelp="true"
-									valueHelpOnly="false"
 									showSuggestion="true"
 									filterSuggests="false"
 									startSuggestion="2"
@@ -127,7 +123,7 @@
 						<f:label>
 							<Label text="{i18n>providerAddress}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -155,7 +151,7 @@
 						<f:label>
 							<Label text="{i18n>contact}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -170,8 +166,9 @@
 								EndDate) - replaces the old free-text Input (the prior
 								StandardPartnerContactInfo VH source 501'd on any
 								standalone query). Locked until a Provider is picked;
-								cleared whenever the Provider changes (see
-								Detail.controller.js#onProviderValueHelpRequest). Contact
+								prefilled from the current IsStandardRelationship contact
+								when the Provider changes and still overridable through the
+								value help. Contact
 								persistence back to the order is still pending (no
 								confirmed write path this session) - see
 								OPEN_QUESTIONS.md. -->
@@ -180,12 +177,12 @@
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 								<Text text="{_SoldToPartyContactInfo/FullName}" visible="{= !${sectionFlags>/createMode} }"/>
-								<Input
+								<Input id="contactInput"
 									value="{createEnrich>/contactName}"
 									showValueHelp="true"
-									valueHelpOnly="true"
-									visible="{sectionFlags>/createMode}"
+									editable="true"
 									enabled="{createState>/providerChosen}"
+									visible="{sectionFlags>/createMode}"
 									valueHelpRequest=".onContactValueHelpRequest"/>
 							</VBox>
 						</f:fields>
@@ -195,7 +192,7 @@
 						<f:label>
 							<Label text="{i18n>colEmployeeResponsible}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -214,7 +211,7 @@
 								<Input
 									value="{createEnrich>/employeeResponsibleName}"
 									showValueHelp="true"
-									valueHelpOnly="true"
+									editable="false"
 									visible="{sectionFlags>/createMode}"
 									enabled="{createState>/providerChosen}"
 									valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
@@ -228,7 +225,7 @@
 						<f:label>
 							<Label text="{i18n>otherReason}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -257,7 +254,7 @@
 						<f:label>
 							<Label text="{i18n>category}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -270,34 +267,33 @@
 								Order Reason above (Text when not editing, ComboBox against the
 								real /CustomerPurchaseOrderType VH entity set when editing).
 								Retires the old hardcoded Enums.CATEGORY Select entirely.
-								Client request (2026-10-01): createMode defaults this to "Direct
-								Entry" (CreateOrderService.js#enter) and keeps it read-only for
-								the lifetime of create mode - unlike every other field here,
-								never unlocked by providerChosen. -->
+								ZKB uses the service value help. ZREP uses its order-type-specific
+								four-option list from OrderModeConfig. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_CustomerPurchaseOrderType/CustomerPurchaseOrderType_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Text
+									text="{parts: [{path: 'CustomerPurchaseOrderType'}, {path: 'orderUi>/category/options'}], formatter: '.formatter.categoryText'}"
+									visible="{= !${sectionFlags>/details/editing} }"/>
 								<Select
 									width="100%"
 									selectedKey="{CustomerPurchaseOrderType}"
 									forceSelection="false"
 									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} }"
-									items="{path: '/CustomerPurchaseOrderType'}">
-									<core:Item key="{CustomerPurchaseOrderType}" text="{CustomerPurchaseOrderType_Text}" />
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: 'orderUi>/category/options'}">
+									<core:Item key="{orderUi>key}" text="{orderUi>text}" />
 								</Select>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
 
-
-					<f:FormElement visible="{= %{CustomerPurchaseOrderType} === 'EXIS' }">
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>filterExisId}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -308,12 +304,12 @@
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<Input value="{PurchaseOrderByCustomer}" visible="{sectionFlags>/details/editing}"
+								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="30" visible="{sectionFlags>/details/editing}"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
-
 
 				</f:formElements>
 			</f:FormContainer>
@@ -322,11 +318,11 @@
 
 			<f:FormContainer title="{i18n>detailsStatus}">
 				<f:formElements>
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>colCreatedAt}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -344,7 +340,7 @@
 						<f:label>
 							<Label text="{i18n>colStatus}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -358,12 +354,21 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}" visible="{= !${sectionFlags>/createMode} }" tooltip="{i18n>createEnrichmentUnavailable}"/>
+								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Select
+									selectedKey="{path: 'UserStatusDerived', formatter: '.formatter.masterStatusCode'}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/details/editing} }"
+									width="100%"
+									forceSelection="false"
+									change=".onDetailStatusChange"
+									items="{enums>/EDIT_STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
 								<Select
 									selectedKey="{createEnrich>/status}"
 									visible="{sectionFlags>/createMode}"
 									width="100%"
-									enabled="{createState>/providerChosen}"
 									tooltip="{i18n>createEnrichmentUnavailable}"
 									items="{enums>/STATUS}">
 									<core:Item key="{enums>key}" text="{enums>text}" />
@@ -376,7 +381,7 @@
 						<f:label>
 							<Label text="{i18n>filterPriority}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -406,6 +411,7 @@
 									selectedKey="{priorityState>/value}"
 									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
 									width="100%"
+									forceSelection="false"
 									enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${createState>/priorityLocked} }"
 									tooltip="{i18n>priorityLockedTooltip}"
 									items="{path: '/DeliveryPriority'}"
@@ -416,7 +422,6 @@
 							</VBox>
 						</f:fields>
 					</f:FormElement>
-
 
 				</f:formElements>
 			</f:FormContainer>
@@ -429,27 +434,17 @@
 						<f:label>
 							<Label text="{i18n>detailsNotes}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
 
 						<f:fields>
-						<!-- Issue Batch 9-30-001 §3.1: createMode's own Notes entry is now
-							editable unconditionally (client-reported bug) - bound to the
-							"createEnrich" local-only model (see
-							Detail.controller.js#_createEnrichDefaults), same pattern as
-							Employee Responsible/Contact. No backend write path exists for
-							this yet (ServiceSchema.js#notesLongTextId is null,
-							TODO-VERIFY) - the typed value is carried in-memory only for
-							this createMode session and is NOT sent anywhere on Save;
-							change-mode editing of an EXISTING order's notes is unaffected
-							(still read-only, unchanged, out of this issue's scope) since
-							there is no local buffer wired for it. -->
+						<!-- Header notes map to _Text/LongText for ZVRH. The local model
+							buffers the value until Create Save or Details section Save. -->
 						<TextArea rows="3" width="100%"
 							value="{createEnrich>/notes}"
-							editable="{= ${sectionFlags>/createMode} || (${sectionFlags>/details/editing} &amp;&amp; false) }"
-							tooltip="{i18n>notesPending}">
+							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
 							<layoutData>
 								<l:GridData span="XL8 L8 M8 S12"/>
 							</layoutData>
@@ -461,13 +456,13 @@
 
 <!-- VALUES -->
 
-			<f:FormContainer title="{i18n>detailsValue}">
+			<f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
 				<f:formElements>
 					<f:FormElement>
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -485,7 +480,7 @@
 						<f:label>
 							<Label text="{i18n>taxAmount}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
@@ -510,7 +505,7 @@
 						<f:label>
 							<Label text="{i18n>grossValue}" required="false">
 								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12"/>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>

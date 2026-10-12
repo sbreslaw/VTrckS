@@ -1,3 +1,27 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
-  <MessageStrip text="{i18n>mvp2Only}" type="Information" showIcon="true" />
+  <Table id="transactionHistoryTable" items="{transactionHistory>/rows}" busy="{transactionHistory>/busy}"
+    growing="true" growingThreshold="10" growingScrollToLoad="true"
+    noDataText="{= ${transactionHistory>/error} ? ${i18n>transactionHistoryLoadError} : ${i18n>transactionHistoryNoRows} }">
+    <headerToolbar>
+      <OverflowToolbar>
+        <ToolbarSpacer />
+        <SearchField id="transactionHistorySearch" width="20rem" placeholder="{i18n>transactionHistorySearchPlaceholder}"
+          liveChange=".onTransactionHistorySearch" search=".onTransactionHistorySearch" />
+      </OverflowToolbar>
+    </headerToolbar>
+    <columns>
+      <Column><Text text="{i18n>transactionHistoryColTransaction}" /></Column>
+      <Column><Text text="{i18n>transactionHistoryColType}" /></Column>
+      <Column><Text text="{i18n>transactionHistoryColCreatedOn}" /></Column>
+    </columns>
+    <items>
+      <ColumnListItem>
+        <cells>
+          <Text text="{transactionHistory>delivery}" />
+          <Text text="{transactionHistory>transactionType}" />
+          <Text text="{path: 'transactionHistory>createdOn', formatter: '.formatter.transactionDeliveryDate'}" />
+        </cells>
+      </ColumnListItem>
+    </items>
+  </Table>
 </core:FragmentDefinition>

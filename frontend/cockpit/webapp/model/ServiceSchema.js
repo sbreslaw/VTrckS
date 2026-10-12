@@ -1,4 +1,6 @@
-sap.ui.define([], function () {
+sap.ui.define([
+  "cdc/vaccreq/model/OrderModeConfig"
+], function (OrderModeConfig) {
   "use strict";
 
   var ServiceSchema = {
@@ -63,9 +65,9 @@ sap.ui.define([], function () {
       // so.xml ~line 1250 - PartnerFunction/PartnerFunction_Text/
       // SDDocumentPartnerType).
       partnerFunction: "PartnerFunction",
-      // 3.9: HeaderPartnerType (so.xml ~line 1065), reached in this app only
-      // via the header's _Partner navigation (never queried top-level) -
-      // listed here for completeness/grep-isolation, not used as a bind path.
+      // 3.9: HeaderPartnerType (so.xml ~line 1065), reached through the
+      // header's _Partner navigation for detail editing and queried directly
+      // by composite key for master-list AP contact enrichment.
       headerPartner: "HeaderPartner",
       // Client requirement (2026-10-01): real top-level fixed-values entity
       // sets (OverallDeliveryStatusType/OverallDeliveryBlockStatusType,
@@ -76,6 +78,10 @@ sap.ui.define([], function () {
       // Detail.controller.js#_setCreateMode.
       deliveryStatus: "OverallDeliveryStatus",
       deliveryBlockStatus: "OverallDeliveryBlockStatus",
+      // SalesOrderTextType is exposed as this top-level entity set for reads,
+      // but metadata marks it Insertable=false. New rows must be created via
+      // SalesOrderManage/_Text after PrepareForEdit.
+      salesOrderText: "SalesOrderText",
       // DF-1025: full code list (SalesDocumentRjcnReasonType); the property's own
       // ValueList points at i_salesdocallowedrjcnrsn (per-doc-type), the backend enforces that.
       rejectionReason: "SalesDocumentRjcnReason"
@@ -149,10 +155,9 @@ sap.ui.define([], function () {
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
-      // Client requirement (2026-09-01): real custom header field, renamed by
-      // the backend team (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc - open for
-      // entry on Create (Details.fragment.xml) - see updatableHeaderProperties
-      // below for the create-replay persistence note.
+      // C_SalesOrderManage header Description field. Open for entry on Create
+      // (Details.fragment.xml); see updatableHeaderProperties below for the
+      // create-replay persistence note.
       description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: rebound from the old
       // SalesOrderType display-only alias to the REAL, independently writable
@@ -198,7 +203,21 @@ sap.ui.define([], function () {
     shipToPartyProperties: {
       id: "Partner",
       fullName: "FullName",
+      addressId: "AddressID",
       address: "FormattedPostalAddressDesc"
+    },
+
+    shippingAddressValueHelp: {
+      entitySet: "C_SDCustomerAddressVH",
+      properties: {
+        customer: "Customer",
+        addressId: "AddressID",
+        partnerFunction: "PartnerFunction",
+        partnerDeterminationProcedure: "PartnerDeterminationProcedure",
+        address: "FormattedPostalAddressDesc"
+      },
+      shipToPartnerFunction: "WE",
+      createPartnerDeterminationProcedure: "TA"
     },
 
     // CustomerSalesAreaType (design/so.xml ~line 1131) - the Provider picker's
@@ -207,6 +226,7 @@ sap.ui.define([], function () {
     customerSalesAreaProperties: {
       customer: "Customer",
       customerName: "CustomerName",
+      organizationName2: "OrganizationBPName2",
       cityName: "CityName",
       postalCode: "PostalCode",
       countryText: "Country_Text",
@@ -236,6 +256,10 @@ sap.ui.define([], function () {
     productProperties: {
       id: "Product",
       text: "Product_Text",
+      // The legacy picker displays Base Category, but the live ProductType
+      // exposes no category property. Keep the column blank rather than
+      // presenting ProductExternalID as unrelated category data.
+      group: null,
       // Client requirement (2026-09-01): I_ProductStdVH extended by
       // ZI_PRODUCTSTDVH_EXT to add this field - carried over to the item's
       // own ZZIndustryStandardName (brand) on NDC selection, see
@@ -471,12 +495,8 @@ sap.ui.define([], function () {
       "ZZ1_SKIPANC"
     ],
 
-    fixedOrderTypes: [
-      // Confirmed 2026-08-19 via design/E008_Service_Extension_Design.md §6:
-      // E008 vaccine-request order type is ZKB (replaces the old unconfirmed
-      // "ZVR1" placeholder here — see OPEN_QUESTIONS.md item 9/NOTES.md).
-      "ZKB"
-    ],
+    fixedOrderTypes: OrderModeConfig.supportedOrderTypes,
+    defaultOrderType: OrderModeConfig.defaultOrderType,
 
     // Client requirement (2026-10-01): createMode defaults seeded by
     // CreateOrderService.js#enter - Category defaults to "Direct Entry" (UI)
@@ -586,13 +606,9 @@ sap.ui.define([], function () {
 
     // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
     // definition extension action on the standard BO, name/params TBD once
-    // activated on-system) and step ③ IoH deep-create/createFromProposal
-    // (design/prompts/e008_ext_build.md — ZUI_VR_EXT companion service, not yet
-    // built/activated anywhere). Both are null = confirmed BLOCKED-BY-SERVICE,
-    // never invented — CreateOrderService.js degrades per the v3 prompt's own
-    // Step-0 rule (skip the call; affected fields stay read-only in createMode).
+    // activated on-system). Null means confirmed BLOCKED-BY-SERVICE; affected
+    // fields remain read-only in create mode.
     enrichmentAction: null,
-    iohCreateAction: null,
 
     // Session Prompt (Detail View Adjustments) 3.9: the ONLY way to add a new
     // HeaderPartner row - Container/HeaderPartner InsertRestrictions.
@@ -622,10 +638,11 @@ sap.ui.define([], function () {
       text: "OverallSDProcessStatus_Text"
     },
 
-    // HeaderPartnerType (so.xml ~line 1065) - reached only via the header's
-    // _Partner navigation (navigation.headerToPartner), never queried
-    // top-level. Session Prompt (Detail View Adjustments) 3.9.
+    // HeaderPartnerType (so.xml ~line 1065) - reached through the header's
+    // _Partner navigation for editing and queried top-level for historical
+    // AP-contact fallback searches.
     headerPartnerProperties: {
+      salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
       // Customer is the real, settable partner-number field (set via a PATCH
       // after CreatePartner, see createPartnerAction above); Partner
@@ -633,8 +650,16 @@ sap.ui.define([], function () {
       // mirror used for RO rendering of already-created rows.
       customer: "Customer",
       partner: "Partner",
+      contactPerson: "ContactPerson",
       fullName: "FullName",
+      phone: "InternationalPhoneNumber",
+      email: "EmailAddress",
       address: "FormattedPostalAddressDesc",
+      postalCode: "PostalCode",
+      cityName: "CityName",
+      country: "Country",
+      streetName: "StreetName",
+      houseNumber: "HouseNumber",
       // Dynamic per-row capability structs (so.xml ~1065) - Delete/Update
       // enablement for each HeaderPartner row must read these, not a static
       // flag (Container/HeaderPartner UpdateRestrictions/DeleteRestrictions
@@ -682,10 +707,10 @@ sap.ui.define([], function () {
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
     // custom service (zui_providerorder_srv, manifest.json model "po") -
-    // ProviderContact is the only entity this app reads from it this session;
-    // ZZ_IoH stays ON HOLD (do not wire - see 3.8/NOTES.md) and ProductUOM is
-    // unused/unwired (noted only, see OPEN_QUESTIONS.md).
+    // ProviderContact, ProviderIOH, and SoldToDetails are read from this
+    // service. ProductUOM remains unused/unwired.
     providerOrderService: {
+      serviceRoot: "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
       // TODO-VERIFY: URL follows the standard OData v4 SEGW/RAP binding-name
       // convention (design/zui_providerorder_meta.xml service definition name
       // "zui_providerorder_srv") mirrored from mainService's own
@@ -696,7 +721,47 @@ sap.ui.define([], function () {
       // /IWFND/MAINT_SERVICE or the Fiori launchpad's service catalog before
       // relying on this in a live test.
       entitySets: {
-        providerContact: "ProviderContact"
+        customerSalesArea: "CustomerSalesArea",
+        fundTypeValueHelp: "FundTypeVH",
+        providerContact: "ProviderContact",
+        providerIoh: "ProviderIOH",
+        soldToDetails: "SoldToDetails",
+        providerDeliveries: "ProvOrdDelvs"
+      },
+      // ProvOrdDelvs: the SalesOrder filter key is assumed - verify against $metadata.
+      providerDeliveryProperties: {
+        salesOrder: "SalesOrder",
+        delivery: "Delivery",
+        subsequentDocumentCategoryText: "SubsequentDocumentCategoryText",
+        deliveryCreationDate: "DeliveryCreationDate"
+      },
+      submitInventoryAction: "com.sap.gateway.srvd.zui_providerorder_srv.v0001.submitInventory",
+      customerSalesAreaProperties: {
+        customer: "Customer",
+        salesOrganization: "SalesOrganization",
+        distributionChannel: "DistributionChannel",
+        division: "Division",
+        salesOffice: "SalesOffice",
+        isActiveEntity: "IsActiveEntity"
+      },
+      fundTypeValueHelpProperties: {
+        ndc: "NDC",
+        orderIntention: "OrderIntention",
+        fundType: "FundType",
+        fundTypeText: "FundTypeText"
+      },
+      providerIohProperties: {
+        soldToParty: "SoldToParty",
+        material: "Material",
+        batch: "Batch",
+        quantity: "Quantity",
+        unit: "Unit",
+        expirationDate: "ExpirationDate",
+        brand: "Brand"
+      },
+      soldToDetailsProperties: {
+        soldToParty: "SoldToParty",
+        identificationNumber: "IdentificationNumber"
       },
       // ProviderContactType (design/zui_providerorder_meta.xml) - key is
       // BusinessPartnerCompany + BusinessPartnerPerson; BusinessPartnerCompany
@@ -742,14 +807,7 @@ sap.ui.define([], function () {
       paymentTerms: "CustomerPaymentTerms",
       salesOffice: "SalesOffice",
       salesGroup: "SalesGroup",
-      // Client requirement (2026-09-01): needed here ONLY so the create-replay
-      // step (CreateOrderService.js#_replayHeaderProperties) actually PATCHes
-      // the value entered during Create - Description is deliberately NOT
-      // rendered as an editable Input in change mode (Details.fragment.xml
-      // shows create-mode-only), so its PATCHability on an EXISTING order is
-      // still unconfirmed/out of this task's scope - verify before ever
-      // wiring a change-mode Input for it. Renamed by the backend team
-      // (2026-09-29) from ZZ_KTEXT_SDH to ZOrdDesc.
+      // Used by create replay and the existing-order Details edit session.
       description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: real, independently
       // writable field (headerProperties.category above) - confirmed no
@@ -776,26 +834,30 @@ sap.ui.define([], function () {
 
     // Issue Batch 9-30-001 §3.1 (Notes write path): SalesOrderTextType is
     // real and confirmed (design/metadata/so_C_SALESORDERMANAGE_2026-09-30.xml -
-    // Key SalesOrder+Language+LongTextID, property LongText), reached only
-    // via the header's own `_Text` navigation (never a top-level query).
+    // Key SalesOrder+Language+LongTextID, property LongText). The top-level
+    // SalesOrderText entity set is Insertable=false; create through the
+    // header's `_Text` navigation, whose Insertable capability is controlled
+    // by SalesOrderManage/__CreateByAssociationControl/_Text.
     textEntity: {
+      entitySet: "SalesOrderText",
       navigation: "_Text",
       properties: {
         salesOrder: "SalesOrder",
         language: "Language",
+        languageForEdit: "LanguageForEdit",
         longTextId: "LongTextID",
+        longTextIdForEdit: "LongTextIDForEdit",
         longText: "LongText"
-      }
+      },
+      insertProperties: {
+        language: "LanguageForEdit",
+        longTextId: "LongTextIDForEdit",
+        longText: "LongText"
+      },
+      prepareForEditAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.PrepareForEdit",
+      defaultLanguage: "E",
+      notesLongTextId: "ZVRH"
     },
-    // TODO-VERIFY(notes-long-text-id): no live backend access this session
-    // to read an existing order's own `_Text` rows and learn which
-    // LongTextID actually carries the CDC order notes (legacy KTEXT-family
-    // vs. a Z text ID, per Session Prompt Issue Batch 9-30-001 §2 Step-0) -
-    // never guessed. Left null on purpose: every notes read/write below
-    // degrades to a no-op (same BLOCKED-BY-SERVICE pattern as
-    // enrichmentAction/iohCreateAction) until a populated example is found
-    // and this constant is set to the real code. See OPEN_QUESTIONS.md.
-    notesLongTextId: null,
 
     showJurisdictionFilter: true,
     statusSource: "e008", // "standard" for temporary service, "e008" for swap-back
