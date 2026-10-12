@@ -116,8 +116,12 @@ sap.ui.define([
   // way, see "UX phasing + triad sourcing" (v5 amendment) for why these come
   // off the scratch header data rather than the fixed salesArea constant.
   function buildCreateActionParams(oScratchData) {
+    var sOrderType = oScratchData[ServiceSchema.headerProperties.salesOrderType];
+    if (ServiceSchema.fixedOrderTypes.indexOf(sOrderType) === -1) {
+      sOrderType = ServiceSchema.defaultOrderType;
+    }
     return {
-      SalesOrderType: ServiceSchema.fixedOrderTypes[0],
+      SalesOrderType: sOrderType,
       SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || ServiceSchema.salesArea.salesOrganization,
       DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || ServiceSchema.salesArea.distributionChannel,
       OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || ServiceSchema.salesArea.organizationDivision,
@@ -224,12 +228,14 @@ sap.ui.define([
     // this same context — save() below then reads whatever is there at that
     // point (the harvested values, or these seeded constants as a fallback
     // only if a picked row somehow lacked them).
-    enter: function (oModel) {
+    enter: function (oModel, sOrderType, oModeDefaults) {
       var oListBinding = oModel.bindList("/" + ServiceSchema.entitySets.header, undefined, undefined, undefined, {
         $$updateGroupId: CREATE_GROUP
       });
       var oInitialData = {};
-      oInitialData[ServiceSchema.headerProperties.salesOrderType] = ServiceSchema.fixedOrderTypes[0];
+      oInitialData[ServiceSchema.headerProperties.salesOrderType] = ServiceSchema.fixedOrderTypes.indexOf(sOrderType) !== -1
+        ? sOrderType
+        : ServiceSchema.defaultOrderType;
       oInitialData[ServiceSchema.headerProperties.salesOrganization] = ServiceSchema.salesArea.salesOrganization;
       oInitialData[ServiceSchema.headerProperties.distributionChannel] = ServiceSchema.salesArea.distributionChannel;
       oInitialData[ServiceSchema.headerProperties.division] = ServiceSchema.salesArea.organizationDivision;
@@ -237,6 +243,12 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.shippingCondition] = ServiceSchema.defaultShippingCondition;
       oInitialData[ServiceSchema.headerProperties.deliveryStatus] = ServiceSchema.defaultDeliveryStatus;
       oInitialData[ServiceSchema.headerProperties.deliveryBlockStatus] = ServiceSchema.defaultDeliveryBlockStatus;
+      Object.keys(oModeDefaults || {}).forEach(function (sDefaultKey) {
+        var sProperty = ServiceSchema.headerProperties[sDefaultKey];
+        if (sProperty && oModeDefaults[sDefaultKey] !== undefined) {
+          oInitialData[sProperty] = oModeDefaults[sDefaultKey];
+        }
+      });
       var oContext = oListBinding.create(oInitialData);
       // Deleting this transient, never-submitted context later (Cancel, or
       // save()'s own cleanup after replay) cancels its still-pending POST,

@@ -267,29 +267,29 @@
 								Order Reason above (Text when not editing, ComboBox against the
 								real /CustomerPurchaseOrderType VH entity set when editing).
 								Retires the old hardcoded Enums.CATEGORY Select entirely.
-								Client request (2026-10-01): createMode defaults this to "Direct
-								Entry" (CreateOrderService.js#enter) and keeps it read-only for
-								the lifetime of create mode - unlike every other field here,
-								never unlocked by providerChosen. -->
+								ZKB uses the service value help. ZREP uses its order-type-specific
+								four-option list from OrderModeConfig. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_CustomerPurchaseOrderType/CustomerPurchaseOrderType_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Text
+									text="{parts: [{path: 'CustomerPurchaseOrderType'}, {path: 'orderUi>/category/options'}], formatter: '.formatter.categoryText'}"
+									visible="{= !${sectionFlags>/details/editing} }"/>
 								<Select
 									width="100%"
 									selectedKey="{CustomerPurchaseOrderType}"
 									forceSelection="false"
 									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} }"
-									items="{path: '/CustomerPurchaseOrderType'}">
-									<core:Item key="{CustomerPurchaseOrderType}" text="{CustomerPurchaseOrderType_Text}" />
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: 'orderUi>/category/options'}">
+									<core:Item key="{orderUi>key}" text="{orderUi>text}" />
 								</Select>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>filterExisId}" required="false">
 								<layoutData>
@@ -318,7 +318,7 @@
 
 			<f:FormContainer title="{i18n>detailsStatus}">
 				<f:formElements>
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>colCreatedAt}" required="false">
 								<layoutData>
@@ -456,7 +456,7 @@
 
 <!-- VALUES -->
 
-			<f:FormContainer title="{i18n>detailsValue}">
+			<f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
 				<f:formElements>
 					<f:FormElement>
 						<f:label>

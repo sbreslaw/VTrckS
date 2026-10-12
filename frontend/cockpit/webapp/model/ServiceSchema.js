@@ -1,4 +1,6 @@
-sap.ui.define([], function () {
+sap.ui.define([
+  "cdc/vaccreq/model/OrderModeConfig"
+], function (OrderModeConfig) {
   "use strict";
 
   var ServiceSchema = {
@@ -493,12 +495,8 @@ sap.ui.define([], function () {
       "ZZ1_SKIPANC"
     ],
 
-    fixedOrderTypes: [
-      // Confirmed 2026-08-19 via design/E008_Service_Extension_Design.md §6:
-      // E008 vaccine-request order type is ZKB (replaces the old unconfirmed
-      // "ZVR1" placeholder here — see OPEN_QUESTIONS.md item 9/NOTES.md).
-      "ZKB"
-    ],
+    fixedOrderTypes: OrderModeConfig.supportedOrderTypes,
+    defaultOrderType: OrderModeConfig.defaultOrderType,
 
     // Client requirement (2026-10-01): createMode defaults seeded by
     // CreateOrderService.js#enter - Category defaults to "Direct Entry" (UI)

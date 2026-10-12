@@ -53,13 +53,6 @@ sap.ui.define([
     "2C": "None"
   };
 
-  // SalesOrderType -> display label for the Details section title (only ZKB
-  // is a supported order type in this app - see ServiceSchema.js#fixedOrderTypes).
-  var mOrderTypeLabel = {
-    ZKB: "Vaccine Order"
-  };
-
-
   // Extracted as plain functions (not object methods) so status formatting
   // works correctly regardless of how the caller invokes it: some XML fragments
   // reference formatters as bare strings (e.g. '.formatter.detailStatusText'),
@@ -151,6 +144,13 @@ sap.ui.define([
     return !!bColumnVisible && !sHigherLevelItem;
   }
 
+  function fnCategoryText(sCategoryKey, aOptions) {
+    var oOption = (aOptions || []).find(function (oCategoryOption) {
+      return oCategoryOption.key === sCategoryKey;
+    });
+    return oOption ? oOption.text : sCategoryKey || "";
+  }
+
   return {
     masterRequestId: function (sOrderId) {
       return sOrderId || "";
@@ -188,6 +188,10 @@ sap.ui.define([
 
     itemOptOutVisible: function (bColumnVisible, sHigherLevelItem) {
       return fnItemOptOutVisible(bColumnVisible, sHigherLevelItem);
+    },
+
+    categoryText: function (sCategoryKey, aOptions) {
+      return fnCategoryText(sCategoryKey, aOptions);
     },
 
     masterCreatedOn: function (sValue) {
@@ -313,8 +317,11 @@ sap.ui.define([
     // Section Panel title = "<order type label> <section text>" (e.g. "Vaccine
     // Order Details"/"Vaccine Order Items" for ZKB), falling back to the plain
     // i18n section text for an unmapped/not-yet-known order type.
-    orderTypeSectionTitle: function (sOrderType, sSectionText) {
-      var sLabel = mOrderTypeLabel[sOrderType];
+    orderTypeSectionTitle: function (sOrderType, sSectionText, sZkbLabel, sZrepLabel) {
+      var sLabel = {
+        ZKB: sZkbLabel,
+        ZREP: sZrepLabel
+      }[sOrderType];
       return sLabel ? (sLabel + " " + sSectionText) : sSectionText;
     },
 

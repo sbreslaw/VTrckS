@@ -42,6 +42,7 @@ sap.ui.define([
   "cdc/vaccreq/sections/SectionConfig",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/model/OrderModeConfig",
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor",
@@ -57,7 +58,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, VariantStore, Enums, MessageExtractor, PricingColumns,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -128,6 +129,9 @@ sap.ui.define([
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this));
       this.getView().setModel(this._createSectionFlagsModel(), "sectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
+      this.getView().setModel(new JSONModel(OrderModeConfig.resolveOrderType(
+        this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType")
+      ).ui), "orderUi");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
@@ -701,7 +705,7 @@ sap.ui.define([
       var oStagePromise = sSectionId === "details"
         ? this._stageHeaderNotes(oContext)
         : Promise.resolve();
-      pRemoveEmptyItems.then(function () { return pStagePromise; }).then(function () {
+      pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
         if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
           return that._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
         }
@@ -762,7 +766,13 @@ sap.ui.define([
       this.getView().unbindElement();
       this.getView().bindElement({
         path: sPath,
-        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup }
+        parameters: {
+          $$updateGroupId: ServiceSchema.editUpdateGroup,
+          $select: ServiceSchema.headerProperties.salesOrderType
+        },
+        events: {
+          dataReceived: this._syncOrderUiFromContext.bind(this)
+        }
       });
     },
 
@@ -2020,15 +2030,19 @@ sap.ui.define([
     // real service value helps, see Details.fragment.xml) can bind items/text
     // directly without a runtime i18n lookup in the XML.
     _createEnumsModel: function () {
-      var oBundle = this.getResourceBundle();
-      function resolve(aList) {
-        return aList.map(function (oEntry) {
-          return { key: oEntry.key, text: oBundle.getText(oEntry.i18nKey) };
-        });
-      }
+      var oOrderContextModel = this.getOwnerComponent().getModel("orderContext");
+      var aCreateStatusOptions = oOrderContextModel.getProperty("/createStatusOptions") || [];
+      var aEditStatusOptions = oOrderContextModel.getProperty("/editStatusOptions") || [];
       return new JSONModel({
-        STATUS: resolve(Enums.STATUS),
-        EDIT_STATUS: resolve(Enums.EDIT_STATUS)
+        STATUS: this._resolveEnumOptions(aCreateStatusOptions.length ? aCreateStatusOptions : Enums.STATUS),
+        EDIT_STATUS: this._resolveEnumOptions(aEditStatusOptions.length ? aEditStatusOptions : Enums.EDIT_STATUS)
+      });
+    },
+
+    _resolveEnumOptions: function (aOptions) {
+      var oBundle = this.getResourceBundle();
+      return aOptions.map(function (oEntry) {
+        return { key: oEntry.key, text: oBundle.getText(oEntry.i18nKey) };
       });
     },
 
@@ -2065,7 +2079,7 @@ sap.ui.define([
         contactName: "",
         employeeResponsibleId: this._getCurrentUserId(),
         employeeResponsibleName: this._getCurrentUserFullName(),
-        status: "",
+        status: this.getOwnerComponent().getModel("orderContext").getProperty("/createStatusDefault") || "",
         shipToPartyId: "",
         shipToPartyName: "",
         notes: "",
@@ -4119,7 +4133,7 @@ sap.ui.define([
       this._destroyCreateContext();
       this._resetCreateSaveState();
       this._setCreateMode(false);
-      var sHeaderSelect = ["SAP__Messages"].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
+      var sHeaderSelect = ["SAP__Messages", ServiceSchema.headerProperties.salesOrderType].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
         return ServiceSchema.updatableHeaderProperties[sKey];
       })).join(",");
       this.getView().bindElement({
@@ -4133,7 +4147,10 @@ sap.ui.define([
         // workaround bindings already in play on this view) so a change-mode
         // PATCH failure can surface the same detailed backend messages F3893
         // receives automatically. Editable fields stay in the parent entity cache.
-        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: sHeaderSelect }
+        parameters: { $$updateGroupId: ServiceSchema.editUpdateGroup, $select: sHeaderSelect },
+        events: {
+          dataReceived: this._syncOrderUiFromContext.bind(this)
+        }
       });
       this._loadHeaderNotes(this.getView().getBindingContext());
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
@@ -4157,7 +4174,13 @@ sap.ui.define([
       // setBindingContext() below (UI5 propagation rules), so without this
       // every relative field/list would keep showing the last-viewed order.
       this.getView().unbindElement();
-      var oResult = CreateOrderService.enter(this.getView().getModel());
+      var oOrderContextModel = this.getOwnerComponent().getModel("orderContext");
+      var sProviderOrderType = oOrderContextModel.getProperty("/providerOrderType");
+      var oResult = CreateOrderService.enter(
+        this.getView().getModel(),
+        sProviderOrderType,
+        oOrderContextModel.getProperty("/defaults")
+      );
       this._oCreateListBinding = oResult.listBinding;
       this._oCreateSession = oResult.session;
       this._bItemsSessionBound = false;
@@ -4167,6 +4190,7 @@ sap.ui.define([
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
+      this._applyOrderUi(sProviderOrderType);
       this._resetTransactionHistoryState("");
       this._resetItemsTableForCreate();
       this._addInitialCreateItemRows();
@@ -4179,6 +4203,70 @@ sap.ui.define([
           this._oSectionFactory.expandSection(oMeta.id);
         }
       }, this);
+    },
+
+    _applyOrderUi: function (sOrderType) {
+      var oMode = OrderModeConfig.resolveOrderType(sOrderType);
+      var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
+      this.getView().getModel("orderUi").setData(oMode.ui);
+      this.getView().getModel("enums").setProperty("/EDIT_STATUS", this._resolveEnumOptions(aEditStatusOptions));
+      this._loadCategoryOptions(oMode);
+    },
+
+    _loadCategoryOptions: function (oMode) {
+      var oOrderUiModel = this.getView().getModel("orderUi");
+      var iRequestToken = (this._iCategoryRequestToken || 0) + 1;
+
+      this._iCategoryRequestToken = iRequestToken;
+      if (oMode.categoryOptions.length) {
+        oOrderUiModel.setProperty("/category", {
+          limited: true,
+          options: oMode.categoryOptions
+        });
+        if (oMode.createCategoryDefaultKey && this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+          var oCreateContext = this.getView().getBindingContext();
+          if (oCreateContext) {
+            oCreateContext.setProperty(ServiceSchema.headerProperties.category, oMode.createCategoryDefaultKey);
+          }
+        }
+        return;
+      }
+
+      var oListBinding = this.getView().getModel().bindList(
+        "/" + ServiceSchema.entitySets.customerPurchaseOrderType,
+        undefined,
+        undefined,
+        undefined,
+        { $select: ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode + "," + ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText }
+      );
+
+      oOrderUiModel.setProperty("/category", {
+        limited: false,
+        options: []
+      });
+
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        var aServiceOptions = aContexts.map(function (oContext) {
+          return {
+            key: oContext.getProperty(ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode),
+            text: oContext.getProperty(ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText)
+          };
+        });
+
+        oListBinding.destroy();
+        if (this._iCategoryRequestToken !== iRequestToken) {
+          return;
+        }
+
+        oOrderUiModel.setProperty("/category/options", aServiceOptions);
+      }.bind(this), function () {
+        oListBinding.destroy();
+      });
+    },
+
+    _syncOrderUiFromContext: function () {
+      var oContext = this.getView().getBindingContext();
+      this._applyOrderUi(oContext && oContext.getProperty(ServiceSchema.headerProperties.salesOrderType));
     },
 
     _onMasterMatched: function () {
@@ -4299,7 +4387,9 @@ sap.ui.define([
         oTitle.bindProperty("text", {
           parts: [
             { path: ServiceSchema.headerProperties.salesOrderType },
-            { path: "i18n>" + oTitleMeta.textKey }
+            { path: "i18n>" + oTitleMeta.textKey },
+            { path: "i18n>orderTypeZkb" },
+            { path: "i18n>orderTypeZrep" }
           ],
           formatter: formatter.orderTypeSectionTitle
         });
