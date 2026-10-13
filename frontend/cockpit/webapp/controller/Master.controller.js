@@ -1131,36 +1131,54 @@ sap.ui.define([
       var oProps = ServiceSchema.headerPartnerProperties;
       var aSelect = [ServiceSchema.keys.orderId, oProps.partnerFunction, oProps.fullName,
         oProps.contactPerson, oProps.phone, oProps.email].join(",");
+      var aOrderIds = [];
       oTable.getRows().forEach(function (oRow) {
         var oContext = oRow.getBindingContext();
         var sOrderId = oContext && oContext.getProperty(ServiceSchema.keys.orderId);
-        if (!sOrderId || this._mMasterContactRequests[sOrderId]) {
-          return;
+        if (sOrderId && !this._mMasterContactRequests[sOrderId]) {
+          this._mMasterContactRequests[sOrderId] = true;
+          aOrderIds.push(sOrderId);
         }
-        this._mMasterContactRequests[sOrderId] = true;
-        var sEscapedOrderId = String(sOrderId).replace(/'/g, "''");
-        var sPath = "/" + ServiceSchema.entitySets.headerPartner +
-          "(SalesOrder='" + sEscapedOrderId + "',PartnerFunction='AP')";
-        var oContactBinding = oODataModel.bindContext(sPath, undefined, { $select: aSelect });
-        var fnSetContact = function (oContact) {
-          var mContacts = Object.assign({}, oContactModel.getProperty("/byOrder"));
-          mContacts[sOrderId] = oContact;
-          oContactModel.setProperty("/byOrder", mContacts);
-        };
-        oContactBinding.requestObject().then(function (oContact) {
+      }, this);
+      if (!aOrderIds.length) {
+        return;
+      }
+      // Collection query, not key reads: an order without an AP partner 404s on a
+      // key read and the backend then aborts every other read in the same $batch.
+      var oContactBinding = oODataModel.bindList("/" + ServiceSchema.entitySets.headerPartner, undefined, undefined, [
+        new Filter({
+          filters: aOrderIds.map(function (sOrderId) {
+            return new Filter(oProps.salesOrder, FilterOperator.EQ, sOrderId);
+          }),
+          and: false
+        }),
+        new Filter(oProps.partnerFunction, FilterOperator.EQ, "AP")
+      ], { $select: aSelect });
+      var fnSetContacts = function (mFound) {
+        var mContacts = Object.assign({}, oContactModel.getProperty("/byOrder"));
+        aOrderIds.forEach(function (sOrderId) {
+          mContacts[sOrderId] = mFound[sOrderId] || { display: "", tooltip: "" };
+        });
+        oContactModel.setProperty("/byOrder", mContacts);
+      };
+      oContactBinding.requestContexts(0, aOrderIds.length).then(function (aContexts) {
+        var mFound = {};
+        aContexts.forEach(function (oCtx) {
+          var oContact = oCtx.getObject();
           var sContactPerson = oContact[oProps.contactPerson];
           var sName = oContact[oProps.fullName] || (sContactPerson && sContactPerson !== "0" ? sContactPerson : "");
           var aDetails = [oContact[oProps.email], oContact[oProps.phone]].filter(Boolean);
-          fnSetContact({
+          mFound[oContact[oProps.salesOrder]] = {
             display: sName || "",
             tooltip: aDetails.length ? [sName].concat(aDetails).filter(Boolean).join(" · ") : (sName || "")
-          });
-        }).catch(function () {
-          fnSetContact({ display: "", tooltip: "" });
-        }).finally(function () {
-          oContactBinding.destroy();
+          };
         });
-      }, this);
+        fnSetContacts(mFound);
+      }).catch(function () {
+        fnSetContacts({});
+      }).finally(function () {
+        oContactBinding.destroy();
+      });
     },
 
     // CRUD Task 1 v3 (In-Place Create): the Create dialog is removed — creation
