@@ -1036,7 +1036,7 @@ sap.ui.define([
       // ServiceSchema.js navigation comment / PHASE2_AUDIT.md); the control stays
       // disabled (see _applyFilterAvailability), so nothing is pushed here.
       this._pushIfValue(aFilters, ServiceSchema.headerProperties.deliveryBlockReason, oView.byId("filterDeliveryBlockReason").getSelectedKey(), FilterOperator.EQ);
-      this._pushIfValue(aFilters, ServiceSchema.headerProperties.salesOrderType, oView.byId("filterSalesOrderType").getSelectedKey(), FilterOperator.EQ);
+      aFilters.push(this._getOrderTypeFilter());
 
       if (ServiceSchema.showJurisdictionFilter) {
         this._pushIfValue(aFilters, ServiceSchema.headerProperties.salesOffice, oView.byId("filterJurisdiction").getValue(), FilterOperator.Contains);
@@ -1381,7 +1381,14 @@ sap.ui.define([
     // user explicitly searches (presses Go) — per requirement, the list should
     // not show all results on initial load.
     _getNoResultsFilter: function () {
-      return [new Filter(ServiceSchema.keys.orderId, FilterOperator.EQ, "")];
+      return [new Filter(ServiceSchema.keys.orderId, FilterOperator.EQ, ""), this._getOrderTypeFilter()];
+    },
+
+    // The list is scoped to the launched order type (startup parameter), never
+    // to the locked ComboBox's own state.
+    _getOrderTypeFilter: function () {
+      return new Filter(ServiceSchema.headerProperties.salesOrderType, FilterOperator.EQ,
+        this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
     },
 
     _pushOrFilter: function (aFilters, aPaths, sValue, sOperator) {
@@ -1450,17 +1457,17 @@ sap.ui.define([
     },
 
     _populateSalesOrderTypeItems: function () {
-      // Optional Order Type filter choices, restricted to the E008 allow-list
-      // (ServiceSchema.fixedOrderTypes). NOTE: this is opt-in only — search no
-      // longer forces this restriction on every query (removed 2026-08-03: it
-      // was an unconfirmed placeholder that silently excluded real orders whose
-      // SalesOrderType wasn't in this list from ID/other searches, even though
-      // they appear on the unfiltered initial master-list load — see NOTES.md).
+      // Display-only, locked (editable=false): shows the launched order type
+      // (orderContext>/providerOrderType). The filter itself is always applied
+      // from orderContext via _getOrderTypeFilter - the 2026-08-03 "opt-in
+      // only" rule (unconfirmed placeholder list) no longer applies now that
+      // the launch parameter is a deliberate scope (see NOTES.md).
       var oControl = this.byId("filterSalesOrderType");
       oControl.removeAllItems();
       ServiceSchema.fixedOrderTypes.forEach(function (sType) {
         oControl.addItem(new Item({ key: sType, text: sType }));
       });
+      oControl.setSelectedKey(this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
     },
 
     // --- Master table columns: layout (order/visibility) driven by VariantStore
@@ -1995,7 +2002,6 @@ sap.ui.define([
         { id: "filterCreatedBy", type: "value" },
         { id: "filterJurisdiction", type: "value" },
         { id: "filterDeliveryBlockReason", type: "key" },
-        { id: "filterSalesOrderType", type: "key" },
         { id: "filterStatus", type: "keys" },
         { id: "filterCreatedOn", type: "dateRange" }
       ];

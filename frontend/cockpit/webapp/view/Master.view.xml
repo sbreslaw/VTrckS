@@ -76,6 +76,12 @@
                     <MultiInput id="filterNdc" showValueHelp="true" valueHelpRequest=".onNdcFilterValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
+                <!-- Locked to the launch parameter (orderContext>/providerOrderType); Master.controller.js#_getOrderTypeFilter applies it on every request. -->
+                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <ComboBox id="filterSalesOrderType" editable="false" tooltip="{i18n>filterSalesOrderTypeLocked}" />
+                  </fb:control>
+                </fb:FilterGroupItem>
 
                 <!-- Dialog-only group ("Filters" adapt dialog only) -->
                 <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="dialog" visibleInFilterBar="false">
@@ -96,11 +102,6 @@
                 <fb:FilterGroupItem name="createdBy" label="{i18n>filterCreatedBy}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
                     <Input id="filterCreatedBy" />
-                  </fb:control>
-                </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <ComboBox id="filterSalesOrderType" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="dialog" visibleInFilterBar="false">
