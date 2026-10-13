@@ -306,6 +306,7 @@
 								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
 									maxLength="30" visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisId/editable} !== false }"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
 							</VBox>
 						</f:fields>

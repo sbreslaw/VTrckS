@@ -22,7 +22,11 @@ sap.ui.define([
   // per-button code path. `oMeta.headerAction` adds an enabled command beside
   // the title, before the spacer, for section-specific workflows such as
   // Inventory's Edit List loader.
-  function SectionFactory(oView, aMeta, fnOnContentLoaded, sFlagsModel, sContainerId) {
+  // `sOrderUiModel` (6th arg, default "orderUi") drives each panel's
+  // `visible` from <model>>/sections/<id>/visible (OrderModeConfig.js); a view
+  // without that model (ItemDetail) leaves every panel visible. Hidden panels
+  // never load their fragment and ignore expandSection.
+  function SectionFactory(oView, aMeta, fnOnContentLoaded, sFlagsModel, sContainerId, sOrderUiModel) {
     this._oView = oView;
     this._aMeta = aMeta || [];
     this._mLoaded = {};
@@ -34,6 +38,7 @@ sap.ui.define([
     this._fnOnContentLoaded = fnOnContentLoaded;
     this._sFlagsModel = sFlagsModel || "sectionFlags";
     this._sContainerId = sContainerId || "sectionsContainer";
+    this._sOrderUiModel = sOrderUiModel || "orderUi";
   }
 
   SectionFactory.prototype.ensurePanels = function () {
@@ -132,6 +137,10 @@ sap.ui.define([
         headerToolbar: oToolbar,
         expandable: true,
         expanded: iIndex === 0 || !!oMeta.expanded,
+        visible: {
+          path: this._sOrderUiModel + ">/sections/" + oMeta.id + "/visible",
+          formatter: function (bVisible) { return bVisible !== false; }
+        },
         expand: this._oView.getController().onExpandPanel.bind(this._oView.getController())
       });
       oPanel.addStyleClass("detailSectionPanel");
@@ -147,7 +156,7 @@ sap.ui.define([
 
   SectionFactory.prototype.ensurePanelContent = function (oPanel) {
     var sId = oPanel.getId();
-    if (this._mLoaded[sId]) {
+    if (this._mLoaded[sId] || !oPanel.getVisible()) {
       return;
     }
     // Mark as loading immediately (not just after Fragment.load resolves) so
@@ -197,7 +206,7 @@ sap.ui.define([
   // within it), but this keeps the behavior explicit for future callers.
   SectionFactory.prototype.expandSection = function (sSectionId) {
     var oPanel = this._oView.byId(sSectionId);
-    if (!oPanel) {
+    if (!oPanel || !oPanel.getVisible()) {
       return;
     }
     oPanel.setExpanded(true);

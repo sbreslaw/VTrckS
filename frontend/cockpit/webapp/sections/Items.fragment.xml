@@ -90,14 +90,14 @@
           <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
-            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" />
+            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
           <!-- Brand is authoritative from the selected Product. A scratch row
             cannot resolve _Product until it is posted, so the locally copied
             ZZIndustryStandardName only bridges that pre-POST interval.
             §3.2: indented for an ancillary child row (HigherLevelItem set). -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${_Product/IndustryStandardName} || ${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
           <Input value="{path: 'Product', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/ndcCode/editable} !== false }"
             showValueHelp="true"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
@@ -116,7 +116,7 @@
                ancillary quantities); a two-way binding's own internal PATCH here would
                race that refresh exactly like the opt-out checkbox's did. -->
           <Input value="{path: 'RequestedQuantity', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" type="Number" textAlign="End" change=".onProdQtyChange"/>
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/qty/editable} !== false }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
                unit EA is not defined" SaveChanges error, see createPayloadUom
@@ -127,7 +127,7 @@
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
           <Select selectedKey="{path: 'MaterialGroup1', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} }" change=".onOrderIntentionChange">
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/orderIntention/editable} !== false }" change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
             <core:Item key="MIX" text="Adult, Pediatric" />
@@ -135,7 +135,7 @@
           <!-- MVGR2 remains MaterialGroup2. Each row binds its values lazily to
                po>/FundTypeVH, filtered by that row's NDC and Order Intention. -->
           <Select selectedKey="{path: 'MaterialGroup2', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" visible="{itemsColumns>/fundType}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !!%{MaterialGroup1} &amp;&amp; !%{HigherLevelItem} }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !!%{MaterialGroup1} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/fundType/editable} !== false }"
             change=".onFundTypeChange" modelContextChange=".onFundTypeModelContextChange" />
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
@@ -150,7 +150,7 @@
           <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
             visible="{itemsColumns>/rejectionReason}"
             items="{rejectionReasons>/list}"
-            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (!${sectionFlags>/createMode} || %{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason})) }"
+            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (!${sectionFlags>/createMode} || %{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason}) &amp;&amp; ${orderUi>/columns/rejectionReason/editable} !== false) }"
             change=".onItemRejectionReasonChange">
             <core:Item key="{rejectionReasons>key}" text="{rejectionReasons>text}" />
           </Select>
