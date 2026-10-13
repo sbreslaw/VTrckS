@@ -46,7 +46,9 @@ sap.ui.define([], function () {
           detailsValue: { visible: false }
         },
         columns: {},
-        sections: {}
+        sections: {
+          inventory: { visible: false }
+        }
       }
     }
   };
