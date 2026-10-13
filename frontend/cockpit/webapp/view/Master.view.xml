@@ -76,8 +76,8 @@
                     <MultiInput id="filterNdc" showValueHelp="true" valueHelpRequest=".onNdcFilterValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <!-- Locked to the launch parameter (orderContext>/providerOrderType); Master.controller.js#_getOrderTypeFilter applies it on every request. -->
-                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="default" visibleInFilterBar="true">
+                <!-- Locked to the launch parameter (orderContext>/providerOrderType); Master.controller.js#_getOrderTypeFilter applies it on every request. Not shown in the bar, read-only in Adapt Filters. -->
+                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
                     <ComboBox id="filterSalesOrderType" editable="false" tooltip="{i18n>filterSalesOrderTypeLocked}" />
                   </fb:control>
