@@ -4220,7 +4220,7 @@ sap.ui.define([
       var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
       var oFlags = oView.getModel("sectionFlags");
       var oNav = oView.getModel("sectionsNav");
-      oView.getModel("orderUi").setData(oMode.ui);
+      oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui));
       this._aSectionMeta.forEach(function (oMeta, iIndex) {
         oNav.setProperty("/list/" + iIndex + "/visible", OrderModeConfig.uiFlag(oMode.ui, "sections", oMeta.id, "visible"));
         if (oMeta.editable) {
@@ -4354,8 +4354,8 @@ sap.ui.define([
         parts: [
           { path: ServiceSchema.keys.orderId },
           { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName },
-          { path: "i18n>detailTitlePrefix" },
-          { path: "i18n>detailTitle" }
+          { path: "orderUi>/title" },
+          { path: "orderUi>/title" }
         ],
         formatter: formatter.detailTitle.bind(formatter)
       });
@@ -4392,7 +4392,7 @@ sap.ui.define([
       this._bindDetailsSectionTitle();
     },
 
-    // Details/Items section Panel titles = "<order type label> Details"/"...
+    // Details/Items section Panel titles = "<order type title> Details"/"...
     // Items" (formatter.orderTypeSectionTitle) - a separate method (not folded
     // into _bindDetailHeader) because the Panels/Titles are created lazily by
     // SectionFactory.ensurePanels() and may not exist yet the first time
@@ -4408,10 +4408,8 @@ sap.ui.define([
         }
         oTitle.bindProperty("text", {
           parts: [
-            { path: ServiceSchema.headerProperties.salesOrderType },
-            { path: "i18n>" + oTitleMeta.textKey },
-            { path: "i18n>orderTypeZkb" },
-            { path: "i18n>orderTypeZrep" }
+            { path: "orderUi>/title" },
+            { path: "i18n>" + oTitleMeta.textKey }
           ],
           formatter: formatter.orderTypeSectionTitle
         });
