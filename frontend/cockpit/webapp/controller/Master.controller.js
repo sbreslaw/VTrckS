@@ -1313,6 +1313,7 @@ sap.ui.define([
           columns: [
             { label: oBundle.getText("colRequestId"), property: ServiceSchema.keys.orderId },
             { label: oBundle.getText("colDescription"), property: ServiceSchema.headerProperties.description },
+            { label: oBundle.getText("colSalesOrderType"), property: ServiceSchema.headerProperties.salesOrderType },
             { label: oBundle.getText("colProvider"), property: ServiceSchema.headerProperties.providerName },
             { label: oBundle.getText("colStatus"), property: ServiceSchema.headerProperties.userStatus },
             { label: oBundle.getText("colCreatedAt"), property: ServiceSchema.headerProperties.createdOn },
@@ -1546,6 +1547,25 @@ sap.ui.define([
             return new Text({
               wrapping: false,
               text: { path: ServiceSchema.headerProperties.description, formatter: formatter.masterDescription.bind(formatter) }
+            });
+          }
+        },
+        {
+          key: "salesOrderType", i18nKey: "colSalesOrderType", hAlign: "Begin", width: "10rem",
+          sortPath: ServiceSchema.headerProperties.salesOrderType,
+          createCell: function () {
+            return new Text({
+              wrapping: false,
+              text: {
+                parts: [
+                  { path: ServiceSchema.headerProperties.salesOrderType },
+                  { path: "orderContext>/orderTypes" }
+                ],
+                formatter: function (sType, aTypes) {
+                  var oType = (aTypes || []).filter(function (oEntry) { return oEntry.orderType === sType; })[0];
+                  return oType ? oType.title : (sType || "");
+                }
+              }
             });
           }
         },

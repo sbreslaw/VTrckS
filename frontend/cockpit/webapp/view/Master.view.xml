@@ -77,7 +77,7 @@
                   </fb:control>
                 </fb:FilterGroupItem>
                 <!-- Optional: narrows to one of the category's READ-enabled types; Master.controller.js#_getOrderTypeFilter always applies the type scope. -->
-                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="dialog" visibleInFilterBar="false">
+                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
                     <ComboBox id="filterSalesOrderType" showClearIcon="true" />
                   </fb:control>
