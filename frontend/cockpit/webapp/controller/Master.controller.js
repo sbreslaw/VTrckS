@@ -163,7 +163,6 @@ sap.ui.define([
           key: ServiceSchema.keys.orderId,
           description: ServiceSchema.headerProperties.providerName,
           keyLabel: "colRequestId",
-          keyLabelArgs: [this._getOrderTitle()],
           descriptionLabel: "colProvider"
         },
         {
@@ -194,7 +193,7 @@ sap.ui.define([
         oInput.setFilterSuggests(false);
         oInput.setStartSuggestion(1);
         oInput.addSuggestionColumn(new MColumn({
-          header: new Text({ text: oBundle.getText(oConfig.keyLabel, oConfig.keyLabelArgs) })
+          header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
         }));
         oInput.addSuggestionColumn(new MColumn({
           header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
@@ -853,7 +852,7 @@ sap.ui.define([
           path: ServiceSchema.headerProperties.providerId,
           selectionOnly: true
         },
-        filterRequestId: { label: oBundle.getText("filterRequestId", [this._getOrderTitle()]), path: ServiceSchema.keys.orderId },
+        filterRequestId: { label: oBundle.getText("filterRequestId"), path: ServiceSchema.keys.orderId },
         filterExisId: { label: oBundle.getText("filterExisId"), path: ServiceSchema.headerProperties.exisId },
         filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId }
       }[sControlId];
@@ -1185,8 +1184,20 @@ sap.ui.define([
     // CRUD Task 1 v3 (In-Place Create): the Create dialog is removed — creation
     // now happens in the Detail view itself (route "create"), which owns the
     // whole transient-context/save/cancel flow (Detail.controller.js).
-    onCreateRequest: function () {
-      this._oRouter.navTo("create", {}, false);
+    onCreateRequest: function (oEvent) {
+      this._oRouter.navTo("create", {
+        orderType: oEvent.getSource().getBindingContext("orderContext").getProperty("orderType")
+      }, false);
+    },
+
+    // Factory, not a template: `visible` must bind the leaf flag path so a runtime flag flip re-renders.
+    createOrderTypeButton: function (sId, oContext) {
+      return new Button(sId, {
+        text: { parts: ["i18n>masterCreateTyped", "orderContext>title"], formatter: formatter.formatText },
+        type: "Transparent",
+        visible: "{orderAuth>/types/" + oContext.getProperty("orderType") + "/CREATE}",
+        press: this.onCreateRequest.bind(this)
+      });
     },
 
     // Detail.controller.js publishes {orderId} on the "app"/"orderCreated"
@@ -1300,7 +1311,7 @@ sap.ui.define([
       var oSpreadsheet = new Spreadsheet({
         workbook: {
           columns: [
-            { label: oBundle.getText("colRequestId", [this._getOrderTitle()]), property: ServiceSchema.keys.orderId },
+            { label: oBundle.getText("colRequestId"), property: ServiceSchema.keys.orderId },
             { label: oBundle.getText("colDescription"), property: ServiceSchema.headerProperties.description },
             { label: oBundle.getText("colProvider"), property: ServiceSchema.headerProperties.providerName },
             { label: oBundle.getText("colStatus"), property: ServiceSchema.headerProperties.userStatus },
@@ -1403,15 +1414,34 @@ sap.ui.define([
       return [new Filter(ServiceSchema.keys.orderId, FilterOperator.EQ, ""), this._getOrderTypeFilter()];
     },
 
-    // The list is scoped to the launched order type (startup parameter), never
-    // to the locked ComboBox's own state.
+    // Always the category's READ-enabled types (OR), optionally narrowed to the
+    // Adapt-Filters selection; never absent, so the list is never unscoped.
     _getOrderTypeFilter: function () {
-      return new Filter(ServiceSchema.headerProperties.salesOrderType, FilterOperator.EQ,
-        this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
+      var sPath = ServiceSchema.headerProperties.salesOrderType;
+      var aTypes = this._getAuthorizedOrderTypes("READ").map(function (oType) {
+        return oType.orderType;
+      });
+      var sSelected = this.byId("filterSalesOrderType").getSelectedKey();
+      if (sSelected) {
+        aTypes = aTypes.indexOf(sSelected) !== -1 ? [sSelected] : [];
+      }
+      if (!aTypes.length) {
+        return new Filter(ServiceSchema.keys.orderId, FilterOperator.EQ, "");
+      }
+      return new Filter({
+        filters: aTypes.map(function (sType) {
+          return new Filter(sPath, FilterOperator.EQ, sType);
+        }),
+        and: false
+      });
     },
 
-    _getOrderTitle: function () {
-      return this.getOwnerComponent().getModel("orderContext").getProperty("/title");
+    _getAuthorizedOrderTypes: function (sAction) {
+      var oComponent = this.getOwnerComponent();
+      var oAuth = oComponent.getModel("orderAuth");
+      return (oComponent.getModel("orderContext").getProperty("/orderTypes") || []).filter(function (oType) {
+        return oAuth.getProperty("/types/" + oType.orderType + "/" + sAction) === true;
+      });
     },
 
     _pushOrFilter: function (aFilters, aPaths, sValue, sOperator) {
@@ -1480,17 +1510,11 @@ sap.ui.define([
     },
 
     _populateSalesOrderTypeItems: function () {
-      // Display-only, locked (editable=false): shows the launched order type
-      // (orderContext>/providerOrderType). The filter itself is always applied
-      // from orderContext via _getOrderTypeFilter - the 2026-08-03 "opt-in
-      // only" rule (unconfirmed placeholder list) no longer applies now that
-      // the launch parameter is a deliberate scope (see NOTES.md).
       var oControl = this.byId("filterSalesOrderType");
       oControl.removeAllItems();
-      ServiceSchema.fixedOrderTypes.forEach(function (sType) {
-        oControl.addItem(new Item({ key: sType, text: sType }));
+      this._getAuthorizedOrderTypes("READ").forEach(function (oType) {
+        oControl.addItem(new Item({ key: oType.orderType, text: oType.title }));
       });
-      oControl.setSelectedKey(this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
     },
 
     // --- Master table columns: layout (order/visibility) driven by VariantStore
@@ -1501,7 +1525,7 @@ sap.ui.define([
       var that = this;
       return [
         {
-          key: "requestId", i18nKey: "colRequestId", i18nArgs: [that._getOrderTitle()], hAlign: "Begin", width: "10rem",
+          key: "requestId", i18nKey: "colRequestId", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             return new Link({
@@ -1740,7 +1764,7 @@ sap.ui.define([
       aVisibleDefs.forEach(function (oDef) {
         var sWidth = (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem";
         var oColumn = new Column({
-          label: new Text({ text: oBundle.getText(oDef.i18nKey, oDef.i18nArgs) }),
+          label: new Text({ text: oBundle.getText(oDef.i18nKey) }),
           template: oDef.createCell(),
           hAlign: oDef.hAlign || "Begin",
           width: sWidth,
@@ -2025,6 +2049,7 @@ sap.ui.define([
         { id: "filterCreatedBy", type: "value" },
         { id: "filterJurisdiction", type: "value" },
         { id: "filterDeliveryBlockReason", type: "key" },
+        { id: "filterSalesOrderType", type: "key" },
         { id: "filterStatus", type: "keys" },
         { id: "filterCreatedOn", type: "dateRange" }
       ];
