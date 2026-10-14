@@ -183,7 +183,7 @@ sap.ui.define([
           parts: [
             { path: "SalesOrder" },
             { path: "SalesOrderItem" },
-            { path: "i18n>detailTitlePrefix" },
+            { path: "orderContext>/title" },
             { path: "i18n>itemDetailItemPrefix" }
           ],
           formatter: formatter.itemDetailSubtitle.bind(formatter)

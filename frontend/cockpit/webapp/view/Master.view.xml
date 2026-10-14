@@ -51,7 +51,7 @@
                     <MultiInput id="filterProviderPin" showValueHelp="true" valueHelpRequest=".onProviderPinValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
+                <fb:FilterGroupItem name="requestId" label="{parts: ['i18n>filterRequestId', 'orderContext>/title'], formatter: '.formatter.formatText'}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
                     <MultiInput id="filterRequestId" showValueHelp="true" valueHelpRequest=".onConditionValueHelpRequest" />
                   </fb:control>
@@ -76,8 +76,8 @@
                     <MultiInput id="filterNdc" showValueHelp="true" valueHelpRequest=".onNdcFilterValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <!-- Locked to the launch parameter (orderContext>/providerOrderType); Master.controller.js#_getOrderTypeFilter applies it on every request. -->
-                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="default" visibleInFilterBar="true">
+                <!-- Locked to the launch parameter (orderContext>/providerOrderType); Master.controller.js#_getOrderTypeFilter applies it on every request. Not shown in the bar, read-only in Adapt Filters. -->
+                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
                     <ComboBox id="filterSalesOrderType" editable="false" tooltip="{i18n>filterSalesOrderTypeLocked}" />
                   </fb:control>
@@ -162,7 +162,7 @@
           </t:noData>
           <t:extension>
             <OverflowToolbar class="masterTableToolbar">
-              <Title text="{= ${i18n>masterTitle} + ' (' + ${view>/masterCount} + ')'}" level="H3" />
+              <Title text="{parts: ['i18n>masterTitle', 'orderContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
               <ToolbarSpacer />
               <Button
                 text="{i18n>masterCreateButton}"

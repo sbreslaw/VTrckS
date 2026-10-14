@@ -163,6 +163,7 @@ sap.ui.define([
           key: ServiceSchema.keys.orderId,
           description: ServiceSchema.headerProperties.providerName,
           keyLabel: "colRequestId",
+          keyLabelArgs: [this._getOrderTitle()],
           descriptionLabel: "colProvider"
         },
         {
@@ -193,7 +194,7 @@ sap.ui.define([
         oInput.setFilterSuggests(false);
         oInput.setStartSuggestion(1);
         oInput.addSuggestionColumn(new MColumn({
-          header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
+          header: new Text({ text: oBundle.getText(oConfig.keyLabel, oConfig.keyLabelArgs) })
         }));
         oInput.addSuggestionColumn(new MColumn({
           header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
@@ -852,7 +853,7 @@ sap.ui.define([
           path: ServiceSchema.headerProperties.providerId,
           selectionOnly: true
         },
-        filterRequestId: { label: oBundle.getText("filterRequestId"), path: ServiceSchema.keys.orderId },
+        filterRequestId: { label: oBundle.getText("filterRequestId", [this._getOrderTitle()]), path: ServiceSchema.keys.orderId },
         filterExisId: { label: oBundle.getText("filterExisId"), path: ServiceSchema.headerProperties.exisId },
         filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId }
       }[sControlId];
@@ -1299,7 +1300,7 @@ sap.ui.define([
       var oSpreadsheet = new Spreadsheet({
         workbook: {
           columns: [
-            { label: oBundle.getText("colRequestId"), property: ServiceSchema.keys.orderId },
+            { label: oBundle.getText("colRequestId", [this._getOrderTitle()]), property: ServiceSchema.keys.orderId },
             { label: oBundle.getText("colDescription"), property: ServiceSchema.headerProperties.description },
             { label: oBundle.getText("colProvider"), property: ServiceSchema.headerProperties.providerName },
             { label: oBundle.getText("colStatus"), property: ServiceSchema.headerProperties.userStatus },
@@ -1409,6 +1410,10 @@ sap.ui.define([
         this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
     },
 
+    _getOrderTitle: function () {
+      return this.getOwnerComponent().getModel("orderContext").getProperty("/title");
+    },
+
     _pushOrFilter: function (aFilters, aPaths, sValue, sOperator) {
       if (!sValue) {
         return;
@@ -1496,7 +1501,7 @@ sap.ui.define([
       var that = this;
       return [
         {
-          key: "requestId", i18nKey: "colRequestId", hAlign: "Begin", width: "10rem",
+          key: "requestId", i18nKey: "colRequestId", i18nArgs: [that._getOrderTitle()], hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             return new Link({
@@ -1735,7 +1740,7 @@ sap.ui.define([
       aVisibleDefs.forEach(function (oDef) {
         var sWidth = (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem";
         var oColumn = new Column({
-          label: new Text({ text: oBundle.getText(oDef.i18nKey) }),
+          label: new Text({ text: oBundle.getText(oDef.i18nKey, oDef.i18nArgs) }),
           template: oDef.createCell(),
           hAlign: oDef.hAlign || "Begin",
           width: sWidth,
