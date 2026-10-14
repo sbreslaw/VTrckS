@@ -63,7 +63,7 @@
       <f:DynamicPageHeader class="detailAnchorHeader">
         <HBox id="detailAnchorBar" wrap="NoWrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}" class="detailAnchorBar">
           <items>
-              <Link text="{sectionsNav>title}" press=".onAnchorPress" class="detailAnchorLink">
+              <Link text="{sectionsNav>title}" visible="{sectionsNav>visible}" press=".onAnchorPress" class="detailAnchorLink">
               <customData>
                 <core:CustomData key="panelId" value="{sectionsNav>id}" writeToDom="false" />
               </customData>

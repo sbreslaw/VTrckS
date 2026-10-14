@@ -15,9 +15,19 @@ sap.ui.define([], function () {
     { key: "01", text: "Telephone call" }
   ];
 
-  // The existing views are the shared baseline. Add only confirmed mode
-  // differences here, then bind the corresponding field, column, or section
-  // to orderContext>/ui in its owning fragment/factory.
+  // The existing views are the shared baseline; add only confirmed per-type
+  // differences here. `ui` is the single UI-config source, exposed to the
+  // Detail view as the `orderUi` model (Detail.controller.js#_applyOrderUi):
+  //   kinds  - fields, fieldGroups (Details.fragment.xml), columns (Items
+  //            table, ITEMS_COLUMN_KEYS), sections (SectionConfig.js ids)
+  //   flags  - visible, editable; both default to true when absent
+  //   XML    - visible="{= ${orderUi>/<kind>/<id>/visible} !== false }"
+  //            (editable: append "&& ${orderUi>/<kind>/<id>/editable} !== false")
+  //   JS     - uiFlag(oUi, kind, id, flag)
+  // Ids currently configured: fields detailsExisId, detailsCreatedAt;
+  // fieldGroups detailsValue; sections inventory. Sections and columns are
+  // wired generically for every id; for fields/fieldGroups add the XML binding
+  // when you add the config entry.
   var ORDER_TYPES = {
     ZKB: {
       orderType: "ZKB",
@@ -78,12 +88,22 @@ sap.ui.define([], function () {
     return resolveOrderType(oStartupParameters && oStartupParameters[STARTUP_PARAMETER]);
   }
 
+  function uiFlag(oUi, sKind, sId, sFlag, bDefault) {
+    var oEntry = oUi && oUi[sKind] && oUi[sKind][sId];
+    var vValue = oEntry && oEntry[sFlag];
+    if (typeof vValue === "boolean") {
+      return vValue;
+    }
+    return bDefault !== false;
+  }
+
   return {
     startupParameter: STARTUP_PARAMETER,
     defaultOrderType: DEFAULT_ORDER_TYPE,
     supportedOrderTypes: Object.keys(ORDER_TYPES),
     normalizeOrderType: normalizeOrderType,
     resolveOrderType: resolveOrderType,
-    resolve: resolve
+    resolve: resolve,
+    uiFlag: uiFlag
   };
 });

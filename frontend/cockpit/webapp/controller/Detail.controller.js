@@ -129,9 +129,7 @@ sap.ui.define([
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this));
       this.getView().setModel(this._createSectionFlagsModel(), "sectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
-      this.getView().setModel(new JSONModel(OrderModeConfig.resolveOrderType(
-        this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType")
-      ).ui), "orderUi");
+      this.getView().setModel(new JSONModel({}), "orderUi");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
@@ -182,6 +180,7 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
+      this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
 
     },
 
@@ -369,9 +368,12 @@ sap.ui.define([
     _getItemsColumnVisibility: function () {
       var oData = VariantStore.load(ITEMS_COLUMNS_KEY);
       var oSaved = oData.variants && oData.variants.layout;
+      var oOrderUi = this.getView().getModel("orderUi").getData();
       var oVisibility = {};
       ITEMS_COLUMN_KEYS.forEach(function (sKey) {
-        oVisibility[sKey] = sKey === "rejectionReason" || !(oSaved && oSaved[sKey] === false);
+        // An order-type-hidden column wins over the user's saved layout.
+        oVisibility[sKey] = OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible") &&
+          (sKey === "rejectionReason" || !(oSaved && oSaved[sKey] === false));
       });
       return oVisibility;
     },
@@ -429,9 +431,11 @@ sap.ui.define([
     onItemsPersonalize: function (oEvent) {
       var that = this;
       var oBundle = this.getResourceBundle();
+      var oOrderUi = this.getView().getModel("orderUi").getData();
       var oWorkingModel = new JSONModel({
         rows: ITEMS_COLUMN_KEYS.filter(function (sKey) {
-          return sKey !== "rowAction" && sKey !== "rejectionReason";
+          return sKey !== "rowAction" && sKey !== "rejectionReason" &&
+            OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
         }).map(function (sKey) {
           return {
             key: sKey,
@@ -4119,7 +4123,7 @@ sap.ui.define([
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), createVisible: !!oMeta.createVisible };
+        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), createVisible: !!oMeta.createVisible, visible: true };
       });
       return new JSONModel({ list: aList });
     },
@@ -4197,20 +4201,37 @@ sap.ui.define([
       this._bindDetailHeader();
       // All createMode-visible sections are expanded/loaded simultaneously —
       // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
-      // Prompt v3.md "Sections in edit simultaneously").
+      // Prompt v3.md "Sections in edit simultaneously"). Order-type-hidden
+      // sections are skipped.
+      var oOrderUi = this.getView().getModel("orderUi").getData();
       this._aSectionMeta.forEach(function (oMeta) {
-        if (oMeta.createVisible) {
+        if (oMeta.createVisible && OrderModeConfig.uiFlag(oOrderUi, "sections", oMeta.id, "visible")) {
           this._oSectionFactory.expandSection(oMeta.id);
         }
       }, this);
     },
 
+    // The only place `orderUi` is set. Create mode and onInit apply the launch
+    // type; an existing order re-applies from its OWN SalesOrderType
+    // (_syncOrderUiFromContext) - deliberate, an order displays per its type.
     _applyOrderUi: function (sOrderType) {
       var oMode = OrderModeConfig.resolveOrderType(sOrderType);
+      var oView = this.getView();
       var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
-      this.getView().getModel("orderUi").setData(oMode.ui);
-      this.getView().getModel("enums").setProperty("/EDIT_STATUS", this._resolveEnumOptions(aEditStatusOptions));
+      var oFlags = oView.getModel("sectionFlags");
+      var oNav = oView.getModel("sectionsNav");
+      oView.getModel("orderUi").setData(oMode.ui);
+      this._aSectionMeta.forEach(function (oMeta, iIndex) {
+        oNav.setProperty("/list/" + iIndex + "/visible", OrderModeConfig.uiFlag(oMode.ui, "sections", oMeta.id, "visible"));
+        if (oMeta.editable) {
+          oFlags.setProperty("/" + oMeta.id + "/editVisible", OrderModeConfig.uiFlag(oMode.ui, "sections", oMeta.id, "editable"));
+        }
+      });
+      oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
+      oView.getModel("enums").setProperty("/EDIT_STATUS", this._resolveEnumOptions(aEditStatusOptions));
       this._loadCategoryOptions(oMode);
+      // A section un-hidden by this order type may already be expanded.
+      this._oSectionFactory.rebind();
     },
 
     _loadCategoryOptions: function (oMode) {
@@ -4232,7 +4253,8 @@ sap.ui.define([
         return;
       }
 
-      var oListBinding = this.getView().getModel().bindList(
+      // Component model: _applyOrderUi also runs from onInit, before view model propagation.
+      var oListBinding = this.getOwnerComponent().getModel().bindList(
         "/" + ServiceSchema.entitySets.customerPurchaseOrderType,
         undefined,
         undefined,
