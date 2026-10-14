@@ -1,7 +1,8 @@
 sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
-  "sap/ui/core/format/DateFormat"
-], function (ServiceSchema, DateFormat) {
+  "sap/ui/core/format/DateFormat",
+  "sap/base/strings/formatMessage"
+], function (ServiceSchema, DateFormat, formatMessage) {
   "use strict";
 
   var EM_DASH = "\u2014";
@@ -314,15 +315,16 @@ sap.ui.define([
       return fnStatusState(sCode);
     },
 
-    // Section Panel title = "<order type label> <section text>" (e.g. "Vaccine
-    // Order Details"/"Vaccine Order Items" for ZKB), falling back to the plain
-    // i18n section text for an unmapped/not-yet-known order type.
-    orderTypeSectionTitle: function (sOrderType, sSectionText, sZkbLabel, sZrepLabel) {
-      var sLabel = {
-        ZKB: sZkbLabel,
-        ZREP: sZrepLabel
-      }[sOrderType];
-      return sLabel ? (sLabel + " " + sSectionText) : sSectionText;
+    // Section Panel title = "<order type title> <section text>" (e.g.
+    // "Replacement Order Items"), plain section text until a title is known.
+    orderTypeSectionTitle: function (sOrderTitle, sSectionText) {
+      return sOrderTitle ? (sOrderTitle + " " + sSectionText) : sSectionText;
+    },
+
+    // Composite-binding counterpart of ResourceBundle#getText(key, args):
+    // first part is the raw i18n pattern, the rest fill {0}, {1}, ...
+    formatText: function (sPattern) {
+      return sPattern ? formatMessage(sPattern, Array.prototype.slice.call(arguments, 1)) : "";
     },
 
     detailCreatedOnBy: function (sOn, sBy, sLabel) {

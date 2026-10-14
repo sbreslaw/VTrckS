@@ -31,6 +31,7 @@ sap.ui.define([], function () {
   var ORDER_TYPES = {
     ZKB: {
       orderType: "ZKB",
+      titleKey: "orderTypeZkb",
       defaults: {},
       createStatusDefault: "",
       createStatusOptions: [],
@@ -41,6 +42,7 @@ sap.ui.define([], function () {
     },
     ZREP: {
       orderType: "ZREP",
+      titleKey: "orderTypeZrep",
       defaults: {},
       createStatusDefault: "2A",
       createStatusOptions: ZREP_STATUS_OPTIONS,
@@ -74,6 +76,7 @@ sap.ui.define([], function () {
     var oConfig = ORDER_TYPES[sOrderType];
     return {
       providerOrderType: sOrderType,
+      titleKey: oConfig.titleKey,
       defaults: Object.assign({}, oConfig.defaults),
       createStatusDefault: oConfig.createStatusDefault,
       createStatusOptions: JSON.parse(JSON.stringify(oConfig.createStatusOptions)),

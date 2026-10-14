@@ -96,8 +96,9 @@
             ZZIndustryStandardName only bridges that pre-POST interval.
             §3.2: indented for an ancillary child row (HigherLevelItem set). -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${_Product/IndustryStandardName} || ${ZZIndustryStandardName} || '') }" visible="{itemsColumns>/brand}" />
+          <!-- NDC is editable only until the row is posted (item number assigned); after that it is fixed. -->
           <Input value="{path: 'Product', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/ndcCode/editable} !== false }"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !!${@$ui5.context.isTransient} &amp;&amp; ${orderUi>/columns/ndcCode/editable} !== false }"
             showValueHelp="true"
             showSuggestion="true" filterSuggests="false" startSuggestion="2"
             valueHelpRequest=".onItemNdcValueHelpRequest"
@@ -115,7 +116,7 @@
                gets a promise to await before refreshing the list for recalculated
                ancillary quantities); a two-way binding's own internal PATCH here would
                race that refresh exactly like the opt-out checkbox's did. -->
-          <Input value="{path: 'RequestedQuantity', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
+          <Input value="{path: 'RequestedQuantity', type: 'sap.ui.model.odata.type.Decimal', formatOptions: {maxFractionDigits: 0, preserveDecimals: false, groupingEnabled: false}, mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/qty/editable} !== false }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
@@ -126,17 +127,26 @@
                baseUnit) instead of always defaulting to the hardcoded "EA". -->
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
           <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
-          <Select selectedKey="{path: 'MaterialGroup1', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" visible="{itemsColumns>/orderIntention}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/orderIntention/editable} !== false }" change=".onOrderIntentionChange">
+          <Select 
+            selectedKey="{path: 'MaterialGroup1', 
+            mode: 'sap.ui.model.BindingMode.OneWay'}" 
+            forceSelection="false" 
+            visible="{itemsColumns>/orderIntention}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/orderIntention/editable} !== false }" 
+            change=".onOrderIntentionChange">
             <core:Item key="ADU" text="Adult" />
             <core:Item key="PED" text="Pediatric" />
             <core:Item key="MIX" text="Adult, Pediatric" />
           </Select>
           <!-- MVGR2 remains MaterialGroup2. Each row binds its values lazily to
                po>/FundTypeVH, filtered by that row's NDC and Order Intention. -->
-          <Select selectedKey="{path: 'MaterialGroup2', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" visible="{itemsColumns>/fundType}"
+          <Select 
+            selectedKey="{path: 'MaterialGroup2', mode: 'sap.ui.model.BindingMode.OneWay'}" 
+            forceSelection="false" 
+            visible="{itemsColumns>/fundType}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !!%{MaterialGroup1} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/fundType/editable} !== false }"
-            change=".onFundTypeChange" modelContextChange=".onFundTypeModelContextChange" />
+            change=".onFundTypeChange" 
+            modelContextChange=".onFundTypeModelContextChange" />
           <Text text="{= '\u2014'}" visible="{itemsColumns>/poReference}" />
           <Text text="{_DeliveryStatus/DeliveryStatus_Text}" visible="{itemsColumns>/deliveryStatus}" />
           <ObjectNumber number="{NetAmount}" unit="{TransactionCurrency}" visible="{itemsColumns>/netValue}" />
