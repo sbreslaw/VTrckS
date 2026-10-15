@@ -23,6 +23,7 @@ sap.ui.define([
   "sap/m/CustomListItem",
   "sap/m/HBox",
   "sap/m/MessageToast",
+  "sap/m/MenuItem",
   "sap/m/SearchField",
   "sap/m/Token",
   "sap/m/p13n/Popup",
@@ -42,7 +43,7 @@ sap.ui.define([
   "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
-  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, SearchField, Token,
+  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
   formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
@@ -1186,17 +1187,15 @@ sap.ui.define([
     // whole transient-context/save/cancel flow (Detail.controller.js).
     onCreateRequest: function (oEvent) {
       this._oRouter.navTo("create", {
-        orderType: oEvent.getSource().getBindingContext("orderContext").getProperty("orderType")
+        orderType: oEvent.getParameter("item").getBindingContext("orderContext").getProperty("orderType")
       }, false);
     },
 
     // Factory, not a template: `visible` must bind the leaf flag path so a runtime flag flip re-renders.
-    createOrderTypeButton: function (sId, oContext) {
-      return new Button(sId, {
-        text: { parts: ["i18n>masterCreateTyped", "orderContext>title"], formatter: formatter.formatText },
-        type: "Transparent",
-        visible: "{orderAuth>/types/" + oContext.getProperty("orderType") + "/CREATE}",
-        press: this.onCreateRequest.bind(this)
+    createOrderTypeMenuItem: function (sId, oContext) {
+      return new MenuItem(sId, {
+        text: "{orderContext>title}",
+        visible: "{orderAuth>/types/" + oContext.getProperty("orderType") + "/CREATE}"
       });
     },
 

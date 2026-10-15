@@ -164,7 +164,11 @@
             <OverflowToolbar class="masterTableToolbar">
               <Title text="{parts: ['i18n>masterTitle', 'orderContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
               <ToolbarSpacer />
-              <HBox renderType="Bare" items="{path: 'orderContext>/orderTypes', factory: '.createOrderTypeButton'}" />
+              <MenuButton text="{i18n>masterCreateButton}" type="Transparent">
+                <menu>
+                  <Menu items="{path: 'orderContext>/orderTypes', factory: '.createOrderTypeMenuItem'}" itemSelected=".onCreateRequest" />
+                </menu>
+              </MenuButton>
               <ToolbarSeparator />
               <SegmentedButton selectedKey="compact" selectionChange=".onMasterTableDensityChange">
                 <items>
