@@ -11,12 +11,6 @@ sap.ui.define([
     { key: "2B", i18nKey: "enumStatus2B" },
     { key: "2C", i18nKey: "enumStatus2C" }
   ];
-  var ZREP_CATEGORY_OPTIONS = [
-    { key: "06", text: "E-Mail" },
-    { key: "03", text: "Fax" },
-    { key: "05", text: "Internet Service" },
-    { key: "01", text: "Telephone call" }
-  ];
 
   // The existing views are the shared baseline; add only confirmed per-type
   // differences here. `ui` is the single UI-config source, exposed to the
@@ -54,8 +48,8 @@ sap.ui.define([
       createStatusDefault: "2A",
       createStatusOptions: ZREP_STATUS_OPTIONS,
       editStatusOptions: ZREP_STATUS_OPTIONS,
-      categoryOptions: ZREP_CATEGORY_OPTIONS,
-      createCategoryDefaultKey: "05",
+      categoryOptions: [],
+      createCategoryDefaultKey: "",
       ui: {
         fields: {
           detailsExisId: { visible: false },

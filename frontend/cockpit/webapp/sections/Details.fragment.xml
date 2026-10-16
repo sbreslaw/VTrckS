@@ -267,8 +267,8 @@
 								Order Reason above (Text when not editing, ComboBox against the
 								real /CustomerPurchaseOrderType VH entity set when editing).
 								Retires the old hardcoded Enums.CATEGORY Select entirely.
-								ZKB uses the service value help. ZREP uses its order-type-specific
-								four-option list from OrderModeConfig. -->
+								Options come from the service value help unless an order type
+								configures its own categoryOptions in OrderModeConfig. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
