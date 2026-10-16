@@ -345,14 +345,12 @@
 }
 
 .detailItemsTable.sapMList {
-  width: max-content !important;
-  min-width: 100%;
+  width: 100% !important;
   flex: 0 0 auto;
 }
 
 .detailItemsTable .sapMListTbl {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   table-layout: fixed;
 }
 

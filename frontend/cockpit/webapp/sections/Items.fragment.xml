@@ -17,9 +17,10 @@
     <VBox id="itemsViewport" class="detailItemsViewport">
     <Table id="itemsTable" width="100%" items="{_Item}" class="detailItemsTable" fixedLayout="true"
       updateFinished=".onItemsTableUpdateFinished">
+    <!-- Column widths are % (sum 100) so the table fits its container; hidden columns' share is redistributed. -->
     <columns>
-      <Column width="2.5rem" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" wrapping="true" /></Column>
-      <Column width="4.75rem" visible="{itemsColumns>/optOut}">
+      <Column width="3%" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" wrapping="true" /></Column>
+      <Column width="6%" visible="{itemsColumns>/optOut}">
         <VBox class="itemsOptOutHeader">
           <Text text="{i18n>colOptOutPrefix}" wrapping="false" />
           <Text text="{i18n>colOptOutSuffix}" wrapping="false" />
@@ -27,19 +28,19 @@
         </VBox>
       </Column>
       <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
-      <Column width="3.5rem" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" wrapping="true" /></Column>
-      <Column width="4.5rem" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" wrapping="true" /></Column>
-      <Column width="4rem" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" wrapping="true" /></Column>
-      <Column width="10rem" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" wrapping="true" /></Column>
-      <Column width="7rem" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" wrapping="true" /></Column>
-      <Column width="3.5rem" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" wrapping="true" /></Column>
-      <Column width="3rem" visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" wrapping="true" /></Column>
-      <Column width="4.5rem" visible="{itemsColumns>/orderIntention}"><VBox><Text text="{i18n>colOrder}" wrapping="false" /><Text text="{i18n>colIntention}" wrapping="false" /></VBox></Column>
-      <Column width="4rem" visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" wrapping="true" /></Column>
-      <Column width="5rem" visible="{itemsColumns>/poReference}"><VBox><Text text="{i18n>colPo}" wrapping="false" /><Text text="{i18n>colReference}" wrapping="false" /></VBox></Column>
-      <Column width="4.5rem" visible="{itemsColumns>/deliveryStatus}"><VBox><Text text="{i18n>colDelivery}" wrapping="false" /><Text text="{i18n>colStatus}" wrapping="false" /></VBox></Column>
-      <Column width="4.25rem" hAlign="End" visible="{itemsColumns>/netValue}"><VBox><Text text="{i18n>colNet}" wrapping="false" /><Text text="{i18n>colAmount}" wrapping="false" /></VBox></Column>
-      <Column width="6.5rem" visible="{itemsColumns>/rejectionReason}"><VBox><Text text="{i18n>colRejection}" wrapping="false" /><Text text="{i18n>colReason}" wrapping="false" /></VBox></Column>
+      <Column width="5%" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumber}" wrapping="true" /></Column>
+      <Column width="6%" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" wrapping="true" /></Column>
+      <Column width="6%" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" wrapping="true" /></Column>
+      <Column width="13%" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" wrapping="true" /></Column>
+      <Column width="12%" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" wrapping="true" /></Column>
+      <Column width="5%" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" wrapping="true" /></Column>
+      <Column width="4%" visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" wrapping="true" /></Column>
+      <Column width="7%" visible="{itemsColumns>/orderIntention}"><VBox><Text text="{i18n>colOrder}" wrapping="false" /><Text text="{i18n>colIntention}" wrapping="false" /></VBox></Column>
+      <Column width="6%" visible="{itemsColumns>/fundType}"><Text text="{i18n>colFundType}" wrapping="true" /></Column>
+      <Column width="6%" visible="{itemsColumns>/poReference}"><VBox><Text text="{i18n>colPo}" wrapping="false" /><Text text="{i18n>colReference}" wrapping="false" /></VBox></Column>
+      <Column width="6%" visible="{itemsColumns>/deliveryStatus}"><VBox><Text text="{i18n>colDelivery}" wrapping="false" /><Text text="{i18n>colStatus}" wrapping="false" /></VBox></Column>
+      <Column width="6%" hAlign="End" visible="{itemsColumns>/netValue}"><VBox><Text text="{i18n>colNet}" wrapping="false" /><Text text="{i18n>colAmount}" wrapping="false" /></VBox></Column>
+      <Column width="9%" visible="{itemsColumns>/rejectionReason}"><VBox><Text text="{i18n>colRejection}" wrapping="false" /><Text text="{i18n>colReason}" wrapping="false" /></VBox></Column>
     </columns>
     <items>
       <ColumnListItem>
