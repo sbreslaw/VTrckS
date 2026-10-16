@@ -20,7 +20,7 @@
 				emptySpanL="0"
 				emptySpanM="0"
 				emptySpanS="0"
-				columnsXL="3"
+				columnsXL="2"
 				columnsL="2"
 				columnsM="1"
 				singleContainerFullSize="false"
@@ -220,6 +220,51 @@
 						</f:fields>
 					</f:FormElement>
 
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>filterPriority}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Session Prompt (Detail View Adjustments) 3.1: Priority is a
+								VIRTUAL header field - DeliveryPriority only exists on
+								SalesOrderItemType (ServiceSchema.itemProperties.
+								deliveryPriority), there is still no header-level property/nav.
+								This Select is bound to the local "priorityState" model, not a
+								header property: Detail.controller.js computes it from the
+								order's items on load (uniform -> that value; mixed -> the
+								highest-priority value found, TODO-VERIFY(priority-ordering) -
+								lowest DeliveryPriority code assumed = most urgent, standard SD
+								convention, never independently confirmed live this session) and
+								propagates the selected value to EVERY item only at Save (see
+								onCreateSavePress/onSectionSavePress +
+								_propagatePriorityToItems) - never on change here. Visible/
+								editable in every mode (not just createMode), gated the same way
+								as the other Details fields. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{priorityState>/valueText}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Select
+									selectedKey="{priorityState>/value}"
+									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
+									width="100%"
+									forceSelection="false"
+									enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${createState>/priorityLocked} }"
+									tooltip="{i18n>priorityLockedTooltip}"
+									items="{path: '/DeliveryPriority'}"
+									change=".onPriorityChange">
+									<core:Item key="{DeliveryPriority}" text="{DeliveryPriority_Text}" />
+								</Select>
+								<Text text="{i18n>priorityMixedHint}" visible="{= ${priorityState>/mixed} &amp;&amp; !${sectionFlags>/createMode} }" class="sapUiTinyMarginTop"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
 
 					<f:FormElement>
 						<f:label>
@@ -271,52 +316,31 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>filterExisId}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
-									maxLength="30" visible="{sectionFlags>/details/editing}"
-									editable="{= ${orderUi>/fields/detailsExisId/editable} !== false }"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
 
 				</f:formElements>
 			</f:FormContainer>
 
-<!-- DATES/STATUS -->
+<!-- STATUS -->
 
-			<f:FormContainer title="{i18n>detailsStatus}">
+			<f:FormContainer title="">
 				<f:formElements>
-					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>colCreatedAt}" required="false">
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
-						</f:label>
+						</f:label> -->
 						<f:fields>
-							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+							<Text text=" ">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 							</Text>
 						</f:fields>
-
 					</f:FormElement>
 
 					<f:FormElement>
@@ -360,9 +384,9 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
 						<f:label>
-							<Label text="{i18n>filterPriority}" required="false">
+							<Label text="{i18n>filterExisId}" required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
@@ -370,77 +394,75 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Session Prompt (Detail View Adjustments) 3.1: Priority is a
-								VIRTUAL header field - DeliveryPriority only exists on
-								SalesOrderItemType (ServiceSchema.itemProperties.
-								deliveryPriority), there is still no header-level property/nav.
-								This Select is bound to the local "priorityState" model, not a
-								header property: Detail.controller.js computes it from the
-								order's items on load (uniform -> that value; mixed -> the
-								highest-priority value found, TODO-VERIFY(priority-ordering) -
-								lowest DeliveryPriority code assumed = most urgent, standard SD
-								convention, never independently confirmed live this session) and
-								propagates the selected value to EVERY item only at Save (see
-								onCreateSavePress/onSectionSavePress +
-								_propagatePriorityToItems) - never on change here. Visible/
-								editable in every mode (not just createMode), gated the same way
-								as the other Details fields. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{priorityState>/valueText}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
-								<Select
-									selectedKey="{priorityState>/value}"
-									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
-									width="100%"
-									forceSelection="false"
-									enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${createState>/priorityLocked} }"
-									tooltip="{i18n>priorityLockedTooltip}"
-									items="{path: '/DeliveryPriority'}"
-									change=".onPriorityChange">
-									<core:Item key="{DeliveryPriority}" text="{DeliveryPriority_Text}" />
-								</Select>
-								<Text text="{i18n>priorityMixedHint}" visible="{= ${priorityState>/mixed} &amp;&amp; !${sectionFlags>/createMode} }" class="sapUiTinyMarginTop"/>
+								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="30" visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisId/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
 
-				</f:formElements>
-			</f:FormContainer>
-
-<!-- NOTES -->
-
-			<f:FormContainer title="{i18n>detailsNotes}">
-				<f:formElements>
+<!-- SPACER -->
 					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
 						<f:label>
-							<Label text="{i18n>detailsNotes}" required="false">
+							<Label text="{i18n>colCreatedAt}" required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
 						</f:label>
-
 						<f:fields>
-						<!-- Header notes map to _Text/LongText for ZVRH. The local model
-							buffers the value until Create Save or Details section Save. -->
-						<TextArea rows="3" width="100%"
-							value="{createEnrich>/notes}"
-							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
-							<layoutData>
-								<l:GridData span="XL8 L8 M8 S12"/>
-							</layoutData>
-						</TextArea>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
 						</f:fields>
 					</f:FormElement>
-				</f:formElements>
-			</f:FormContainer>
 
-<!-- VALUES -->
 
-			<f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
-				<f:formElements>
 					<f:FormElement>
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
@@ -502,8 +524,126 @@
 						</f:fields>
 					</f:FormElement>
 
+
 				</f:formElements>
 			</f:FormContainer>
+
+<!-- DATES -->
+
+			<!-- <f:FormContainer title="{i18n>detailsDates}">
+				<f:formElements>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>colCreatedAt}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer> -->
+
+<!-- NOTES -->
+
+			<f:FormContainer title="{i18n>detailsNotes}">
+				<!-- Full row; label/field spans halved so they align with the half-width containers above. -->
+				<f:layoutData>
+					<l:GridData span="XL12 L12 M12 S12" linebreak="true"/>
+				</f:layoutData>
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>detailsNotes}" required="false">
+								<layoutData>
+									<l:GridData span="XL2 L2 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+						<!-- Header notes map to _Text/LongText for ZVRH. The local model
+							buffers the value until Create Save or Details section Save. -->
+						<TextArea rows="3" width="100%"
+							value="{createEnrich>/notes}"
+							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
+							<layoutData>
+								<l:GridData span="XL10 L10 M8 S12"/>
+							</layoutData>
+						</TextArea>
+						</f:fields>
+					</f:FormElement>
+				</f:formElements>
+			</f:FormContainer>
+
+<!-- VALUES -->
+
+			<!-- <f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>netValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{ZZ_NET_VALUE_SDH}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>taxAmount}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{headerCalc>/taxAmount}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>grossValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{ZZ_GROSS_VALUE_SDH}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer> -->
 
 		</f:formContainers>
 	</f:Form>
