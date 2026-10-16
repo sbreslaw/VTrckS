@@ -180,6 +180,7 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
+      this._loadOrderIntentionVH();
       this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
     },
@@ -3578,6 +3579,28 @@ sap.ui.define([
         oVHModel.setProperty("/list", aList);
       }, function () {
         // Non-fatal: the Select then only offers "none"; the read failure is in the message model.
+      });
+    },
+
+    // One-time load into a JSON model: an absolute OData list nested in the Items row template
+    // would be re-requested per row (same reason as rejectionReasons above).
+    _loadOrderIntentionVH: function () {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.orderIntentionProperties;
+      var oVHModel = new JSONModel({ list: [] });
+      this.getView().setModel(oVHModel, "orderIntentions");
+      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
+        "/" + oSchema.entitySets.orderIntention, undefined, undefined, undefined,
+        { $select: [oProps.code, oProps.text].join(",") }
+      );
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        oVHModel.setProperty("/list", aContexts.map(function (oCtx) {
+          return { key: oCtx.getProperty(oProps.code), text: oCtx.getProperty(oProps.text) };
+        }));
+      }, function () {
+        // Non-fatal: the Select stays empty; the read failure is in the message model.
+      }).finally(function () {
+        oListBinding.destroy();
       });
     },
 

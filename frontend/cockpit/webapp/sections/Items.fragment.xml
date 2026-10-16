@@ -126,17 +126,16 @@
                NDC's own Product.BaseUnit (ServiceSchema.productProperties.
                baseUnit) instead of always defaulting to the hardcoded "EA". -->
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
-          <!-- MVGR1 - real MaterialGroup1 domain confirmed by the client (2026-09-16): ADU=Adult, PED=Pediatric, MIX=Pediatric and Adult (fits MaxLength=3). -->
+          <!-- MVGR1: values from po>/OrderIntention, loaded once into the JSON "orderIntentions" model (Detail.controller.js#_loadOrderIntentionVH). -->
           <Select 
             selectedKey="{path: 'MaterialGroup1', 
             mode: 'sap.ui.model.BindingMode.OneWay'}" 
             forceSelection="false" 
             visible="{itemsColumns>/orderIntention}"
+            items="{path: 'orderIntentions>/list', templateShareable: false}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/orderIntention/editable} !== false }" 
             change=".onOrderIntentionChange">
-            <core:Item key="ADU" text="Adult" />
-            <core:Item key="PED" text="Pediatric" />
-            <core:Item key="MIX" text="Adult, Pediatric" />
+            <core:Item key="{orderIntentions>key}" text="{orderIntentions>text}" />
           </Select>
           <!-- MVGR2 remains MaterialGroup2. Each row binds its values lazily to
                po>/FundTypeVH, filtered by that row's NDC and Order Intention. -->
