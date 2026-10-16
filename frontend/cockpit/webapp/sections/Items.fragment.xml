@@ -91,7 +91,7 @@
           <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
           <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
-            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
+            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
           <!-- Brand is authoritative from the selected Product. A scratch row
             cannot resolve _Product until it is posted, so the locally copied
             ZZIndustryStandardName only bridges that pre-POST interval.
@@ -118,7 +118,7 @@
                ancillary quantities); a two-way binding's own internal PATCH here would
                race that refresh exactly like the opt-out checkbox's did. -->
           <Input value="{path: 'RequestedQuantity', type: 'sap.ui.model.odata.type.Decimal', formatOptions: {maxFractionDigits: 0, preserveDecimals: false, groupingEnabled: false}, mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/qty/editable} !== false }" type="Number" textAlign="End" change=".onProdQtyChange"/>
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/qty/editable} !== false }" type="Number" textAlign="End" change=".onProdQtyChange"/>
           <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
                read-only - the prior editable Input (worked around a "Sales
                unit EA is not defined" SaveChanges error, see createPayloadUom
