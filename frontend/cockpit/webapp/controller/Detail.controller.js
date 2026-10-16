@@ -37,7 +37,6 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator",
-  "sap/ui/model/Sorter",
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/sections/SectionFactory",
   "cdc/vaccreq/sections/SectionConfig",
@@ -59,7 +58,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -3591,7 +3590,7 @@ sap.ui.define([
       var oVHModel = new JSONModel({ list: [] });
       this.getView().setModel(oVHModel, "orderIntentions");
       var oListBinding = this.getOwnerComponent().getModel("po").bindList(
-        "/" + oSchema.entitySets.orderIntention, undefined, [new Sorter(oProps.sortOrder)], undefined,
+        "/" + oSchema.entitySets.orderIntention, undefined, undefined, undefined,
         { $select: [oProps.code, oProps.text].join(",") }
       );
       oListBinding.requestContexts(0, 100).then(function (aContexts) {
