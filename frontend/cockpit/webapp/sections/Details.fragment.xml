@@ -562,13 +562,13 @@
 				</f:layoutData>
 				<f:formElements>
 					<f:FormElement>
-						<f:label>
+						<!-- <f:label>
 							<Label text="{i18n>detailsNotes}" required="false">
 								<layoutData>
 									<l:GridData span="XL2 L2 M4 S12" linebreak="true"/>
 								</layoutData>
 							</Label>
-						</f:label>
+						</f:label> -->
 
 						<f:fields>
 						<!-- Header notes map to _Text/LongText for ZVRH. The local model
@@ -577,7 +577,7 @@
 							value="{createEnrich>/notes}"
 							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
 							<layoutData>
-								<l:GridData span="XL10 L10 M8 S12"/>
+								<l:GridData span="XL12 L12 M12 S12"/>
 							</layoutData>
 						</TextArea>
 						</f:fields>
