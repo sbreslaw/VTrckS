@@ -166,7 +166,7 @@
                 },
                 {
                     "name": "create",
-                    "pattern": "create",
+                    "pattern": "create/{orderType}",
                     "layout": "MidColumnFullScreen",
                     "target": [
                         "master",

@@ -37,6 +37,7 @@ sap.ui.define([
   "sap/ui/model/json/JSONModel",
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator",
+  "sap/ui/model/Sorter",
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/sections/SectionFactory",
   "cdc/vaccreq/sections/SectionConfig",
@@ -58,7 +59,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -180,7 +181,8 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
-      this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/providerOrderType"));
+      this._loadOrderIntentionVH();
+      this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
     },
 
@@ -318,7 +320,7 @@ sap.ui.define([
         Promise.resolve(oContext && EditRequestService.cancel(oContext)).then(function () {
           this._destroyNotesWriteBinding();
           Messaging.removeAllMessages();
-          this._oRouter.navTo("create", {}, false);
+          this._oRouter.navTo("create", { orderType: this._getNewOrderType() }, false);
         }.bind(this));
         return;
       }
@@ -330,7 +332,7 @@ sap.ui.define([
         this._bItemsSessionBound = false;
         FundLogicService.clearAllocationCache();
         this.getView().setBusy(false);
-        this._onCreateMatched();
+        this._enterCreateMode(this._sCreateOrderType);
       }.bind(this), function (oError) {
         this.getView().setBusy(false);
         MessageExtractor.extract(oError, oContext && oContext.getPath(), this.getResourceBundle());
@@ -743,7 +745,7 @@ sap.ui.define([
         if (that._bStartNewAfterSave) {
           that._bStartNewAfterSave = false;
           that.byId("newOrderBtn").setEnabled(true);
-          that._oRouter.navTo("create", {}, false);
+          that._oRouter.navTo("create", { orderType: that._getNewOrderType() }, false);
         }
       }, function (oError) {
         that._bStartNewAfterSave = false;
@@ -1985,6 +1987,9 @@ sap.ui.define([
         oFlags.setProperty("/" + sId + "/editing", bOn);
       });
       if (bOn) {
+        var aCreateStatusOptions = OrderModeConfig.resolveOrderType(this._sCreateOrderType).createStatusOptions;
+        this.getView().getModel("enums").setProperty("/STATUS",
+          this._resolveEnumOptions(aCreateStatusOptions.length ? aCreateStatusOptions : Enums.STATUS));
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
@@ -2034,12 +2039,9 @@ sap.ui.define([
     // real service value helps, see Details.fragment.xml) can bind items/text
     // directly without a runtime i18n lookup in the XML.
     _createEnumsModel: function () {
-      var oOrderContextModel = this.getOwnerComponent().getModel("orderContext");
-      var aCreateStatusOptions = oOrderContextModel.getProperty("/createStatusOptions") || [];
-      var aEditStatusOptions = oOrderContextModel.getProperty("/editStatusOptions") || [];
       return new JSONModel({
-        STATUS: this._resolveEnumOptions(aCreateStatusOptions.length ? aCreateStatusOptions : Enums.STATUS),
-        EDIT_STATUS: this._resolveEnumOptions(aEditStatusOptions.length ? aEditStatusOptions : Enums.EDIT_STATUS)
+        STATUS: this._resolveEnumOptions(Enums.STATUS),
+        EDIT_STATUS: this._resolveEnumOptions(Enums.EDIT_STATUS)
       });
     },
 
@@ -2083,7 +2085,7 @@ sap.ui.define([
         contactName: "",
         employeeResponsibleId: this._getCurrentUserId(),
         employeeResponsibleName: this._getCurrentUserFullName(),
-        status: this.getOwnerComponent().getModel("orderContext").getProperty("/createStatusDefault") || "",
+        status: OrderModeConfig.resolveOrderType(this._sCreateOrderType).createStatusDefault,
         shipToPartyId: "",
         shipToPartyName: "",
         notes: "",
@@ -3581,6 +3583,28 @@ sap.ui.define([
       });
     },
 
+    // One-time load into a JSON model: an absolute OData list nested in the Items row template
+    // would be re-requested per row (same reason as rejectionReasons above).
+    _loadOrderIntentionVH: function () {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.orderIntentionProperties;
+      var oVHModel = new JSONModel({ list: [] });
+      this.getView().setModel(oVHModel, "orderIntentions");
+      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
+        "/" + oSchema.entitySets.orderIntention, undefined, [new Sorter(oProps.sortOrder)], undefined,
+        { $select: [oProps.code, oProps.text].join(",") }
+      );
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        oVHModel.setProperty("/list", aContexts.map(function (oCtx) {
+          return { key: oCtx.getProperty(oProps.code), text: oCtx.getProperty(oProps.text) };
+        }));
+      }, function () {
+        // Non-fatal: the Select stays empty; the read failure is in the message model.
+      }).finally(function () {
+        oListBinding.destroy();
+      });
+    },
+
     _loadDeliveryPriorityVH: function () {
       var that = this;
       var oProps = ServiceSchema.valueHelpProperties;
@@ -4041,7 +4065,8 @@ sap.ui.define([
         })
         .then(function () {
           that.getView().setBusy(false);
-          MessageToast.show(oBundle.getText("createRequestSuccessToast", [sNewId]));
+          MessageToast.show(oBundle.getText("createRequestSuccessToast",
+            [that.getView().getModel("orderUi").getProperty("/title"), sNewId]));
           var bStartNew = !!that._bStartNewAfterSave;
           that._bStartNewAfterSave = false;
           that.byId("newOrderBtn").setEnabled(true);
@@ -4093,7 +4118,7 @@ sap.ui.define([
       this._setCreateMode(false);
       EventBus.getInstance().publish("app", "orderCreated", { orderId: sNewId });
       if (bStartNew) {
-        this._onCreateMatched();
+        this._enterCreateMode(this._sCreateOrderType);
       } else {
         this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
       }
@@ -4170,7 +4195,18 @@ sap.ui.define([
     // stands up a transient list-binding context (CreateOrderService.js#enter)
     // as a pure local scratchpad — a stand-in for the bindElement path the
     // "detail" route uses. No backend contact happens until Save.
-    _onCreateMatched: function () {
+    // The category scopes Create; deep links to a type outside it (or without CREATE) are refused.
+    _onCreateMatched: function (oEvent) {
+      var sOrderType = String(oEvent.getParameter("arguments").orderType || "").toUpperCase();
+      if (this._getCreatableOrderTypes().indexOf(sOrderType) === -1) {
+        MessageToast.show(this.getResourceBundle().getText("createOrderTypeNotAllowed", [sOrderType]));
+        this._oRouter.navTo("master", {}, true);
+        return;
+      }
+      this._enterCreateMode(sOrderType);
+    },
+
+    _enterCreateMode: function (sOrderType) {
       this._destroyCreateContext();
       this._resetCreateSaveState();
       // A prior "detail" route visit leaves an active bindElement() on the
@@ -4178,12 +4214,11 @@ sap.ui.define([
       // setBindingContext() below (UI5 propagation rules), so without this
       // every relative field/list would keep showing the last-viewed order.
       this.getView().unbindElement();
-      var oOrderContextModel = this.getOwnerComponent().getModel("orderContext");
-      var sProviderOrderType = oOrderContextModel.getProperty("/providerOrderType");
+      this._sCreateOrderType = sOrderType;
       var oResult = CreateOrderService.enter(
         this.getView().getModel(),
-        sProviderOrderType,
-        oOrderContextModel.getProperty("/defaults")
+        sOrderType,
+        OrderModeConfig.resolveOrderType(sOrderType).defaults
       );
       this._oCreateListBinding = oResult.listBinding;
       this._oCreateSession = oResult.session;
@@ -4194,7 +4229,7 @@ sap.ui.define([
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
-      this._applyOrderUi(sProviderOrderType);
+      this._applyOrderUi(sOrderType);
       this._resetTransactionHistoryState("");
       this._resetItemsTableForCreate();
       this._addInitialCreateItemRows();
@@ -4211,12 +4246,13 @@ sap.ui.define([
       }, this);
     },
 
-    // The only place `orderUi` is set. Create mode and onInit apply the launch
-    // type; an existing order re-applies from its OWN SalesOrderType
+    // The only place `orderUi` is set. Create mode applies the route's type,
+    // onInit the category's first type; an existing order re-applies from its OWN SalesOrderType
     // (_syncOrderUiFromContext) - deliberate, an order displays per its type.
     _applyOrderUi: function (sOrderType) {
       var oMode = OrderModeConfig.resolveOrderType(sOrderType);
       var oView = this.getView();
+      this._sOrderType = oMode.orderType;
       var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
       var oFlags = oView.getModel("sectionFlags");
       var oNav = oView.getModel("sectionsNav");
@@ -4289,6 +4325,22 @@ sap.ui.define([
     _syncOrderUiFromContext: function () {
       var oContext = this.getView().getBindingContext();
       this._applyOrderUi(oContext && oContext.getProperty(ServiceSchema.headerProperties.salesOrderType));
+    },
+
+    _getCreatableOrderTypes: function () {
+      var oComponent = this.getOwnerComponent();
+      var oAuth = oComponent.getModel("orderAuth");
+      return (oComponent.getModel("orderContext").getProperty("/orderTypes") || []).map(function (oType) {
+        return oType.orderType;
+      }).filter(function (sOrderType) {
+        return oAuth.getProperty("/types/" + sOrderType + "/CREATE") === true;
+      });
+    },
+
+    // "New" keeps the current order's type when the launch category may create it.
+    _getNewOrderType: function () {
+      var aTypes = this._getCreatableOrderTypes();
+      return aTypes.indexOf(this._sOrderType) !== -1 ? this._sOrderType : (aTypes[0] || this._sOrderType);
     },
 
     _onMasterMatched: function () {

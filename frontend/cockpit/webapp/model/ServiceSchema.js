@@ -726,7 +726,14 @@ sap.ui.define([
         providerContact: "ProviderContact",
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails",
-        providerDeliveries: "ProvOrdDelvs"
+        providerDeliveries: "ProvOrdDelvs",
+        // TODO-VERIFY: not in design/metadata snapshot (stale); names from code owner 2026-10-16.
+        orderIntention: "OrderIntention"
+      },
+      orderIntentionProperties: {
+        code: "OrderIntention",
+        text: "OrderingIntention",
+        sortOrder: "SortOrder"
       },
       // ProvOrdDelvs: the SalesOrder filter key is assumed - verify against $metadata.
       providerDeliveryProperties: {

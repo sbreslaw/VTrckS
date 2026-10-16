@@ -20,7 +20,7 @@
 				emptySpanL="0"
 				emptySpanM="0"
 				emptySpanS="0"
-				columnsXL="3"
+				columnsXL="2"
 				columnsL="2"
 				columnsM="1"
 				singleContainerFullSize="false"
@@ -220,164 +220,6 @@
 						</f:fields>
 					</f:FormElement>
 
-
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>otherReason}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
-								unaffected outside createMode (normal Change-Mode editing). -->
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<ComboBox
-									width="100%"
-									selectedKey="{SDDocumentReason}"
-									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: '/SDDocumentReason'}">
-									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-								</ComboBox>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
-
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>category}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- Session Prompt (Detail View Adjustments) 3.2: rebound to the
-								real, independently writable CustomerPurchaseOrderType header
-								property (ServiceSchema.headerProperties.category/
-								updatableHeaderProperties.category) - same edit-live pattern as
-								Order Reason above (Text when not editing, ComboBox against the
-								real /CustomerPurchaseOrderType VH entity set when editing).
-								Retires the old hardcoded Enums.CATEGORY Select entirely.
-								ZKB uses the service value help. ZREP uses its order-type-specific
-								four-option list from OrderModeConfig. -->
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text
-									text="{parts: [{path: 'CustomerPurchaseOrderType'}, {path: 'orderUi>/category/options'}], formatter: '.formatter.categoryText'}"
-									visible="{= !${sectionFlags>/details/editing} }"/>
-								<Select
-									width="100%"
-									selectedKey="{CustomerPurchaseOrderType}"
-									forceSelection="false"
-									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: 'orderUi>/category/options'}">
-									<core:Item key="{orderUi>key}" text="{orderUi>text}" />
-								</Select>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
-
-					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>filterExisId}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
-									maxLength="30" visible="{sectionFlags>/details/editing}"
-									editable="{= ${orderUi>/fields/detailsExisId/editable} !== false }"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
-
-				</f:formElements>
-			</f:FormContainer>
-
-<!-- DATES/STATUS -->
-
-			<f:FormContainer title="{i18n>detailsStatus}">
-				<f:formElements>
-					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>colCreatedAt}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-						<f:fields>
-							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-						</f:fields>
-
-					</f:FormElement>
-
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>colStatus}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- Status derivation on create is also part of the still-
-								unbuilt enrichment action per ADDENDUM-001 - must stay
-								user-selectable per the create-order design, hardcoded
-								Select in createMode, local-only until then. -->
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
-									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
-								<Select
-									selectedKey="{path: 'UserStatusDerived', formatter: '.formatter.masterStatusCode'}"
-									visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/details/editing} }"
-									width="100%"
-									forceSelection="false"
-									change=".onDetailStatusChange"
-									items="{enums>/EDIT_STATUS}">
-									<core:Item key="{enums>key}" text="{enums>text}" />
-								</Select>
-								<Select
-									selectedKey="{createEnrich>/status}"
-									visible="{sectionFlags>/createMode}"
-									width="100%"
-									tooltip="{i18n>createEnrichmentUnavailable}"
-									items="{enums>/STATUS}">
-									<core:Item key="{enums>key}" text="{enums>text}" />
-								</Select>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
-
 					<f:FormElement>
 						<f:label>
 							<Label text="{i18n>filterPriority}" required="false">
@@ -424,16 +266,9 @@
 						</f:fields>
 					</f:FormElement>
 
-				</f:formElements>
-			</f:FormContainer>
-
-<!-- NOTES -->
-
-			<f:FormContainer title="{i18n>detailsNotes}">
-				<f:formElements>
 					<f:FormElement>
 						<f:label>
-							<Label text="{i18n>detailsNotes}" required="false">
+							<Label text="{i18n>otherReason}" required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
@@ -441,24 +276,193 @@
 						</f:label>
 
 						<f:fields>
-						<!-- Header notes map to _Text/LongText for ZVRH. The local model
-							buffers the value until Create Save or Details section Save. -->
-						<TextArea rows="3" width="100%"
-							value="{createEnrich>/notes}"
-							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
-							<layoutData>
-								<l:GridData span="XL8 L8 M8 S12"/>
-							</layoutData>
-						</TextArea>
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+								unaffected outside createMode (normal Change-Mode editing). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{SDDocumentReason}"
+									visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/SDDocumentReason'}">
+									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+								</ComboBox>
+							</VBox>
 						</f:fields>
 					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>category}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Read-only in every mode (user request 2026-10-16). Create still seeds and replays
+								ServiceSchema.defaultCategory; text resolves via orderUi>/category/options. -->
+							<Text
+								text="{parts: [{path: 'CustomerPurchaseOrderType'}, {path: 'orderUi>/category/options'}], formatter: '.formatter.categoryText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
 				</f:formElements>
 			</f:FormContainer>
 
-<!-- VALUES -->
+<!-- STATUS -->
 
-			<f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
+			<f:FormContainer title="">
 				<f:formElements>
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>colStatus}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Status derivation on create is also part of the still-
+								unbuilt enrichment action per ADDENDUM-001 - must stay
+								user-selectable per the create-order design, hardcoded
+								Select in createMode, local-only until then. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Select
+									selectedKey="{path: 'UserStatusDerived', formatter: '.formatter.masterStatusCode'}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/details/editing} }"
+									width="100%"
+									forceSelection="false"
+									change=".onDetailStatusChange"
+									items="{enums>/EDIT_STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
+								<Select
+									selectedKey="{createEnrich>/status}"
+									visible="{sectionFlags>/createMode}"
+									width="100%"
+									tooltip="{i18n>createEnrichmentUnavailable}"
+									items="{enums>/STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>filterExisId}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="30" visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisId/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>colCreatedAt}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
 					<f:FormElement>
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
@@ -520,8 +524,126 @@
 						</f:fields>
 					</f:FormElement>
 
+
 				</f:formElements>
 			</f:FormContainer>
+
+<!-- DATES -->
+
+			<!-- <f:FormContainer title="{i18n>detailsDates}">
+				<f:formElements>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>colCreatedAt}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer> -->
+
+<!-- NOTES -->
+
+			<f:FormContainer title="{i18n>detailsNotes}">
+				<!-- Full row; label/field spans halved so they align with the half-width containers above. -->
+				<f:layoutData>
+					<l:GridData span="XL12 L12 M12 S12" linebreak="true"/>
+				</f:layoutData>
+				<f:formElements>
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text="{i18n>detailsNotes}" required="false">
+								<layoutData>
+									<l:GridData span="XL2 L2 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+
+						<f:fields>
+						<!-- Header notes map to _Text/LongText for ZVRH. The local model
+							buffers the value until Create Save or Details section Save. -->
+						<TextArea rows="3" width="100%"
+							value="{createEnrich>/notes}"
+							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
+							<layoutData>
+								<l:GridData span="XL12 L12 M12 S12"/>
+							</layoutData>
+						</TextArea>
+						</f:fields>
+					</f:FormElement>
+				</f:formElements>
+			</f:FormContainer>
+
+<!-- VALUES -->
+
+			<!-- <f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>netValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{ZZ_NET_VALUE_SDH}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>taxAmount}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{headerCalc>/taxAmount}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>grossValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{ZZ_GROSS_VALUE_SDH}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer> -->
 
 		</f:formContainers>
 	</f:Form>

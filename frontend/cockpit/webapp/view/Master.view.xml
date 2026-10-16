@@ -51,7 +51,7 @@
                     <MultiInput id="filterProviderPin" showValueHelp="true" valueHelpRequest=".onProviderPinValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="requestId" label="{parts: ['i18n>filterRequestId', 'orderContext>/title'], formatter: '.formatter.formatText'}" groupName="default" visibleInFilterBar="true">
+                <fb:FilterGroupItem name="requestId" label="{i18n>filterRequestId}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
                     <MultiInput id="filterRequestId" showValueHelp="true" valueHelpRequest=".onConditionValueHelpRequest" />
                   </fb:control>
@@ -76,10 +76,10 @@
                     <MultiInput id="filterNdc" showValueHelp="true" valueHelpRequest=".onNdcFilterValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <!-- Locked to the launch parameter (orderContext>/providerOrderType); Master.controller.js#_getOrderTypeFilter applies it on every request. Not shown in the bar, read-only in Adapt Filters. -->
-                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="dialog" visibleInFilterBar="false">
+                <!-- Optional: narrows to one of the category's READ-enabled types; Master.controller.js#_getOrderTypeFilter always applies the type scope. -->
+                <fb:FilterGroupItem name="salesOrderType" label="{i18n>filterSalesOrderType}" groupName="default" visibleInFilterBar="true">
                   <fb:control>
-                    <ComboBox id="filterSalesOrderType" editable="false" tooltip="{i18n>filterSalesOrderTypeLocked}" />
+                    <ComboBox id="filterSalesOrderType" showClearIcon="true" />
                   </fb:control>
                 </fb:FilterGroupItem>
 
@@ -164,11 +164,11 @@
             <OverflowToolbar class="masterTableToolbar">
               <Title text="{parts: ['i18n>masterTitle', 'orderContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
               <ToolbarSpacer />
-              <Button
-                text="{i18n>masterCreateButton}"
-                tooltip="{i18n>masterCreateTooltip}"
-                type="Transparent"
-                press=".onCreateRequest" />
+              <MenuButton text="{i18n>masterCreateButton}" type="Transparent">
+                <menu>
+                  <Menu items="{path: 'orderContext>/orderTypes', factory: '.createOrderTypeMenuItem'}" itemSelected=".onCreateRequest" />
+                </menu>
+              </MenuButton>
               <ToolbarSeparator />
               <SegmentedButton selectedKey="compact" selectionChange=".onMasterTableDensityChange">
                 <items>
