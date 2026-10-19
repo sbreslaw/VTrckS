@@ -727,17 +727,15 @@ sap.ui.define([
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails",
         providerDeliveries: "ProvOrdDelvs",
-        // TODO-VERIFY: not in design/metadata snapshot (stale); names from code owner 2026-10-16.
         orderIntention: "OrderIntention"
       },
+      // OrderIntentionType (design/metadata/zui_providerorder_meta_2026-10-19.xml): key NDC + OrderingIntention + SortOrder.
       orderIntentionProperties: {
-        code: "OrderIntention",
-        text: "OrderingIntention",
+        code: "OrderingIntention",
+        text: "OrderingIntentionText",
         sortOrder: "SortOrder",
-        // TODO-VERIFY: name from code owner 2026-10-19 (snapshot stale).
         ndc: "NDC"
       },
-      // ProvOrdDelvs: the SalesOrder filter key is assumed - verify against $metadata.
       providerDeliveryProperties: {
         salesOrder: "SalesOrder",
         delivery: "Delivery",
