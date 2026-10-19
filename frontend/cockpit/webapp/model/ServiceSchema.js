@@ -733,7 +733,9 @@ sap.ui.define([
       orderIntentionProperties: {
         code: "OrderIntention",
         text: "OrderingIntention",
-        sortOrder: "SortOrder"
+        sortOrder: "SortOrder",
+        // TODO-VERIFY: name from code owner 2026-10-19 (snapshot stale).
+        ndc: "NDC"
       },
       // ProvOrdDelvs: the SalesOrder filter key is assumed - verify against $metadata.
       providerDeliveryProperties: {
