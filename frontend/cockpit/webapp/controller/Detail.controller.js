@@ -135,6 +135,7 @@ sap.ui.define([
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
       this.getView().setModel(new JSONModel({ salesOrder: "", rows: [], busy: false, error: false, loaded: false }), "transactionHistory");
+      this.getView().setModel(new JSONModel({ name: "", tooltip: "" }), "detailContact");
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -769,6 +770,8 @@ sap.ui.define([
     // of requestSideEffects when a saved section can change a to-one nav's
     // target identity (see _aSectionsNeedingFullReload above).
     _reloadHeaderContext: function (sPath) {
+      var oOldContext = this.getView().getBindingContext();
+      var sOrderId = oOldContext && oOldContext.getProperty(ServiceSchema.keys.orderId);
       this.getView().unbindElement();
       this.getView().bindElement({
         path: sPath,
@@ -779,6 +782,40 @@ sap.ui.define([
         events: {
           dataReceived: this._syncOrderUiFromContext.bind(this)
         }
+      });
+      this._loadDetailContact(sOrderId);
+    },
+
+    // Same source as the Master Contact column: the order's AP HeaderPartner, via a
+    // filtered collection query (a key read 404s when the order has no AP partner).
+    _loadDetailContact: function (sOrderId) {
+      var oContactModel = this.getView().getModel("detailContact");
+      var oProps = ServiceSchema.headerPartnerProperties;
+      var iRequest = (this._iContactRequest || 0) + 1;
+      this._iContactRequest = iRequest;
+      oContactModel.setData({ name: "", tooltip: "" });
+      if (!sOrderId) {
+        return;
+      }
+      var oBinding = this.getOwnerComponent().getModel().bindList("/" + ServiceSchema.entitySets.headerPartner, undefined, undefined, [
+        new Filter(oProps.salesOrder, FilterOperator.EQ, sOrderId),
+        new Filter(oProps.partnerFunction, FilterOperator.EQ, ServiceSchema.contactPartnerFunction)
+      ], { $select: [oProps.salesOrder, oProps.partnerFunction, oProps.fullName, oProps.contactPerson, oProps.phone, oProps.email].join(",") });
+      oBinding.requestContexts(0, 1).then(function (aContexts) {
+        var oContact = aContexts.length ? aContexts[0].getObject() : null;
+        if (iRequest !== this._iContactRequest || !oContact) {
+          return;
+        }
+        var sContactPerson = oContact[oProps.contactPerson];
+        var sName = oContact[oProps.fullName] || (sContactPerson && sContactPerson !== "0" ? sContactPerson : "");
+        oContactModel.setData({
+          name: sName,
+          tooltip: [sName, oContact[oProps.email], oContact[oProps.phone]].filter(Boolean).join(" \u00b7 ")
+        });
+      }.bind(this)).catch(function () {
+        // Non-fatal: the field stays empty; the read failure is in the message model.
+      }).finally(function () {
+        oBinding.destroy();
       });
     },
 
@@ -4182,6 +4219,7 @@ sap.ui.define([
         }
       });
       this._loadHeaderNotes(this.getView().getBindingContext());
+      this._loadDetailContact(sId);
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
       this._computeHeaderPriority();

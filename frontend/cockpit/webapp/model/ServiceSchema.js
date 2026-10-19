@@ -641,6 +641,8 @@ sap.ui.define([
     // HeaderPartnerType (so.xml ~line 1065) - reached through the header's
     // _Partner navigation for editing and queried top-level for historical
     // AP-contact fallback searches.
+    // Partner function of the order's Contact (Master Contact column, Details > General > Contact).
+    contactPartnerFunction: "AP",
     headerPartnerProperties: {
       salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
