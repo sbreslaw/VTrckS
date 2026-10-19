@@ -78,6 +78,8 @@ sap.ui.define([
       // Detail.controller.js#_setCreateMode.
       deliveryStatus: "OverallDeliveryStatus",
       deliveryBlockStatus: "OverallDeliveryBlockStatus",
+      // Header Priority value help (ShippingTypeType: ShippingType, ShippingType_Text).
+      shippingType: "ShippingType",
       // SalesOrderTextType is exposed as this top-level entity set for reads,
       // but metadata marks it Insertable=false. New rows must be created via
       // SalesOrderManage/_Text after PrepareForEdit.
@@ -142,14 +144,8 @@ sap.ui.define([
       billingBlockStatus: "OverallBillingBlockStatus",
       billingStatus: "OverallOrdReltdBillgStatus",
       paymentTerms: "CustomerPaymentTerms",
-      // Session Prompt (Detail View Adjustments) 3.1: still no real header-level
-      // Priority property/nav on SalesOrderManageType (confirmed again in so.xml
-      // Step-0 reread) - Priority stays a VIRTUAL header field, computed from/
-      // propagated to item DeliveryPriority (itemProperties.deliveryPriority
-      // below), never a header property to bind/PATCH/select here. Left null so
-      // any accidental future header-property reference fails loudly instead of
-      // silently binding a nonexistent path.
-      priority: null,
+      // Header "Priority" field = SD shipping type (VSARTTR, so_C_SALESORDERMANAGE_2026-09-30.xml).
+      priority: "ShippingType",
       orderReason: "SDDocumentReason",
       // No header-level "Partner" property exists either — Ship-To-Party ID/name
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
@@ -346,11 +342,8 @@ sap.ui.define([
       chipQty: "ZZCHIPQTY",
       panQty: "ZZPANQTY",
       resQty: "ZZRESQTY",
-      // Session Prompt (Detail View Adjustments) 3.1: real property on
-      // SalesOrderItemType (so.xml ~line 112, MaxLength 2) - this is the ONLY
-      // place Priority actually lives; the Details section's header Priority
-      // field is a virtual read/write projection over this per-item value (see
-      // Detail.controller.js#_computeHeaderPriority/_propagatePriorityToItems).
+      // Item-level delivery priority (so.xml ~line 112, MaxLength 2); no longer
+      // driven by the header Priority field, which is now ShippingType.
       // Text reached via navigation.itemToDeliveryPriority (_DeliveryPriority).
       deliveryPriority: "DeliveryPriority",
       // Session Prompt (Detail View Adjustments) 3.3: real property on
@@ -795,16 +788,10 @@ sap.ui.define([
     // Edit is a plain PATCH/ETag flow, no draft actions/DraftAdministrativeData —
     // if a draftActions block ever reappears here, delete it, it's wrong.
     //
-    // Step-0 finding (deviates from the work order's assumption): Priority has
-    // NO header-level field at all (item-level only, see itemProperties.
-    // deliveryPriority above) - it is never PATCHed as a header property, even
-    // though it now has a real, user-facing header UI (propagated to every
-    // item instead, see Detail.controller.js#_propagatePriorityToItems). Only
-    // Order Reason, ExIS ID/Customer Reference, Shipping Condition, Payment
-    // Terms, Sales Office/Group, Description, and (Session Prompt, Detail View
-    // Adjustments 3.2) Category/CustomerPurchaseOrderType are confirmed real,
-    // editable header fields (no Core.Immutable/Computed annotation in the
-    // metadata).
+    // Only Order Reason, ExIS ID/Customer Reference, Shipping Condition,
+    // Payment Terms, Sales Office/Group, Priority (ShippingType), Description
+    // and Category/CustomerPurchaseOrderType are real, editable header fields
+    // (no Core.Immutable/Computed annotation in the metadata).
     updatableHeaderProperties: {
       orderReason: "SDDocumentReason",
       exisId: "PurchaseOrderByCustomer",
@@ -814,6 +801,8 @@ sap.ui.define([
       paymentTerms: "CustomerPaymentTerms",
       salesOffice: "SalesOffice",
       salesGroup: "SalesGroup",
+      // Header Priority (headerProperties.priority); no static Immutable/Computed annotation - TODO-VERIFY PATCHable live.
+      priority: "ShippingType",
       // Used by create replay and the existing-order Details edit session.
       description: "ZOrdDesc",
       // Session Prompt (Detail View Adjustments) 3.2: real, independently
