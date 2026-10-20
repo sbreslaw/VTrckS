@@ -360,12 +360,12 @@ sap.ui.define([
       taxAmount: "TaxAmount"
     },
 
-    // Items paste validation limits, from so_C_SALESORDERMANAGE_2026-09-30.xml
-    // (SalesOrderItemType): PurchaseOrderByCustomer MaxLength 35, Product
-    // MaxLength 18. Qty is capped by the Edm.Int32 ZZ*QTY mirrors it is copied
-    // into (RequestedQuantity itself is Decimal 15,3).
+    // Items paste validation limits (SalesOrderItemType): ExisItemNumber
+    // MaxLength 12 (live $metadata 2026-10-20, see VTrckS#26), Product MaxLength
+    // 18. Qty is capped by the Edm.Int32 ZZ*QTY mirrors it is copied into
+    // (RequestedQuantity itself is Decimal 15,3).
     itemFieldLimits: {
-      exisIdMaxLength: 35,
+      exisIdMaxLength: 12,
       ndcMaxLength: 18,
       qtyMax: 2147483647
     },
