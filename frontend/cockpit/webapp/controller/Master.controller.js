@@ -43,13 +43,14 @@ sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/service/ProviderSearchService",
-  "cdc/vaccreq/util/ValueHelpTableFitter"
+  "cdc/vaccreq/util/ValueHelpTableFitter",
+  "cdc/vaccreq/util/FilterValue"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
-  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
+  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue
 ) {
   "use strict";
 
@@ -67,9 +68,14 @@ sap.ui.define([
   var DateRangeKeys = mLibrary.StandardDynamicDateRangeKeys;
   var SortOrder = coreLibrary.SortOrder;
   // Must stay a String type: sap.ui.table.Column only parses * wildcards for String filter types.
-  var UpperCaseStringType = StringType.extend("cdc.vaccreq.model.type.UpperCaseString", {
+  var FunctionSafeStringType = StringType.extend("cdc.vaccreq.model.type.FunctionSafeString", {
     parseValue: function () {
-      return StringType.prototype.parseValue.apply(this, arguments).toUpperCase();
+      return FilterValue.forFunction(StringType.prototype.parseValue.apply(this, arguments));
+    }
+  });
+  var UpperCaseStringType = FunctionSafeStringType.extend("cdc.vaccreq.model.type.UpperCaseString", {
+    parseValue: function () {
+      return FunctionSafeStringType.prototype.parseValue.apply(this, arguments).toUpperCase();
     }
   });
   var CONDITION_OPERATIONS = [RangeOperation.EQ, RangeOperation.Contains, RangeOperation.BT,
@@ -318,7 +324,7 @@ sap.ui.define([
         oBinding = oInput.getBinding("suggestionRows");
       }
 
-      var sValue = (oEvent.getParameter("suggestValue") || "").trim();
+      var sValue = FilterValue.forFunction((oEvent.getParameter("suggestValue") || "").trim());
       if (oConfig.loadSuggestions) {
         var iRequest = (oInput.data("suggestionRequest") || 0) + 1;
         oInput.data("suggestionRequest", iRequest);
@@ -498,7 +504,7 @@ sap.ui.define([
       fnCreateFieldControls(oInitialSearchMode ? oInitialSearchMode.fields : oConfig.fields);
       var fnGetFilters = function () {
         var aFilters = [];
-        var sSearchValue = oBasicSearch.getValue();
+        var sSearchValue = FilterValue.forFunction(oBasicSearch.getValue());
         if (sSearchValue) {
           aFilters.push(new Filter({
             filters: oConfig.searchPaths.map(function (sPath) {
@@ -508,7 +514,7 @@ sap.ui.define([
           }));
         }
         aFieldControls.forEach(function (oFieldControl) {
-          var sValue = oFieldControl.control.getValue();
+          var sValue = FilterValue.forFunction(oFieldControl.control.getValue());
           if (sValue) {
             aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
           }
@@ -742,7 +748,7 @@ sap.ui.define([
         return "'" + String(sValue).replace(/'/g, "''") + "'";
       };
       var fnContains = function (sProperty, sValue) {
-        return "contains(" + sProperty + "," + fnQuote(sValue) + ")";
+        return "contains(" + sProperty + "," + fnQuote(FilterValue.forFunction(sValue)) + ")";
       };
       if (sBasicSearch) {
         aFilters.push("(" + fnContains(sIdentificationNumber, sBasicSearch) + " or " +
@@ -788,13 +794,14 @@ sap.ui.define([
       };
       var sValue1 = fnQuote(oCondition.value1);
       var sValue2 = fnQuote(oCondition.value2);
+      var sFunctionValue = fnQuote(FilterValue.forFunction(oCondition.value1));
       return {
         EQ: sProperty + " eq " + sValue1,
         Empty: sProperty + " eq ''",
-        Contains: "contains(" + sProperty + "," + sValue1 + ")",
+        Contains: "contains(" + sProperty + "," + sFunctionValue + ")",
         BT: "(" + sProperty + " ge " + sValue1 + " and " + sProperty + " le " + sValue2 + ")",
-        StartsWith: "startswith(" + sProperty + "," + sValue1 + ")",
-        EndsWith: "endswith(" + sProperty + "," + sValue1 + ")",
+        StartsWith: "startswith(" + sProperty + "," + sFunctionValue + ")",
+        EndsWith: "endswith(" + sProperty + "," + sFunctionValue + ")",
         LT: sProperty + " lt " + sValue1,
         LE: sProperty + " le " + sValue1,
         GT: sProperty + " gt " + sValue1,
@@ -1001,7 +1008,13 @@ sap.ui.define([
           GE: FilterOperator.LT
         }[sOperator];
       }
-      return sOperator ? new Filter(sPath, sOperator, oCondition.value1, oCondition.value2) : null;
+      if (!sOperator) {
+        return null;
+      }
+      var bFunction = [FilterOperator.Contains, FilterOperator.StartsWith, FilterOperator.EndsWith,
+        FilterOperator.NotContains, FilterOperator.NotStartsWith, FilterOperator.NotEndsWith].indexOf(sOperator) !== -1;
+      return new Filter(sPath, sOperator,
+        bFunction ? FilterValue.forFunction(oCondition.value1) : oCondition.value1, oCondition.value2);
     },
 
     _getInputConditions: function (sControlId) {
@@ -1955,8 +1968,8 @@ sap.ui.define([
           filterProperty: oDef.filterPath || "",
           showFilterMenuEntry: !!oDef.filterPath
         });
-        if (oDef.filterUpperCase) {
-          oColumn.setFilterType(new UpperCaseStringType());
+        if (oDef.filterPath) {
+          oColumn.setFilterType(oDef.filterUpperCase ? new UpperCaseStringType() : new FunctionSafeStringType());
         }
         oColumn.data("colKey", oDef.key);
         oColumn.data("baselineWidth", sWidth);

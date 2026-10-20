@@ -1,8 +1,9 @@
 sap.ui.define([
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator",
-  "cdc/vaccreq/model/ServiceSchema"
-], function (Filter, FilterOperator, ServiceSchema) {
+  "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/util/FilterValue"
+], function (Filter, FilterOperator, ServiceSchema, FilterValue) {
   "use strict";
 
   var MODE_ALL = "all";
@@ -110,6 +111,7 @@ sap.ui.define([
   }
 
   function containsFilter(sPath, sValue) {
+    sValue = FilterValue.forFunction(sValue);
     return sValue ? new Filter(sPath, FilterOperator.Contains, sValue) : null;
   }
 
