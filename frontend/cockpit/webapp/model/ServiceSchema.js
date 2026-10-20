@@ -362,6 +362,16 @@ sap.ui.define([
       taxAmount: "TaxAmount"
     },
 
+    // Items paste validation limits (SalesOrderItemType): ExisItemNumber
+    // MaxLength 12 (live $metadata 2026-10-20, see VTrckS#26), Product MaxLength
+    // 18. Qty is capped by the Edm.Int32 ZZ*QTY mirrors it is copied into
+    // (RequestedQuantity itself is Decimal 15,3).
+    itemFieldLimits: {
+      exisIdMaxLength: 12,
+      ndcMaxLength: 18,
+      qtyMax: 2147483647
+    },
+
     // Live-test fix (round 19): bound action (design/so.xml ~2178,
     // IsBound="true", param "_it" SalesOrderItemType, no EntitySetPath ->
     // bound directly on the item entity itself) that explicitly (re)triggers
@@ -642,6 +652,8 @@ sap.ui.define([
     // HeaderPartnerType (so.xml ~line 1065) - reached through the header's
     // _Partner navigation for editing and queried top-level for historical
     // AP-contact fallback searches.
+    // Partner function of the order's Contact (Master Contact column, Details > General > Contact).
+    contactPartnerFunction: "AP",
     headerPartnerProperties: {
       salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
@@ -728,15 +740,15 @@ sap.ui.define([
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails",
         providerDeliveries: "ProvOrdDelvs",
-        // TODO-VERIFY: not in design/metadata snapshot (stale); names from code owner 2026-10-16.
         orderIntention: "OrderIntention"
       },
+      // OrderIntentionType (design/metadata/zui_providerorder_meta_2026-10-19.xml): key NDC + OrderingIntention + SortOrder.
       orderIntentionProperties: {
-        code: "OrderIntention",
-        text: "OrderingIntention",
-        sortOrder: "SortOrder"
+        code: "OrderingIntention",
+        text: "OrderingIntentionText",
+        sortOrder: "SortOrder",
+        ndc: "NDC"
       },
-      // ProvOrdDelvs: the SalesOrder filter key is assumed - verify against $metadata.
       providerDeliveryProperties: {
         salesOrder: "SalesOrder",
         delivery: "Delivery",

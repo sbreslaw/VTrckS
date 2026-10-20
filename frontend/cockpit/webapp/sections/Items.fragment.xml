@@ -90,7 +90,7 @@
                read-only detail. -->
           <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
-          <Input value="{ExisItemNumber}" visible="{itemsColumns>/exisId}"
+          <Input value="{ExisItemNumber}" visible="{itemsColumns>/exisId}" change=".onItemExisChange"
             enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
           <!-- Brand is authoritative from the selected Product. A scratch row
             cannot resolve _Product until it is posted, so the locally copied
@@ -127,17 +127,15 @@
                NDC's own Product.BaseUnit (ServiceSchema.productProperties.
                baseUnit) instead of always defaulting to the hardcoded "EA". -->
           <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
-          <!-- MVGR1: values from po>/OrderIntention, loaded once into the JSON "orderIntentions" model (Detail.controller.js#_loadOrderIntentionVH). -->
+          <!-- MVGR1: values from po>/OrderIntention, bound lazily per row and filtered by the row's NDC (Detail.controller.js#_bindOrderIntentionValueHelp). -->
           <Select 
             selectedKey="{path: 'MaterialGroup1', 
             mode: 'sap.ui.model.BindingMode.OneWay'}" 
             forceSelection="false" 
             visible="{itemsColumns>/orderIntention}"
-            items="{path: 'orderIntentions>/list', templateShareable: false}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/orderIntention/editable} !== false }" 
-            change=".onOrderIntentionChange">
-            <core:Item key="{orderIntentions>key}" text="{orderIntentions>text}" />
-          </Select>
+            change=".onOrderIntentionChange"
+            modelContextChange=".onOrderIntentionModelContextChange" />
           <!-- MVGR2 remains MaterialGroup2. Each row binds its values lazily to
                po>/FundTypeVH, filtered by that row's NDC and Order Intention. -->
           <Select 

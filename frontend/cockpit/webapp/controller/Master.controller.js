@@ -1153,7 +1153,7 @@ sap.ui.define([
           }),
           and: false
         }),
-        new Filter(oProps.partnerFunction, FilterOperator.EQ, "AP")
+        new Filter(oProps.partnerFunction, FilterOperator.EQ, ServiceSchema.contactPartnerFunction)
       ], { $select: aSelect });
       var fnSetContacts = function (mFound) {
         var mContacts = Object.assign({}, oContactModel.getProperty("/byOrder"));
