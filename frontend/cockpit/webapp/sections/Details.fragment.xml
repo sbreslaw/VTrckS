@@ -230,7 +230,7 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Priority = header ShippingType (ServiceSchema.headerProperties.priority); values from /ShippingType. -->
+							<!-- Priority = header ShippingType (ServiceSchema.headerProperties.priority); values from po>/PriorityType. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
@@ -242,8 +242,8 @@
 									width="100%"
 									forceSelection="false"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: '/ShippingType'}">
-									<core:Item key="{ShippingType}" text="{ShippingType_Text}" />
+									items="{path: 'po>/PriorityType', templateShareable: false}">
+									<core:Item key="{po>ShippingType}" text="{po>ShippingTypeText}" />
 								</Select>
 							</VBox>
 						</f:fields>

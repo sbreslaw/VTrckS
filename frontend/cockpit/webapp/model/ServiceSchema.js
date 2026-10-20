@@ -78,8 +78,6 @@ sap.ui.define([
       // Detail.controller.js#_setCreateMode.
       deliveryStatus: "OverallDeliveryStatus",
       deliveryBlockStatus: "OverallDeliveryBlockStatus",
-      // Header Priority value help (ShippingTypeType: ShippingType, ShippingType_Text).
-      shippingType: "ShippingType",
       // SalesOrderTextType is exposed as this top-level entity set for reads,
       // but metadata marks it Insertable=false. New rows must be created via
       // SalesOrderManage/_Text after PrepareForEdit.
@@ -720,6 +718,8 @@ sap.ui.define([
         providerIoh: "ProviderIOH",
         soldToDetails: "SoldToDetails",
         providerDeliveries: "ProvOrdDelvs",
+        // Header Priority value help (PriorityTypeType). TODO-VERIFY: entity set name not in the 2026-10-19 snapshot.
+        priorityType: "PriorityType",
         // TODO-VERIFY: not in design/metadata snapshot (stale); names from code owner 2026-10-16.
         orderIntention: "OrderIntention"
       },
