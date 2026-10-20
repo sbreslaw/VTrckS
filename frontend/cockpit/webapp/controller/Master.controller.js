@@ -1652,6 +1652,7 @@ sap.ui.define([
         {
           key: "requestId", i18nKey: "colRequestId", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.keys.orderId,
+          filterPath: ServiceSchema.keys.orderId,
           createCell: function () {
             return new Link({
               text: { path: ServiceSchema.keys.orderId, formatter: formatter.masterRequestId },
@@ -1676,6 +1677,9 @@ sap.ui.define([
         {
           key: "salesOrderType", i18nKey: "colSalesOrderType", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.headerProperties.salesOrderType,
+          // Filters the type code (e.g. ZKB), not the displayed title.
+          filterPath: ServiceSchema.headerProperties.salesOrderType,
+          filterUpperCase: true,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1695,6 +1699,7 @@ sap.ui.define([
         {
           key: "provider", i18nKey: "colProvider", hAlign: "Begin", width: "18rem",
           sortPath: ServiceSchema.headerProperties.providerId,
+          filterPath: ServiceSchema.headerProperties.providerName,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1769,6 +1774,8 @@ sap.ui.define([
         {
           key: "createdBy", i18nKey: "colCreatedBy", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.headerProperties.createdBy,
+          filterPath: ServiceSchema.headerProperties.createdBy,
+          filterUpperCase: true,
           createCell: function () {
             return new HBox({
               width: "100%",
@@ -1903,6 +1910,7 @@ sap.ui.define([
       oTable.removeAllColumns();
       aVisibleDefs.forEach(function (oDef) {
         var sWidth = (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem";
+        var sSortOrder = this._getColumnSortOrder(oLayout, oDef.key);
         var oColumn = new Column({
           label: new Text({ text: oBundle.getText(oDef.i18nKey) }),
           template: oDef.createCell(),
@@ -1912,8 +1920,17 @@ sap.ui.define([
           autoResizable: true,
           sortProperty: oDef.sortPath || "",
           showSortMenuEntry: !!oDef.sortPath,
-          sortOrder: this._getColumnSortOrder(oLayout, oDef.key)
+          sortOrder: sSortOrder,
+          // Deprecated, but the 1.136 header renderer still needs it to show the sort icon.
+          sorted: sSortOrder !== SortOrder.None,
+          filterProperty: oDef.filterPath || "",
+          showFilterMenuEntry: !!oDef.filterPath
         });
+        if (oDef.filterUpperCase) {
+          // Code fields are upper case; a function filterType disables wildcard parsing, so Contains is set explicitly.
+          oColumn.setFilterType(function (sValue) { return sValue.toUpperCase(); });
+          oColumn.setDefaultFilterOperator(FilterOperator.Contains);
+        }
         oColumn.data("colKey", oDef.key);
         oColumn.data("baselineWidth", sWidth);
         oTable.addColumn(oColumn);
@@ -1956,7 +1973,9 @@ sap.ui.define([
       this._saveColumnLayout(oLayout);
       var oTable = this.byId("requestsTable");
       oTable.getColumns().forEach(function (oTableColumn) {
-        oTableColumn.setSortOrder(this._getColumnSortOrder(oLayout, oTableColumn.data("colKey")));
+        var sColumnSortOrder = this._getColumnSortOrder(oLayout, oTableColumn.data("colKey"));
+        oTableColumn.setSortOrder(sColumnSortOrder);
+        oTableColumn.setSorted(sColumnSortOrder !== SortOrder.None);
       }, this);
       var oBinding = oTable.getBinding("rows");
       if (oBinding) {
