@@ -360,6 +360,16 @@ sap.ui.define([
       taxAmount: "TaxAmount"
     },
 
+    // Items paste validation limits (SalesOrderItemType): ExisItemNumber
+    // MaxLength 12 (live $metadata 2026-10-20, see VTrckS#26), Product MaxLength
+    // 18. Qty is capped by the Edm.Int32 ZZ*QTY mirrors it is copied into
+    // (RequestedQuantity itself is Decimal 15,3).
+    itemFieldLimits: {
+      exisIdMaxLength: 12,
+      ndcMaxLength: 18,
+      qtyMax: 2147483647
+    },
+
     // Live-test fix (round 19): bound action (design/so.xml ~2178,
     // IsBound="true", param "_it" SalesOrderItemType, no EntitySetPath ->
     // bound directly on the item entity itself) that explicitly (re)triggers
