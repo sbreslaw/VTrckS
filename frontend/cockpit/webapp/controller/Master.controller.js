@@ -105,7 +105,6 @@ sap.ui.define([
       // is guaranteed to match nothing (SalesOrder is a non-nullable key field,
       // never an empty string).
       this._aCurrentFilters = this._getNoResultsFilter();
-      this._iMaxHits = 50;
       this._bindMasterRows();
       this._refreshVariantsModel();
       this._refreshColumnVariantsModel();
@@ -946,7 +945,11 @@ sap.ui.define([
         },
         filterRequestId: { label: oBundle.getText("filterRequestId"), path: ServiceSchema.keys.orderId },
         filterExisId: { label: oBundle.getText("filterExisId"), path: ServiceSchema.headerProperties.exisId },
-        filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId },
+        filterProvider: {
+          label: oBundle.getText("filterProvider"),
+          path: ServiceSchema.headerProperties.providerId,
+          typedPaths: [ServiceSchema.headerProperties.providerId, ServiceSchema.headerProperties.providerName]
+        },
         filterCreatedBy: { label: oBundle.getText("filterCreatedBy"), path: ServiceSchema.headerProperties.createdBy }
       }[sControlId];
     },
@@ -961,7 +964,8 @@ sap.ui.define([
         return oToken.data("range");
       }).filter(Boolean);
       if (!aConditions.length && oInput.getValue() && !oConfig.selectionOnly) {
-        aConditions.push({ exclude: false, operation: RangeOperation.EQ, value1: oInput.getValue() });
+        this._pushTypedFilter(aFilters, oConfig.typedPaths || [oConfig.path], oInput.getValue(), RangeOperation.EQ);
+        return;
       }
       var aIncludeFilters = [];
       var aExcludeFilters = [];
@@ -1010,9 +1014,61 @@ sap.ui.define([
         };
       });
       if (!aConditions.length && oInput.getValue()) {
-        aConditions.push({ exclude: false, operation: RangeOperation.EQ, value1: oInput.getValue() });
+        var oTypedCondition = this._parseTypedCondition(oInput.getValue(), RangeOperation.EQ);
+        if (oTypedCondition) {
+          aConditions.push(oTypedCondition);
+        }
       }
       return aConditions;
+    },
+
+    // Same typed syntax as the table column filters: *x*, x*, *x, =x, !=x, <x, <=x, >x, >=x, a..b.
+    _parseTypedCondition: function (sValue, sDefaultOperation) {
+      var sText = (sValue || "").trim();
+      var aBetween = sText.match(/^(.+?)\.\.(.+)$/);
+      if (aBetween) {
+        return { exclude: false, operation: RangeOperation.BT, value1: aBetween[1].trim(), value2: aBetween[2].trim() };
+      }
+      var aPrefix = [
+        ["!=", RangeOperation.EQ, true], ["<=", RangeOperation.LE], [">=", RangeOperation.GE],
+        ["=", RangeOperation.EQ], ["<", RangeOperation.LT], [">", RangeOperation.GT]
+      ].find(function (aEntry) {
+        return sText.indexOf(aEntry[0]) === 0;
+      });
+      if (aPrefix) {
+        var sOperand = sText.slice(aPrefix[0].length).trim();
+        return sOperand ? { exclude: !!aPrefix[2], operation: aPrefix[1], value1: sOperand } : null;
+      }
+      var bLeading = sText.charAt(0) === "*";
+      var bTrailing = sText.length > 1 && sText.charAt(sText.length - 1) === "*";
+      var sCore = sText.replace(/^\*/, "").replace(/\*$/, "");
+      if (!sCore) {
+        return null;
+      }
+      var sOperation = sDefaultOperation;
+      if (bLeading && bTrailing) {
+        sOperation = RangeOperation.Contains;
+      } else if (bLeading) {
+        sOperation = RangeOperation.EndsWith;
+      } else if (bTrailing) {
+        sOperation = RangeOperation.StartsWith;
+      }
+      return { exclude: false, operation: sOperation, value1: sCore };
+    },
+
+    // Exclusions must hold for every path; inclusions for any path.
+    _pushTypedFilter: function (aFilters, aPaths, sValue, sDefaultOperation) {
+      var oCondition = this._parseTypedCondition(sValue, sDefaultOperation);
+      if (!oCondition) {
+        return;
+      }
+      var aPathFilters = aPaths.map(function (sPath) {
+        return this._createConditionFilter(sPath, oCondition);
+      }, this).filter(Boolean);
+      if (aPathFilters.length) {
+        aFilters.push(aPathFilters.length === 1 ? aPathFilters[0]
+          : new Filter({ filters: aPathFilters, and: !!oCondition.exclude }));
+      }
     },
 
     _pushNdcConditionFilters: function (aFilters) {
@@ -1103,9 +1159,9 @@ sap.ui.define([
       this._pushConditionFilters(aFilters, "filterRequestId");
       this._pushConditionFilters(aFilters, "filterExisId");
       this._pushConditionFilters(aFilters, "filterProvider");
-      this._pushIfValue(aFilters,
-        ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee,
-        oView.byId("filterEmployeeResponsible").getValue(), FilterOperator.EQ);
+      this._pushTypedFilter(aFilters,
+        [ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee],
+        oView.byId("filterEmployeeResponsible").getValue(), RangeOperation.EQ);
       this._pushNdcConditionFilters(aFilters);
       // CreatedByUser is IsUpperCase: typed IDs are matched EQ in upper case.
       var oCreatedBy = oView.byId("filterCreatedBy");
@@ -1125,7 +1181,7 @@ sap.ui.define([
       // PHASE2_AUDIT.md), not yet exercised against the live service in this pass.
       var sShipToId = ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.id;
       var sShipToName = ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.fullName;
-      this._pushOrFilter(aFilters, [sShipToId, sShipToName], oView.byId("filterShipToParty").getValue());
+      this._pushTypedFilter(aFilters, [sShipToId, sShipToName], oView.byId("filterShipToParty").getValue(), RangeOperation.Contains);
 
       // Priority: BLOCKED-BY-SERVICE as a master-list filter — DeliveryPriority
       // exists only on SalesOrderItemType, not on the header entity (see
@@ -1135,7 +1191,7 @@ sap.ui.define([
       aFilters.push(this._getOrderTypeFilter());
 
       if (ServiceSchema.showJurisdictionFilter) {
-        this._pushIfValue(aFilters, ServiceSchema.headerProperties.salesOffice, oView.byId("filterJurisdiction").getValue(), FilterOperator.Contains);
+        this._pushTypedFilter(aFilters, [ServiceSchema.headerProperties.salesOffice], oView.byId("filterJurisdiction").getValue(), RangeOperation.Contains);
       }
 
       var aStatusKeys = oView.byId("filterStatus").getSelectedKeys();
@@ -1155,15 +1211,6 @@ sap.ui.define([
       }
 
       var oTable = this.byId("requestsTable");
-      var iMaxHits = oView.byId("filterMaxHits").getValue();
-      // NOTE: $top/$skip cannot be set as OData V4 list-binding parameters
-      // ("System query option $top is not supported" — confirmed at runtime,
-      // see NOTES.md); V4 paging is fully automatic for sap.ui.table.Table's
-      // virtual scrolling. iMaxHits is captured for the variant state and any
-      // future $apply(top(...))-based cap, but is not enforced as a hard
-      // fetch limit here.
-      this._iMaxHits = iMaxHits;
-
       this._aCurrentFilters = aFilters;
       var oBinding = oTable.getBinding("rows");
       if (oBinding) {
@@ -1185,7 +1232,6 @@ sap.ui.define([
 
     onFilterBarClear: function () {
       this._applyVariantValues({});
-      this.byId("filterMaxHits").setValue(50);
       this.onSearch();
     },
 
@@ -1574,16 +1620,6 @@ sap.ui.define([
       return (oComponent.getModel("orderContext").getProperty("/orderTypes") || []).filter(function (oType) {
         return oAuth.getProperty("/types/" + oType.orderType + "/" + sAction) === true;
       });
-    },
-
-    _pushOrFilter: function (aFilters, aPaths, sValue, sOperator) {
-      if (!sValue) {
-        return;
-      }
-      var aOrFilters = aPaths.map(function (sPath) {
-        return new Filter(sPath, sOperator, sValue);
-      });
-      aFilters.push(new Filter({ filters: aOrFilters, and: false }));
     },
 
     _applyFilterAvailability: function () {
@@ -2363,7 +2399,6 @@ sap.ui.define([
       }
       if (sKey === STANDARD_VARIANT_KEY) {
         this._applyVariantValues({});
-        this.byId("filterMaxHits").setValue(50);
         VariantStore.setLastSelectedKey(FILTER_VARIANT_KEY, null);
         this.onSearch();
         return;

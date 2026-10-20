@@ -129,11 +129,6 @@
                     <Input id="filterRejectionReason" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="maxHits" label="{i18n>filterMaxHits}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <Slider id="filterMaxHits" min="10" max="100" step="10" value="50" />
-                  </fb:control>
-                </fb:FilterGroupItem>
               </fb:filterGroupItems>
             </fb:FilterBar>
       </f:DynamicPageHeader>
