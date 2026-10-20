@@ -1626,20 +1626,6 @@ sap.ui.define([
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
       var sTooltip = oBundle.getText("availableWithE008Service");
 
-      // Contact: RUNTIME-BLOCKED-BY-SERVICE — filtering/expanding
-      // _SoldToPartyContactInfo on the master LIST crashes the backend
-      // (ASSERTION_FAILED in CL_SD_S4H_STD_PARTNER_CONTACT=CM002, confirmed via
-      // ST22 short dump 2026-08-03, see NOTES.md).
-      this.byId("filterContact").setEnabled(false);
-      this.byId("filterContact").setTooltip(sTooltip);
-
-      // Rejection Reason: no header-level reason-code field exists on this
-      // service (only an item-level SalesDocumentRjcnReason) — filtering the
-      // master list by it is not supported without an item-level query, same
-      // class of limitation as NDC.
-      this.byId("filterRejectionReason").setEnabled(false);
-      this.byId("filterRejectionReason").setTooltip(sTooltip);
-
       // Priority: DeliveryPriority exists only on SalesOrderItemType in this
       // service (design/so.xml) — there is no header-level Priority field to
       // filter the master list by, so this control is disabled rather than

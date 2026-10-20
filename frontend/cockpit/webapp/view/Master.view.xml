@@ -89,11 +89,6 @@
                     <DynamicDateRange id="filterCreatedOn" standardOptions="DATE,DATERANGE,TODAY,YESTERDAY,LASTDAYS,LASTWEEKS,LASTMONTHS,THISWEEK,THISMONTH,FROM,TO" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="contact" label="{i18n>filterContact}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <Input id="filterContact" />
-                  </fb:control>
-                </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="shipToParty" label="{i18n>filterShipToParty}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
                     <Input id="filterShipToParty" />
@@ -122,11 +117,6 @@
                 <fb:FilterGroupItem name="deliveryBlockReason" label="{i18n>filterDeliveryBlockReason}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
                     <ComboBox id="filterDeliveryBlockReason" />
-                  </fb:control>
-                </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="rejectionReason" label="{i18n>filterRejectionReason}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <Input id="filterRejectionReason" />
                   </fb:control>
                 </fb:FilterGroupItem>
               </fb:filterGroupItems>
