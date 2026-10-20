@@ -928,14 +928,27 @@ sap.ui.define([
         aRows.push(oNewRowData);
       }
       if (bAtEnd === false && !this._bItemsSessionBound) {
-        aRows.reverse().forEach(function (oRowData) {
-          this._handleItemCreatePromise(oBinding.create(oRowData, false, false));
-        }, this);
+        this._appendScratchRows(oBinding, aRows);
         return;
       }
       aRows.forEach(function (oRowData) {
         this._handleItemCreatePromise(oBinding.create(oRowData, false, true, bInactive));
       }, this);
+    },
+
+    // For a freshly bound list whose length isn't known yet. Rows inserted at the front of the
+    // nested transient _Item list cross-wire their cells' property bindings (UI5 1.136: editing
+    // one row shows its values in the other front-inserted rows), so resolve the length and append.
+    _appendScratchRows: function (oBinding, aRows) {
+      oBinding.requestContexts(0, 1).then(function () {
+        var oTable = this._byIdInSection("items", "itemsTable");
+        if (!oTable || oTable.getBinding("items") !== oBinding) {
+          return;
+        }
+        aRows.forEach(function (oRowData) {
+          this._handleItemCreatePromise(oBinding.create(oRowData, false, true));
+        }, this);
+      }.bind(this)).catch(function () {});
     },
 
     _handleItemCreatePromise: function (oContext) {
@@ -1932,21 +1945,11 @@ sap.ui.define([
       this._rebindItemsGroup(this._sItemsUpdateGroup);
       var oNewBinding = oTable.getBinding("items");
       if (oNewBinding) {
-        // A just-`bindItems()`-created binding hasn't resolved its own
-        // length yet (unlike _addItemRows's bAtEnd:true, which only ever
-        // runs long after the Table's own rendering cycle has already
-        // resolved it) - create(..., bAtEnd:true) here throws synchronously
-        // ("Must know the final length to create at the end"). Insert at
-        // the front instead (no length needed either way); item numbers are
-        // assigned up front (in original order) so reverse-inserting them
-        // doesn't also reverse the client-only placeholder numbering.
         aRowData.forEach(function (oRowData, iIndex) {
           oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
           oRowData.SalesOrderItem = ("000000" + ((iIndex + 1) * 10)).slice(-6);
         });
-        aRowData.slice().reverse().forEach(function (oRowData) {
-          this._handleItemCreatePromise(oNewBinding.create(oRowData, false, false));
-        }, this);
+        this._appendScratchRows(oNewBinding, aRowData);
       }
       FundLogicService.clearAllocationCache();
     },
