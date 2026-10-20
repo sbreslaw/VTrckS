@@ -26,6 +26,7 @@ sap.ui.define([
   "sap/m/MenuItem",
   "sap/m/SearchField",
   "sap/m/Token",
+  "sap/m/library",
   "sap/m/p13n/Popup",
   "sap/m/p13n/SelectionPanel",
   "sap/m/p13n/SortPanel",
@@ -43,7 +44,7 @@ sap.ui.define([
   "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
-  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token,
+  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
   formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
@@ -61,6 +62,7 @@ sap.ui.define([
   var ROW_COUNT_DEBOUNCE_MS = 400;
   var RESIZE_DEBOUNCE_MS = 400;
   var RangeOperation = compLibrary.valuehelpdialog.ValueHelpRangeOperation;
+  var DateRangeKeys = mLibrary.StandardDynamicDateRangeKeys;
   var CONDITION_OPERATIONS = [RangeOperation.EQ, RangeOperation.Contains, RangeOperation.BT,
     RangeOperation.StartsWith, RangeOperation.EndsWith, RangeOperation.LT, RangeOperation.LE,
     RangeOperation.GT, RangeOperation.GE, "Empty"];
@@ -1138,11 +1140,9 @@ sap.ui.define([
         }));
       }
 
-      var oDateRange = oView.byId("filterCreatedOn");
-      var oDateFrom = oDateRange.getDateValue();
-      var oDateTo = oDateRange.getSecondDateValue();
-      if (oDateFrom && oDateTo) {
-        aFilters.push(new Filter(ServiceSchema.headerProperties.createdOn, FilterOperator.BT, oDateFrom, oDateTo));
+      var oCreatedOnFilter = this._getCreatedOnFilter();
+      if (oCreatedOnFilter) {
+        aFilters.push(oCreatedOnFilter);
       }
 
       var oTable = this.byId("requestsTable");
@@ -1178,6 +1178,45 @@ sap.ui.define([
       this._applyVariantValues({});
       this.byId("filterMaxHits").setValue(50);
       this.onSearch();
+    },
+
+    // D-1172: CreationDate is Edm.Date, so bounds go out as YYYY-MM-DD strings.
+    // FROM/TO resolve to a single date (StandardDynamicDateOption#toDates).
+    _getCreatedOnFilter: function () {
+      var oControl = this.byId("filterCreatedOn");
+      var oValue = oControl.getValue();
+      if (!oValue || !oControl.getOption(oValue.operator)) {
+        return null;
+      }
+      var aDates = oControl.toDates(oValue);
+      var sPath = ServiceSchema.headerProperties.createdOn;
+      var fnFormat = function (oDate) {
+        return oDate.getFullYear() + "-" + String(oDate.getMonth() + 1).padStart(2, "0") + "-" +
+          String(oDate.getDate()).padStart(2, "0");
+      };
+      if (oValue.operator === DateRangeKeys.FROM) {
+        return new Filter(sPath, FilterOperator.GE, fnFormat(aDates[0]));
+      }
+      if (oValue.operator === DateRangeKeys.TO) {
+        return new Filter(sPath, FilterOperator.LE, fnFormat(aDates[0]));
+      }
+      return new Filter(sPath, FilterOperator.BT, fnFormat(aDates[0]), fnFormat(aDates[1] || aDates[0]));
+    },
+
+    // Variants saved before D-1172 hold the DateRangeSelection shape {from, to}.
+    _toDynamicDateValue: function (vValue) {
+      if (vValue && vValue.operator) {
+        return {
+          operator: vValue.operator,
+          values: (vValue.values || []).map(function (vEntry) {
+            return vEntry && vEntry.date ? new Date(vEntry.date) : vEntry;
+          })
+        };
+      }
+      if (vValue && vValue.from && vValue.to) {
+        return { operator: DateRangeKeys.DATERANGE, values: [new Date(vValue.from), new Date(vValue.to)] };
+      }
+      return undefined;
     },
 
     _navigateToOrder: function (sId) {
@@ -2154,7 +2193,7 @@ sap.ui.define([
         { id: "filterDeliveryBlockReason", type: "key" },
         { id: "filterSalesOrderType", type: "key" },
         { id: "filterStatus", type: "keys" },
-        { id: "filterCreatedOn", type: "dateRange" }
+        { id: "filterCreatedOn", type: "dynamicDateRange" }
       ];
     },
 
@@ -2178,11 +2217,14 @@ sap.ui.define([
             break;
           case "key": oValues[oDef.id] = oControl.getSelectedKey(); break;
           case "keys": oValues[oDef.id] = oControl.getSelectedKeys(); break;
-          case "dateRange":
-            oValues[oDef.id] = {
-              from: oControl.getDateValue() ? oControl.getDateValue().toISOString() : null,
-              to: oControl.getSecondDateValue() ? oControl.getSecondDateValue().toISOString() : null
-            };
+          case "dynamicDateRange":
+            var oDateValue = oControl.getValue();
+            oValues[oDef.id] = oDateValue && oControl.getOption(oDateValue.operator) ? {
+              operator: oDateValue.operator,
+              values: oDateValue.values.map(function (vEntry) {
+                return vEntry instanceof Date ? { date: vEntry.toISOString() } : vEntry;
+              })
+            } : null;
             break;
           default: break;
         }
@@ -2206,9 +2248,8 @@ sap.ui.define([
             break;
           case "key": oControl.setSelectedKey(vValue || oDef.defaultValue || ""); break;
           case "keys": oControl.setSelectedKeys(vValue || []); break;
-          case "dateRange":
-            oControl.setDateValue(vValue && vValue.from ? new Date(vValue.from) : null);
-            oControl.setSecondDateValue(vValue && vValue.to ? new Date(vValue.to) : null);
+          case "dynamicDateRange":
+            oControl.setValue(this._toDynamicDateValue(vValue));
             break;
           default: break;
         }
