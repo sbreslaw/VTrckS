@@ -183,7 +183,6 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
-      this._loadOrderIntentionVH();
       this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
     },
@@ -981,6 +980,7 @@ sap.ui.define([
         oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
       }
       this._refreshFundTypeValueHelp(oRowContext);
+      this._bindOrderIntentionValueHelp(this._getRowSelect(this._getRowForContext(oRowContext), ServiceSchema.itemProperties.orderIntention));
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -1107,20 +1107,62 @@ sap.ui.define([
     },
 
     _getRowFundTypeSelect: function (oRow) {
+      return this._getRowSelect(oRow, ServiceSchema.itemProperties.fundType);
+    },
+
+    // The row's Select whose selectedKey is bound to sPropertyPath.
+    _getRowSelect: function (oRow, sPropertyPath) {
       return oRow && oRow.getCells().filter(function (oCell) {
         var oBinding = oCell.getBinding && oCell.getBinding("selectedKey");
-        return oBinding && oBinding.getPath() === ServiceSchema.itemProperties.fundType;
+        return oBinding && oBinding.getPath() === sPropertyPath;
+      })[0];
+    },
+
+    _getRowForContext: function (oRowContext) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var sPath = oRowContext && oRowContext.getPath();
+      return oTable && oTable.getItems().filter(function (oItem) {
+        var oContext = oItem.getBindingContext();
+        return oContext && oContext.getPath() === sPath;
       })[0];
     },
 
     _getFundTypeSelectForContext: function (oRowContext) {
-      var oTable = this._byIdInSection("items", "itemsTable");
-      var sPath = oRowContext && oRowContext.getPath();
-      var oRow = oTable && oTable.getItems().filter(function (oItem) {
-        var oContext = oItem.getBindingContext();
-        return oContext && oContext.getPath() === sPath;
-      })[0];
-      return this._getRowFundTypeSelect(oRow);
+      return this._getRowFundTypeSelect(this._getRowForContext(oRowContext));
+    },
+
+    // Order Intention options are product-specific: bound per row to po>/OrderIntention filtered by the row's NDC.
+    _bindOrderIntentionValueHelp: function (oSelect) {
+      var oRowContext = oSelect && oSelect.getBindingContext();
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.orderIntentionProperties;
+      if (!oRowContext) {
+        return;
+      }
+      var sNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material);
+      var sFilterKey = [oRowContext.getPath(), sNdc || ""].join("|");
+      if (oSelect.data("orderIntentionFilterKey") === sFilterKey) {
+        return;
+      }
+      oSelect.data("orderIntentionFilterKey", sFilterKey);
+      oSelect.unbindAggregation("items");
+      if (!sNdc) {
+        return;
+      }
+      oSelect.bindAggregation("items", {
+        path: "po>/" + oSchema.entitySets.orderIntention,
+        parameters: { $select: [oProps.code, oProps.text].join(",") },
+        sorter: new Sorter(oProps.sortOrder),
+        filters: [new Filter(oProps.ndc, FilterOperator.EQ, sNdc)],
+        template: new CoreItem({
+          key: "{po>" + oProps.code + "}",
+          text: "{po>" + oProps.text + "}"
+        })
+      });
+    },
+
+    onOrderIntentionModelContextChange: function (oEvent) {
+      this._bindOrderIntentionValueHelp(oEvent.getSource());
     },
 
     _bindFundTypeValueHelp: function (oSelect, sNdc, sOrderIntention) {
@@ -3799,28 +3841,6 @@ sap.ui.define([
         oVHModel.setProperty("/list", aList);
       }, function () {
         // Non-fatal: the Select then only offers "none"; the read failure is in the message model.
-      });
-    },
-
-    // One-time load into a JSON model: an absolute OData list nested in the Items row template
-    // would be re-requested per row (same reason as rejectionReasons above).
-    _loadOrderIntentionVH: function () {
-      var oSchema = ServiceSchema.providerOrderService;
-      var oProps = oSchema.orderIntentionProperties;
-      var oVHModel = new JSONModel({ list: [] });
-      this.getView().setModel(oVHModel, "orderIntentions");
-      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
-        "/" + oSchema.entitySets.orderIntention, undefined, [new Sorter(oProps.sortOrder)], undefined,
-        { $select: [oProps.code, oProps.text].join(",") }
-      );
-      oListBinding.requestContexts(0, 100).then(function (aContexts) {
-        oVHModel.setProperty("/list", aContexts.map(function (oCtx) {
-          return { key: oCtx.getProperty(oProps.code), text: oCtx.getProperty(oProps.text) };
-        }));
-      }, function () {
-        // Non-fatal: the Select stays empty; the read failure is in the message model.
-      }).finally(function () {
-        oListBinding.destroy();
       });
     },
 
