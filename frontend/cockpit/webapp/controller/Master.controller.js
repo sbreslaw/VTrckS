@@ -32,6 +32,7 @@ sap.ui.define([
   "sap/m/p13n/SortPanel",
   "sap/m/p13n/GroupPanel",
   "sap/ui/core/EventBus",
+  "sap/ui/core/library",
   "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
   "sap/ui/comp/filterbar/FilterBar",
   "sap/ui/comp/filterbar/FilterGroupItem",
@@ -45,7 +46,7 @@ sap.ui.define([
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
-  P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
+  P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
   formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
 ) {
@@ -63,6 +64,7 @@ sap.ui.define([
   var RESIZE_DEBOUNCE_MS = 400;
   var RangeOperation = compLibrary.valuehelpdialog.ValueHelpRangeOperation;
   var DateRangeKeys = mLibrary.StandardDynamicDateRangeKeys;
+  var SortOrder = coreLibrary.SortOrder;
   var CONDITION_OPERATIONS = [RangeOperation.EQ, RangeOperation.Contains, RangeOperation.BT,
     RangeOperation.StartsWith, RangeOperation.EndsWith, RangeOperation.LT, RangeOperation.LE,
     RangeOperation.GT, RangeOperation.GE, "Empty"];
@@ -1664,7 +1666,6 @@ sap.ui.define([
         },
         {
           key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "14rem",
-          sortPath: ServiceSchema.headerProperties.description,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1711,7 +1712,6 @@ sap.ui.define([
         },
         {
           key: "status", i18nKey: "colStatus", hAlign: "Begin", width: "10rem",
-          sortPath: ServiceSchema.headerProperties.userStatus,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1721,7 +1721,6 @@ sap.ui.define([
         },
         {
           key: "contact", i18nKey: "colContact", hAlign: "Begin", width: "10rem",
-          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1758,7 +1757,6 @@ sap.ui.define([
         },
         {
           key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", width: "8rem",
-          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             // RUNTIME-BLOCKED-BY-SERVICE: selecting ResponsibleEmployee via the
             // _SoldToPartyContactInfo navigation causes a backend 500
@@ -1871,9 +1869,9 @@ sap.ui.define([
     // without a visual group-header divider row. This is a documented
     // limitation, not a guess — see NOTES.md.
     //
-    // Only columns with a real, single bindable server property (sortPath) are
-    // offered as sort/group candidates (see _getColumnDefs); columns without
-    // one (description, contact, employeeResponsible) are excluded.
+    // Only columns with a sortPath are offered as sort/group candidates (D-1178:
+    // requestId, salesOrderType, provider, createdAt, createdBy) - from the
+    // column header menu and from the p13n dialog alike.
     _buildSorters: function (oLayout) {
       var mDefsByKey = {};
       this._aColumnDefs.forEach(function (oDef) { mDefsByKey[oDef.key] = oDef; });
@@ -1882,7 +1880,7 @@ sap.ui.define([
       var oSort = oLayout.sort;
 
       if (oGroup && mDefsByKey[oGroup.key] && mDefsByKey[oGroup.key].sortPath) {
-        aSorters.push(new Sorter(mDefsByKey[oGroup.key].sortPath, false));
+        aSorters.push(new Sorter(mDefsByKey[oGroup.key].sortPath, !!(oSort && oSort.key === oGroup.key && oSort.descending)));
       }
       if (oSort && mDefsByKey[oSort.key] && mDefsByKey[oSort.key].sortPath && (!oGroup || oGroup.key !== oSort.key)) {
         aSorters.push(new Sorter(mDefsByKey[oSort.key].sortPath, !!oSort.descending));
@@ -1913,12 +1911,13 @@ sap.ui.define([
           resizable: true,
           autoResizable: true,
           sortProperty: oDef.sortPath || "",
-          showSortMenuEntry: true
+          showSortMenuEntry: !!oDef.sortPath,
+          sortOrder: this._getColumnSortOrder(oLayout, oDef.key)
         });
         oColumn.data("colKey", oDef.key);
         oColumn.data("baselineWidth", sWidth);
         oTable.addColumn(oColumn);
-      });
+      }, this);
 
       // oTable.setFixedColumnCount(Math.min(FIXED_COLUMN_KEYS.length, aVisibleDefs.length));
       this.byId("requestsRowMode").setRowCount(oLayout.rowCount || 10);
@@ -1935,6 +1934,33 @@ sap.ui.define([
       if (oRowsBinding) {
         oRowsBinding.attachDataRequested(function () { oTable.setBusy(true); });
         oRowsBinding.attachDataReceived(function () { oTable.setBusy(false); });
+      }
+    },
+
+    _getColumnSortOrder: function (oLayout, sKey) {
+      if (!oLayout.sort || oLayout.sort.key !== sKey) {
+        return SortOrder.None;
+      }
+      return oLayout.sort.descending ? SortOrder.Descending : SortOrder.Ascending;
+    },
+
+    // D-1178: one source of sort - the header menu writes layout.sort (like the
+    // p13n dialog) and the binding is sorted via _buildSorters, so the group stays primary.
+    onMasterTableSort: function (oEvent) {
+      oEvent.preventDefault();
+      var oColumn = oEvent.getParameter("column");
+      var sSortOrder = oEvent.getParameter("sortOrder");
+      var oLayout = this._getColumnLayout();
+      oLayout.sort = sSortOrder === SortOrder.None ? null
+        : { key: oColumn.data("colKey"), descending: sSortOrder === SortOrder.Descending };
+      this._saveColumnLayout(oLayout);
+      var oTable = this.byId("requestsTable");
+      oTable.getColumns().forEach(function (oTableColumn) {
+        oTableColumn.setSortOrder(this._getColumnSortOrder(oLayout, oTableColumn.data("colKey")));
+      }, this);
+      var oBinding = oTable.getBinding("rows");
+      if (oBinding) {
+        oBinding.sort(this._buildSorters(oLayout));
       }
     },
 
@@ -2003,9 +2029,8 @@ sap.ui.define([
       var aSelectableDefs = aOrderedDefs.filter(function (oDef) {
         return FIXED_COLUMN_KEYS.indexOf(oDef.key) === -1;
       });
-      // Only columns with a real, single bindable server property can be
-      // sorted/grouped (see _getColumnDefs' sortPath / _buildSorters note).
-      var aSortableDefs = aSelectableDefs.filter(function (oDef) { return !!oDef.sortPath; });
+      // Sort/group candidates include the fixed Order column (D-1178).
+      var aSortableDefs = aOrderedDefs.filter(function (oDef) { return !!oDef.sortPath; });
 
       var aSelectionItems = aSelectableDefs.map(function (oDef, iIndex) {
         return {

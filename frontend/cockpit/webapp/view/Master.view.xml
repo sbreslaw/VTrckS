@@ -149,6 +149,7 @@
           enableColumnReordering="true"
           columnMove=".onColumnMove"
           columnResize=".onColumnResize"
+          sort=".onMasterTableSort"
           rowsUpdated=".onRowsUpdated"
           >
           <t:rowMode>
