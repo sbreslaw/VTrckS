@@ -90,7 +90,7 @@
                read-only detail. -->
           <Link text="{SalesOrderItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
-          <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}"
+          <Input value="{ExisItemNumber}" visible="{itemsColumns>/exisId}"
             enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
           <!-- Brand is authoritative from the selected Product. A scratch row
             cannot resolve _Product until it is posted, so the locally copied
