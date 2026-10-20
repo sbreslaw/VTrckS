@@ -176,7 +176,7 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_SoldToPartyContactInfo/FullName}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Text text="{detailContact>/name}" tooltip="{detailContact>/tooltip}" visible="{= !${sectionFlags>/createMode} }"/>
 								<Input id="contactInput"
 									value="{createEnrich>/contactName}"
 									showValueHelp="true"

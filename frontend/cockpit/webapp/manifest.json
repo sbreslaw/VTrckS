@@ -52,6 +52,10 @@
             "type": "XML",
             "id": "app"
         },
+        "contentDensities": {
+            "compact": true,
+            "cozy": false
+        },
         "dependencies": {
             "minUI5Version": "1.136.0",
             "libs": {

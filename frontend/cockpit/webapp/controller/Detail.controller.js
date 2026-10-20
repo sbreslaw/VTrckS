@@ -109,6 +109,8 @@ sap.ui.define([
     poReference: "colPoReference", deliveryStatus: "colDeliveryStatus", netValue: "itemNetAmount",
     rejectionReason: "colRejectionReason"
   };
+  // Paste-eligible Items columns: column key -> ServiceSchema.itemProperties key of the cell's value binding.
+  var PASTE_COLUMNS = { exisId: "exisId", ndcCode: "material", qty: "quantity" };
 
   return Controller.extend("cdc.vaccreq.controller.Detail", {
     formatter: formatter,
@@ -135,6 +137,7 @@ sap.ui.define([
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
       this.getView().setModel(new JSONModel({ salesOrder: "", rows: [], busy: false, error: false, loaded: false }), "transactionHistory");
+      this.getView().setModel(new JSONModel({ name: "", tooltip: "" }), "detailContact");
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -170,7 +173,6 @@ sap.ui.define([
       // items load (change mode) - see _computeAncillaryParents.
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadRejectionReasonVH();
-      this._loadOrderIntentionVH();
       this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
     },
@@ -743,6 +745,8 @@ sap.ui.define([
     // of requestSideEffects when a saved section can change a to-one nav's
     // target identity (see _aSectionsNeedingFullReload above).
     _reloadHeaderContext: function (sPath) {
+      var oOldContext = this.getView().getBindingContext();
+      var sOrderId = oOldContext && oOldContext.getProperty(ServiceSchema.keys.orderId);
       this.getView().unbindElement();
       this.getView().bindElement({
         path: sPath,
@@ -753,6 +757,40 @@ sap.ui.define([
         events: {
           dataReceived: this._syncOrderUiFromContext.bind(this)
         }
+      });
+      this._loadDetailContact(sOrderId);
+    },
+
+    // Same source as the Master Contact column: the order's AP HeaderPartner, via a
+    // filtered collection query (a key read 404s when the order has no AP partner).
+    _loadDetailContact: function (sOrderId) {
+      var oContactModel = this.getView().getModel("detailContact");
+      var oProps = ServiceSchema.headerPartnerProperties;
+      var iRequest = (this._iContactRequest || 0) + 1;
+      this._iContactRequest = iRequest;
+      oContactModel.setData({ name: "", tooltip: "" });
+      if (!sOrderId) {
+        return;
+      }
+      var oBinding = this.getOwnerComponent().getModel().bindList("/" + ServiceSchema.entitySets.headerPartner, undefined, undefined, [
+        new Filter(oProps.salesOrder, FilterOperator.EQ, sOrderId),
+        new Filter(oProps.partnerFunction, FilterOperator.EQ, ServiceSchema.contactPartnerFunction)
+      ], { $select: [oProps.salesOrder, oProps.partnerFunction, oProps.fullName, oProps.contactPerson, oProps.phone, oProps.email].join(",") });
+      oBinding.requestContexts(0, 1).then(function (aContexts) {
+        var oContact = aContexts.length ? aContexts[0].getObject() : null;
+        if (iRequest !== this._iContactRequest || !oContact) {
+          return;
+        }
+        var sContactPerson = oContact[oProps.contactPerson];
+        var sName = oContact[oProps.fullName] || (sContactPerson && sContactPerson !== "0" ? sContactPerson : "");
+        oContactModel.setData({
+          name: sName,
+          tooltip: [sName, oContact[oProps.email], oContact[oProps.phone]].filter(Boolean).join(" \u00b7 ")
+        });
+      }.bind(this)).catch(function () {
+        // Non-fatal: the field stays empty; the read failure is in the message model.
+      }).finally(function () {
+        oBinding.destroy();
       });
     },
 
@@ -859,14 +897,27 @@ sap.ui.define([
         aRows.push(oNewRowData);
       }
       if (bAtEnd === false && !this._bItemsSessionBound) {
-        aRows.reverse().forEach(function (oRowData) {
-          this._handleItemCreatePromise(oBinding.create(oRowData, false, false));
-        }, this);
+        this._appendScratchRows(oBinding, aRows);
         return;
       }
       aRows.forEach(function (oRowData) {
         this._handleItemCreatePromise(oBinding.create(oRowData, false, true, bInactive));
       }, this);
+    },
+
+    // For a freshly bound list whose length isn't known yet. Rows inserted at the front of the
+    // nested transient _Item list cross-wire their cells' property bindings (UI5 1.136: editing
+    // one row shows its values in the other front-inserted rows), so resolve the length and append.
+    _appendScratchRows: function (oBinding, aRows) {
+      oBinding.requestContexts(0, 1).then(function () {
+        var oTable = this._byIdInSection("items", "itemsTable");
+        if (!oTable || oTable.getBinding("items") !== oBinding) {
+          return;
+        }
+        aRows.forEach(function (oRowData) {
+          this._handleItemCreatePromise(oBinding.create(oRowData, false, true));
+        }, this);
+      }.bind(this)).catch(function () {});
     },
 
     _handleItemCreatePromise: function (oContext) {
@@ -948,6 +999,7 @@ sap.ui.define([
         oRowContext.setProperty(ServiceSchema.itemProperties.unit, oItem[oProps.baseUnit]);
       }
       this._refreshFundTypeValueHelp(oRowContext);
+      this._bindOrderIntentionValueHelp(this._getRowSelect(this._getRowForContext(oRowContext), ServiceSchema.itemProperties.orderIntention));
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -1007,15 +1059,20 @@ sap.ui.define([
       this._setNdcValueState(oInput, true);
     },
 
-    // Resolve typed Product IDs before writing them; an empty value must not
-    // clear an already-selected item.
     onItemNdcChange: function (oEvent) {
-      var that = this;
       var oInput = oEvent.getSource();
-      var oRowContext = oInput.getBindingContext();
-      var sValue = (oEvent.getParameter("value") || "").trim();
+      this._applyNdcValue(oInput.getBindingContext(), oInput, oEvent.getParameter("value"));
+    },
+
+    // Shared by typing (onItemNdcChange) and paste. Resolves the typed Product
+    // ID before writing it; an empty value must not clear an already-selected
+    // item. Resolves true only when the NDC was found and applied.
+    _applyNdcValue: function (oRowContext, oInput, sRawValue) {
+      var that = this;
+      // Safe normalization only: trim, collapse whitespace, uppercase - the /Product lookup is the validator.
+      var sValue = String(sRawValue || "").trim().replace(/\s+/g, " ").toUpperCase();
       if (!oRowContext) {
-        return;
+        return Promise.resolve(false);
       }
       var oProps = ServiceSchema.productProperties;
       var sPreviousNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material) || "";
@@ -1027,28 +1084,31 @@ sap.ui.define([
         } else {
           this._setNdcValueState(oInput, true);
         }
-        return;
+        return Promise.resolve(false);
       }
+      oInput.setValue(sValue);
       var oLookupBinding = oRowContext.getModel().bindList(
         "/" + ServiceSchema.entitySets.product, undefined, undefined,
         [new Filter(oProps.id, FilterOperator.EQ, sValue)],
         { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") }
       );
-      oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
+      return oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
         if (oInput.getValue().trim() !== sValue) {
-          return;
+          return false;
         }
         if (aContexts.length) {
           that._applyNdcPick(oRowContext, aContexts[0].getObject());
           oInput.setValue(aContexts[0].getProperty(oProps.id));
           that._setNdcValueState(oInput, true);
-        } else {
-          oInput.setValue(sPreviousNdc);
-          that._setNdcValueState(oInput, false);
+          return true;
         }
+        oInput.setValue(sPreviousNdc);
+        that._setNdcValueState(oInput, false);
+        return false;
       }).catch(function () {
         oInput.setValue(sPreviousNdc);
         that._setNdcValueState(oInput, false);
+        return false;
       });
     },
 
@@ -1066,20 +1126,62 @@ sap.ui.define([
     },
 
     _getRowFundTypeSelect: function (oRow) {
+      return this._getRowSelect(oRow, ServiceSchema.itemProperties.fundType);
+    },
+
+    // The row's Select whose selectedKey is bound to sPropertyPath.
+    _getRowSelect: function (oRow, sPropertyPath) {
       return oRow && oRow.getCells().filter(function (oCell) {
         var oBinding = oCell.getBinding && oCell.getBinding("selectedKey");
-        return oBinding && oBinding.getPath() === ServiceSchema.itemProperties.fundType;
+        return oBinding && oBinding.getPath() === sPropertyPath;
+      })[0];
+    },
+
+    _getRowForContext: function (oRowContext) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var sPath = oRowContext && oRowContext.getPath();
+      return oTable && oTable.getItems().filter(function (oItem) {
+        var oContext = oItem.getBindingContext();
+        return oContext && oContext.getPath() === sPath;
       })[0];
     },
 
     _getFundTypeSelectForContext: function (oRowContext) {
-      var oTable = this._byIdInSection("items", "itemsTable");
-      var sPath = oRowContext && oRowContext.getPath();
-      var oRow = oTable && oTable.getItems().filter(function (oItem) {
-        var oContext = oItem.getBindingContext();
-        return oContext && oContext.getPath() === sPath;
-      })[0];
-      return this._getRowFundTypeSelect(oRow);
+      return this._getRowFundTypeSelect(this._getRowForContext(oRowContext));
+    },
+
+    // Order Intention options are product-specific: bound per row to po>/OrderIntention filtered by the row's NDC.
+    _bindOrderIntentionValueHelp: function (oSelect) {
+      var oRowContext = oSelect && oSelect.getBindingContext();
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.orderIntentionProperties;
+      if (!oRowContext) {
+        return;
+      }
+      var sNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material);
+      var sFilterKey = [oRowContext.getPath(), sNdc || ""].join("|");
+      if (oSelect.data("orderIntentionFilterKey") === sFilterKey) {
+        return;
+      }
+      oSelect.data("orderIntentionFilterKey", sFilterKey);
+      oSelect.unbindAggregation("items");
+      if (!sNdc) {
+        return;
+      }
+      oSelect.bindAggregation("items", {
+        path: "po>/" + oSchema.entitySets.orderIntention,
+        parameters: { $select: [oProps.code, oProps.text].join(",") },
+        sorter: new Sorter(oProps.sortOrder),
+        filters: [new Filter(oProps.ndc, FilterOperator.EQ, sNdc)],
+        template: new CoreItem({
+          key: "{po>" + oProps.code + "}",
+          text: "{po>" + oProps.text + "}"
+        })
+      });
+    },
+
+    onOrderIntentionModelContextChange: function (oEvent) {
+      this._bindOrderIntentionValueHelp(oEvent.getSource());
     },
 
     _bindFundTypeValueHelp: function (oSelect, sNdc, sOrderIntention) {
@@ -1147,26 +1249,47 @@ sap.ui.define([
       return aPending;
     },
 
-    onProdQtyChange: function( oEvent) {
+    onProdQtyChange: function (oEvent) {
+      var oInput = oEvent.getSource();
+      this._applyQtyValue(oInput.getBindingContext(), oInput, oEvent.getParameter("value"));
+    },
+
+    // Whole-number quantity > 0 as a plain integer string, or null if invalid.
+    // Strips spaces and thousands separators; "100.000" is accepted as 100.
+    _parseQtyValue: function (sRawValue) {
+      var aMatch = /^(\d+)(?:\.0*)?$/.exec(String(sRawValue || "").replace(/[\s,]/g, ""));
+      var iQty = aMatch ? parseInt(aMatch[1], 10) : NaN;
+      if (!(iQty > 0) || iQty > ServiceSchema.itemFieldLimits.qtyMax) {
+        return null;
+      }
+      return String(iQty);
+    },
+
+    // Shared by typing (onProdQtyChange) and paste. An invalid value leaves
+    // the cell unchanged with a Warning and returns null; otherwise returns the
+    // write promise. bDeferRefresh lets a multi-row paste refresh once at the end.
+    _applyQtyValue: function (oRowContext, oInput, sRawValue, bDeferRefresh) {
       var that = this;
-      var oRowContext = oEvent.getSource().getBindingContext();
-      var sQty = oEvent.getParameter('value');
+      var sQty = this._parseQtyValue(sRawValue);
+      if (sQty === null) {
+        var oValueBinding = oInput.getBinding("value");
+        oInput.setValue(oValueBinding.getType().formatValue(oValueBinding.getValue(), "string"));
+        this._setCellSkippedState(oInput, "pasteSkippedInvalid");
+        return null;
+      }
+      oInput.setValueState("None");
       var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       // ZZVFCQTY/ZZ317QTY/etc. are Edm.Int32 (design/so.xml) - RequestedQuantity
-      // is Edm.Decimal, so this Input's own "value" here is that type's
-      // formatted decimal string (e.g. "67.000"); sending that verbatim
-      // for an Int32 property fails with "invalid value", and the Gateway's
-      // OWN error response for that failure comes back malformed enough
-      // that the client can't even parse it ("Error while parsing an XML
-      // stream") - always send a real, rounded integer instead.
-      var iQty = Math.round(parseFloat(sQty));
-      var iValue = isNaN(iQty) ? 0 : iQty;
+      // is Edm.Decimal; sending a decimal string for an Int32 property fails
+      // with "invalid value", and the Gateway's OWN error response for that
+      // failure comes back malformed enough that the client can't even parse
+      // it ("Error while parsing an XML stream") - always send a real integer.
+      var iValue = parseInt(sQty, 10);
       // value is OneWay (Items.fragment.xml) - this is the only PATCH for
       // RequestedQuantity itself, so its promise is always the one to await.
       // RequestedQuantity is Edm.Decimal (unlike the Int32 mirrors below) -
-      // must send the raw decimal STRING (sQty), never the rounded iValue
-      // integer, or the deep-create POST fails the same malformed-XML way
-      // the Int32 comment above warns about.
+      // must be sent as a STRING (sQty), never the iValue number, or the
+      // deep-create POST fails the same malformed-XML way.
       var aPending = [];
       // A2/A4: which quantity mirror gets the value now follows the row's own
       // fundType selection (see onFundTypeChange) instead of always ZZSTATEQTY.
@@ -1186,10 +1309,193 @@ sap.ui.define([
       // and any already-inserted ancillary child rows' quantities as a side
       // effect of this PATCH - only a real, already-posted row (not still a
       // local scratch row) can have such children yet.
-      Promise.all(aPending).then(function () {
-        return bPersisted ? that._refreshItemsBinding() : undefined;
+      return Promise.all(aPending).then(function () {
+        return bPersisted && !bDeferRefresh ? that._refreshItemsBinding() : undefined;
       }).catch(function (oError) {
         that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      });
+    },
+
+    // Paste-only (ExIS typing goes through the two-way binding and its metadata type).
+    // An ID cannot be shortened, so an over-long value is skipped, never truncated.
+    _applyExisValue: function (oRowContext, oInput, sRawValue) {
+      var iMaxLength = ServiceSchema.itemFieldLimits.exisIdMaxLength;
+      var sValue = String(sRawValue || "").trim().replace(/\s+/g, " ");
+      if (sValue.length > iMaxLength) {
+        this._setCellSkippedState(oInput, "pasteSkippedTooLong", [iMaxLength]);
+        return false;
+      }
+      oInput.setValueState("None");
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+      oRowContext.setProperty(ServiceSchema.itemProperties.exisId, sValue).catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
+      return true;
+    },
+
+    // Clears a paste-skip Warning once the user edits the ExIS cell (type errors use Error, not Warning).
+    onItemExisChange: function (oEvent) {
+      var oInput = oEvent.getSource();
+      if (oInput.getValueState() === "Warning") {
+        oInput.setValueState("None");
+      }
+    },
+
+    _setCellSkippedState: function (oInput, sTextKey, aArgs) {
+      oInput.setValueState("Warning");
+      oInput.setValueStateText(this.getResourceBundle().getText(sTextKey, aArgs));
+    },
+
+    // Maps a row's paste-eligible Inputs by column key: { exisId: {input, index}, ... }.
+    _getItemsPasteCells: function (oRow) {
+      var mCells = {};
+      oRow.getCells().forEach(function (oCell, iIndex) {
+        var oBinding = oCell.isA("sap.m.Input") && oCell.getBinding("value");
+        var sPath = oBinding && oBinding.getPath();
+        Object.keys(PASTE_COLUMNS).forEach(function (sKey) {
+          if (sPath && sPath === ServiceSchema.itemProperties[PASTE_COLUMNS[sKey]]) {
+            mCells[sKey] = { input: oCell, index: iIndex };
+          }
+        });
+      });
+      return mCells;
+    },
+
+    _isPasteCellOpen: function (oInput) {
+      return !!oInput && oInput.getVisible() && oInput.getEnabled() && oInput.getEditable();
+    },
+
+    // Multi-cell paste into the Items table (ExIS / NDC / Qty). Rows go down,
+    // columns go right; existing open rows only, never new ones. A single value
+    // is left to the browser and the cell's own change handler.
+    onItemsCellPaste: function (oEvent) {
+      var that = this;
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oInput = Element.closestTo(oEvent.target);
+      var oRow = oInput && oInput.getParent();
+      if (!oTable || !oRow || oRow.getParent() !== oTable) {
+        return;
+      }
+      var mCursorCells = this._getItemsPasteCells(oRow);
+      var sStartKey = Object.keys(mCursorCells).filter(function (sKey) {
+        return mCursorCells[sKey].input === oInput;
+      })[0];
+      var oClipboard = oEvent.originalEvent && oEvent.originalEvent.clipboardData;
+      if (!sStartKey || !oClipboard || !this._isPasteCellOpen(oInput)) {
+        return;
+      }
+      var aClipRows = oClipboard.getData("text/plain").replace(/(\r\n|\r|\n)$/, "")
+        .split(/\r\n|\r|\n/).map(function (sLine) { return sLine.split("\t"); });
+      if (aClipRows.length === 1 && aClipRows[0].length === 1) {
+        return;
+      }
+      oEvent.preventDefault();
+      var oBundle = this.getResourceBundle();
+      var aColumns = oTable.getColumns();
+      var iStartIndex = mCursorCells[sStartKey].index;
+      var aPlan = Object.keys(mCursorCells).filter(function (sKey) {
+        var iIndex = mCursorCells[sKey].index;
+        return iIndex >= iStartIndex && aColumns[iIndex] && aColumns[iIndex].getVisible();
+      }).sort(function (sA, sB) {
+        return mCursorCells[sA].index - mCursorCells[sB].index;
+      });
+      var bPlanHasNdc = aPlan.indexOf("ndcCode") !== -1;
+      var aItems = oTable.getItems();
+      var aTargets = [];
+      for (var i = aItems.indexOf(oRow); i < aItems.length && aTargets.length < aClipRows.length; i += 1) {
+        var oContext = aItems[i].getBindingContext();
+        var mCells = this._getItemsPasteCells(aItems[i]);
+        // Ancillary child rows and rows whose NDC is fixed are not open rows - skipped without consuming a clipboard row.
+        if (!oContext || oContext.getProperty(ServiceSchema.itemProperties.higherLevelItem)
+            || (bPlanHasNdc && !this._isPasteCellOpen(mCells.ndcCode && mCells.ndcCode.input))
+            || !aPlan.some(function (sKey) { return mCells[sKey] && that._isPasteCellOpen(mCells[sKey].input); })) {
+          continue;
+        }
+        aTargets.push({ item: aItems[i], context: oContext, cells: mCells });
+      }
+      if (!aTargets.length) {
+        MessageToast.show(oBundle.getText("pasteNothing", [oBundle.getText("pasteReasonNoRows")]));
+        return;
+      }
+      var oStartBinding = oTable.getBinding("items");
+      var oStats = { rows: 0, skipped: 0, refreshes: [] };
+      oTable.setBusy(true);
+      aTargets.reduce(function (pChain, oTarget, iRow) {
+        return pChain.then(function () {
+          // A row completing mid-paste can rebind the table to the create session; stop rather than write to stale rows.
+          if (oTable.getBinding("items") !== oStartBinding || oTarget.item.bIsDestroyed
+              || oTarget.item.getBindingContext() !== oTarget.context) {
+            return;
+          }
+          return that._pasteItemsRow(oTarget, aPlan, aClipRows[iRow], oStats);
+        });
+      }, Promise.resolve()).then(function () {
+        oTable.setBusy(false);
+        if (oStats.refreshes.length) {
+          Promise.all(oStats.refreshes).then(function () {
+            return that._refreshItemsBinding();
+          });
+        }
+        MessageToast.show(oStats.rows
+          ? oBundle.getText("pasteSummary", [oStats.rows, aClipRows.length, oStats.skipped])
+          : oBundle.getText("pasteNothing", [oBundle.getText("pasteReasonInvalid")]));
+      });
+    },
+
+    // Applies one clipboard row; NDC first, since a failed NDC lookup skips the row's other cells.
+    _pasteItemsRow: function (oTarget, aPlan, aClipCells, oStats) {
+      var that = this;
+      var oContext = oTarget.context;
+      var mValues = {};
+      aPlan.forEach(function (sKey, iIndex) {
+        mValues[sKey] = String(aClipCells[iIndex] || "").trim();
+      });
+      var oNdcInput = oTarget.cells.ndcCode && oTarget.cells.ndcCode.input;
+      var pNdc = Promise.resolve(true);
+      if (mValues.ndcCode) {
+        var sNdc = mValues.ndcCode.replace(/\s+/g, " ");
+        var iNdcMaxLength = ServiceSchema.itemFieldLimits.ndcMaxLength;
+        if (sNdc.length > iNdcMaxLength) {
+          this._setCellSkippedState(oNdcInput, "pasteSkippedTooLong", [iNdcMaxLength]);
+          pNdc = Promise.resolve(false);
+        } else {
+          pNdc = this._applyNdcValue(oContext, oNdcInput, sNdc).then(function (bFound) {
+            if (!bFound) {
+              that._setCellSkippedState(oNdcInput, "pasteSkippedNdcNotFound");
+            }
+            return bFound;
+          });
+        }
+      }
+      return pNdc.then(function (bNdcOk) {
+        var bTouched = !!mValues.ndcCode && bNdcOk;
+        if (mValues.ndcCode && !bNdcOk) {
+          oStats.skipped += 1;
+        }
+        aPlan.forEach(function (sKey) {
+          var oCell = oTarget.cells[sKey];
+          if (sKey === "ndcCode" || !mValues[sKey]) {
+            return;
+          }
+          if (!bNdcOk || !oCell || !that._isPasteCellOpen(oCell.input)) {
+            oStats.skipped += 1;
+            return;
+          }
+          var bApplied;
+          if (sKey === "exisId") {
+            bApplied = that._applyExisValue(oContext, oCell.input, mValues[sKey]);
+          } else {
+            var bPersisted = !!(oContext.isTransient && !oContext.isTransient());
+            var pWrite = that._applyQtyValue(oContext, oCell.input, mValues[sKey], true);
+            bApplied = !!pWrite;
+            if (pWrite && bPersisted) {
+              oStats.refreshes.push(pWrite);
+            }
+          }
+          oStats.skipped += bApplied ? 0 : 1;
+          bTouched = bTouched || bApplied;
+        });
+        oStats.rows += bTouched ? 1 : 0;
       });
     },
 
@@ -1594,21 +1900,11 @@ sap.ui.define([
       this._rebindItemsGroup(this._sItemsUpdateGroup);
       var oNewBinding = oTable.getBinding("items");
       if (oNewBinding) {
-        // A just-`bindItems()`-created binding hasn't resolved its own
-        // length yet (unlike _addItemRows's bAtEnd:true, which only ever
-        // runs long after the Table's own rendering cycle has already
-        // resolved it) - create(..., bAtEnd:true) here throws synchronously
-        // ("Must know the final length to create at the end"). Insert at
-        // the front instead (no length needed either way); item numbers are
-        // assigned up front (in original order) so reverse-inserting them
-        // doesn't also reverse the client-only placeholder numbering.
         aRowData.forEach(function (oRowData, iIndex) {
           oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
           oRowData.SalesOrderItem = ("000000" + ((iIndex + 1) * 10)).slice(-6);
         });
-        aRowData.slice().reverse().forEach(function (oRowData) {
-          this._handleItemCreatePromise(oNewBinding.create(oRowData, false, false));
-        }, this);
+        this._appendScratchRows(oNewBinding, aRowData);
       }
       FundLogicService.clearAllocationCache();
     },
@@ -3380,6 +3676,11 @@ sap.ui.define([
         }
       } else if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
+        // sap.m.Table#paste ignores pastes into an <input>, so cell pastes are caught by a delegate instead.
+        var oItemsTable = this._byIdInSection("items", "itemsTable");
+        if (oItemsTable) {
+          oItemsTable.addEventDelegate({ onpaste: this.onItemsCellPaste }, this);
+        }
         this._addInitialCreateItemRows();
         // 3.3: the Items panel's own contexts are the most convenient point
         // to (re)confirm the header Tax Amount sum once real item data is
@@ -3517,28 +3818,6 @@ sap.ui.define([
         oVHModel.setProperty("/list", aList);
       }, function () {
         // Non-fatal: the Select then only offers "none"; the read failure is in the message model.
-      });
-    },
-
-    // One-time load into a JSON model: an absolute OData list nested in the Items row template
-    // would be re-requested per row (same reason as rejectionReasons above).
-    _loadOrderIntentionVH: function () {
-      var oSchema = ServiceSchema.providerOrderService;
-      var oProps = oSchema.orderIntentionProperties;
-      var oVHModel = new JSONModel({ list: [] });
-      this.getView().setModel(oVHModel, "orderIntentions");
-      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
-        "/" + oSchema.entitySets.orderIntention, undefined, [new Sorter(oProps.sortOrder)], undefined,
-        { $select: [oProps.code, oProps.text].join(",") }
-      );
-      oListBinding.requestContexts(0, 100).then(function (aContexts) {
-        oVHModel.setProperty("/list", aContexts.map(function (oCtx) {
-          return { key: oCtx.getProperty(oProps.code), text: oCtx.getProperty(oProps.text) };
-        }));
-      }, function () {
-        // Non-fatal: the Select stays empty; the read failure is in the message model.
-      }).finally(function () {
-        oListBinding.destroy();
       });
     },
 
@@ -3998,6 +4277,7 @@ sap.ui.define([
         }
       });
       this._loadHeaderNotes(this.getView().getBindingContext());
+      this._loadDetailContact(sId);
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
       this._computeHeaderTaxAmount();
