@@ -230,38 +230,21 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Session Prompt (Detail View Adjustments) 3.1: Priority is a
-								VIRTUAL header field - DeliveryPriority only exists on
-								SalesOrderItemType (ServiceSchema.itemProperties.
-								deliveryPriority), there is still no header-level property/nav.
-								This Select is bound to the local "priorityState" model, not a
-								header property: Detail.controller.js computes it from the
-								order's items on load (uniform -> that value; mixed -> the
-								highest-priority value found, TODO-VERIFY(priority-ordering) -
-								lowest DeliveryPriority code assumed = most urgent, standard SD
-								convention, never independently confirmed live this session) and
-								propagates the selected value to EVERY item only at Save (see
-								onCreateSavePress/onSectionSavePress +
-								_propagatePriorityToItems) - never on change here. Visible/
-								editable in every mode (not just createMode), gated the same way
-								as the other Details fields. -->
+							<!-- Priority = header ShippingType (ServiceSchema.headerProperties.priority); values from po>/PriorityType. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{priorityState>/valueText}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Text text="{_ShippingType/ShippingType_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<Select
-									selectedKey="{priorityState>/value}"
-									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
+									selectedKey="{ShippingType}"
+									visible="{sectionFlags>/details/editing}"
 									width="100%"
 									forceSelection="false"
-									enabled="{= (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${createState>/priorityLocked} }"
-									tooltip="{i18n>priorityLockedTooltip}"
-									items="{path: '/DeliveryPriority'}"
-									change=".onPriorityChange">
-									<core:Item key="{DeliveryPriority}" text="{DeliveryPriority_Text}" />
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: 'po>/PriorityType', templateShareable: false}">
+									<core:Item key="{po>ShippingType}" text="{po>ShippingTypeText}" />
 								</Select>
-								<Text text="{i18n>priorityMixedHint}" visible="{= ${priorityState>/mixed} &amp;&amp; !${sectionFlags>/createMode} }" class="sapUiTinyMarginTop"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>

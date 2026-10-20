@@ -159,18 +159,8 @@ sap.ui.define([
       // since the header's own _OverallDeliveryStatus/
       // _OverallDeliveryBlockStatus navigation cannot resolve against the
       // transient createMode scratch context (client requirement 2026-10-01).
-      // priorityLocked: DeliveryPriority 422s ("Read-only fields must not be
-      // changed") on any PATCH once an item is actually posted - set true the
-      // instant the first item posts (_bindItemsTableToSession) so the user
-      // can no longer change Priority after that point (see
-      // _applyCreatePriorityToRow/onCreateSavePress).
-      this.getView().setModel(new JSONModel({ providerChosen: false, priorityLocked: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
+      this.getView().setModel(new JSONModel({ providerChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
-      // Session Prompt (Detail View Adjustments) 3.1: virtual header Priority -
-      // {value, valueText, mixed, dirty} computed from/propagated to item
-      // DeliveryPriority (see _computeHeaderPriority/_propagatePriorityToItems),
-      // reset on entering createMode (_setCreateMode).
-      this.getView().setModel(new JSONModel({ value: "", valueText: "", mixed: false, dirty: false }), "priorityState");
       // 3.3: client-side-only SUM of item TaxAmount - never a real header
       // property, see _computeHeaderTaxAmount.
       this.getView().setModel(new JSONModel({ taxAmount: 0 }), "headerCalc");
@@ -182,7 +172,6 @@ sap.ui.define([
       // until the sticky session opens (createMode) or an existing order's
       // items load (change mode) - see _computeAncillaryParents.
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
-      this._loadDeliveryPriorityVH();
       this._loadRejectionReasonVH();
       this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
@@ -289,10 +278,8 @@ sap.ui.define([
       if (!oContext) {
         return false;
       }
-      var oPriorityModel = this.getView().getModel("priorityState");
       var oEnrichModel = this.getView().getModel("createEnrich");
       return oContext.getModel().hasPendingChanges(ServiceSchema.editUpdateGroup) ||
-        oPriorityModel.getProperty("/dirty") ||
         oEnrichModel.getProperty("/notes") !== oEnrichModel.getProperty("/notesOriginal");
     },
 
@@ -704,20 +691,10 @@ sap.ui.define([
       var pRemoveEmptyItems = sSectionId === "items"
         ? this._deleteEmptyItemRows(oItemsBinding)
         : Promise.resolve();
-      // Session Prompt (Detail View Adjustments) 3.1: the "details" section's
-      // own Save is also the only trigger for propagating a changed/mixed
-      // header Priority selection down onto every item - staged into the same
-      // "vrEdit" group EditRequestService.save is about to submitBatch, so it
-      // rides along in the very same request as the header PATCH below.
-      var oPriorityModel = this.getView().getModel("priorityState");
       var oStagePromise = sSectionId === "details"
         ? this._stageHeaderNotes(oContext)
         : Promise.resolve();
       pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
-        if (sSectionId === "details" && (oPriorityModel.getProperty("/dirty") || oPriorityModel.getProperty("/mixed")) && oPriorityModel.getProperty("/value")) {
-          return that._propagatePriorityToItems(oContext, oPriorityModel.getProperty("/value"));
-        }
-      }).then(function () {
         return EditRequestService.save(oContext);
       }).then(function () {
         if (sSectionId === "details" && that._bNotesNeedsCreate) {
@@ -738,9 +715,6 @@ sap.ui.define([
         // OData V4 model/entity instance, whose cache the PATCH response
         // already updated \u2014 any bound row for this order reflects it automatically.
         that._endEditSession(sSectionId);
-        if (sSectionId === "details") {
-          that._computeHeaderPriority();
-        }
         if (sSectionId === "items") {
           that._computeHeaderTaxAmount();
         }
@@ -916,12 +890,7 @@ sap.ui.define([
         oNewRowData[oProps.chipQty] = 0;
         oNewRowData[oProps.panQty] = 0;
         oNewRowData[oProps.resQty] = 0;
-        if (this._bItemsSessionBound) {
-          var sLockedPriority = this.getView().getModel("priorityState").getProperty("/value");
-          if (sLockedPriority) {
-            oNewRowData[ServiceSchema.itemProperties.deliveryPriority] = sLockedPriority;
-          }
-        } else if (bCreateMode) {
+        if (!this._bItemsSessionBound && bCreateMode) {
           oNewRowData[oProps.itemNumber] = ("000000" + iNextItemNumber).slice(-6);
           iNextItemNumber += 10;
         }
@@ -1775,11 +1744,6 @@ sap.ui.define([
       // transferred onto the NEW context below (the create response itself
       // always reads them back as 0 - see FundLogicService.js).
       var oAllocationSnapshot = FundLogicService.getSnapshot(oRowContext);
-      // DeliveryPriority becomes backend read-only the instant this POST
-      // lands (422 "Read-only fields must not be changed" on any later PATCH)
-      // - stamp the header Priority Select's current value now, it can never
-      // be corrected afterward.
-      this._applyCreatePriorityToRow(oRowContext);
       CreateOrderService.postItem(this._oCreateSession, oHeaderContext, oRowContext.getObject())
         .then(function (oNewItemContext) {
           oRowContext.delete().catch(function () {});
@@ -1831,9 +1795,6 @@ sap.ui.define([
       return aOthers.reduce(function (pChain, oCtx) {
         return pChain.then(function () {
           if (that._isScratchRowComplete(oCtx)) {
-            // Same one-shot stamp as _postFirstItemRow - this row is about to
-            // post too, and DeliveryPriority can't be corrected afterward.
-            that._applyCreatePriorityToRow(oCtx);
             return CreateOrderService.postItem(that._oCreateSession, oHeaderContext, oCtx.getObject()).then(function () {
               oCtx.delete().catch(function () {});
             });
@@ -1864,9 +1825,6 @@ sap.ui.define([
       this._sItemsUpdateGroup = ServiceSchema.itemInteractiveGroup;
       this._rebindItemsGroup(this._sItemsUpdateGroup);
       this._bItemsSessionBound = true;
-      // Locks the header Priority Select for good this create session -
-      // DeliveryPriority is now read-only on every already-posted item.
-      this.getView().getModel("createState").setProperty("/priorityLocked", true);
       // The rebind's own GET is still async here - computing childParents
       // synchronously would run off the OLD (scratch/empty) contexts and
       // never get another chance to recompute; wait for the real fetch.
@@ -1934,9 +1892,6 @@ sap.ui.define([
       this._aPendingIncompleteRows = [];
       this._bItemsSessionBound = false;
       this._bPostingFirstItem = false;
-      // Items are plain scratch rows again - Priority is editable until the
-      // next item actually posts.
-      this.getView().getModel("createState").setProperty("/priorityLocked", false);
       if (!oTable) {
         return;
       }
@@ -2289,11 +2244,9 @@ sap.ui.define([
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
-        this.getView().getModel("createState").setProperty("/priorityLocked", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
         this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
         this._lookupCreateModeStatusTexts();
-        this.getView().getModel("priorityState").setData({ value: "", valueText: "", mixed: false, dirty: false });
         this.getView().getModel("headerCalc").setProperty("/taxAmount", 0);
       }
     },
@@ -3848,22 +3801,6 @@ sap.ui.define([
       }
     },
 
-    // --- Session Prompt (Detail View Adjustments) 3.1: virtual header
-    // Priority. DeliveryPriority only exists on SalesOrderItemType (so.xml) -
-    // there is still no header-level property/nav to bind. The header
-    // "Priority" Select (Details.fragment.xml) is backed by the local
-    // "priorityState" model instead: on load, computed from every item's
-    // DeliveryPriority (uniform -> that value, mixed -> the highest-priority
-    // value found + a "mixed" hint); user changes are only PROPAGATED to
-    // every item at Save (never live) - see _propagatePriorityToItems below,
-    // called from onCreateSavePress (createMode) / onSectionSavePress
-    // (change mode, "details" section only). ---
-
-    // One-time load of the real /DeliveryPriority VH entity set (small fixed
-    // list) - used both as the Select's own items source (Details.fragment.xml
-    // binds directly to "/DeliveryPriority") and as a text lookup cache so the
-    // read-only Text display (priorityState>/valueText) doesn't need its own
-    // per-row nav-property read.
     // DF-1025: one-time load of the rejection-reason code list into a JSON model
     // (Items.fragment.xml Select items) - leading "" entry = no reason.
     _loadRejectionReasonVH: function () {
@@ -3881,114 +3818,6 @@ sap.ui.define([
         oVHModel.setProperty("/list", aList);
       }, function () {
         // Non-fatal: the Select then only offers "none"; the read failure is in the message model.
-      });
-    },
-
-    _loadDeliveryPriorityVH: function () {
-      var that = this;
-      var oProps = ServiceSchema.valueHelpProperties;
-      this._mPriorityText = {};
-      // getView().getModel() can still be undefined this early (onInit runs
-      // before the view's own model propagation from the owner component
-      // completes) - the component's model is already guaranteed to exist.
-      var oModel = this.getOwnerComponent().getModel();
-      var oListBinding = oModel.bindList("/" + ServiceSchema.entitySets.deliveryPriority);
-      oListBinding.requestContexts(0, 100).then(function (aContexts) {
-        aContexts.forEach(function (oCtx) {
-          that._mPriorityText[oCtx.getProperty(oProps.deliveryPriorityCode)] = oCtx.getProperty(oProps.deliveryPriorityText);
-        });
-      }, function () {
-        // Non-fatal - the Select control resolves its own display text from
-        // its bound items regardless; this cache only backs the read-only
-        // Text control's display.
-      });
-    },
-
-    // Reads every item's DeliveryPriority for the current (existing) order and
-    // derives the header's display value: no items/none set -> blank; one
-    // distinct value -> that value; more than one distinct value -> "mixed",
-    // displaying the highest-priority value found.
-    // TODO-VERIFY(priority-ordering): this assumes the standard SD convention
-    // that a LOWER DeliveryPriority code is MORE urgent (e.g. "01" = highest
-    // priority) - so "highest priority" = the lowest code, ascending sort,
-    // first element. Never independently confirmed against live VH data this
-    // session (no backend access) - re-verify against the real /DeliveryPriority
-    // list (and its sort order/any ranking annotation) before relying on this
-    // in production.
-    _computeHeaderPriority: function () {
-      var that = this;
-      var oContext = this.getView().getBindingContext();
-      var oPriorityModel = this.getView().getModel("priorityState");
-      if (!oContext || (oContext.isTransient && oContext.isTransient())) {
-        return;
-      }
-      var oModel = oContext.getModel();
-      var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oContext, undefined, undefined, {
-        $select: ServiceSchema.itemProperties.deliveryPriority
-      });
-      oItemsBinding.requestContexts(0, 9999).then(function (aContexts) {
-        var aCodes = aContexts
-          .map(function (oCtx) { return oCtx.getProperty(ServiceSchema.itemProperties.deliveryPriority); })
-          .filter(function (sCode) { return !!sCode; });
-        if (!aCodes.length) {
-          oPriorityModel.setData({ value: "", valueText: "", mixed: false, dirty: false });
-          return;
-        }
-        var aUnique = aCodes.filter(function (sCode, iIndex, aAll) { return aAll.indexOf(sCode) === iIndex; });
-        aUnique.sort();
-        var sValue = aUnique[0];
-        oPriorityModel.setData({
-          value: sValue,
-          valueText: that._mPriorityText[sValue] || sValue,
-          mixed: aUnique.length > 1,
-          dirty: false
-        });
-      });
-    },
-
-    // Change handler for the header Priority Select (Details.fragment.xml) -
-    // only updates local state; the actual per-item propagation happens at
-    // Save (onCreateSavePress/onSectionSavePress), never here.
-    onPriorityChange: function (oEvent) {
-      var oSelectedItem = oEvent.getParameter("selectedItem");
-      var sKey = oSelectedItem ? oSelectedItem.getKey() : oEvent.getSource().getSelectedKey();
-      var oPriorityModel = this.getView().getModel("priorityState");
-      oPriorityModel.setProperty("/value", sKey);
-      oPriorityModel.setProperty("/valueText", this._mPriorityText[sKey] || sKey);
-      if (!this.getView().getModel("sectionFlags").getProperty("/createMode")) {
-        oPriorityModel.setProperty("/dirty", true);
-      }
-    },
-
-    // Change-mode propagation: PATCHes DeliveryPriority onto every item of
-    // the current (existing) order, in the same "vrEdit" group as the
-    // Details section's own header PATCH - both ride the same submitBatch
-    // call in onSectionSavePress, so nothing is sent until the user actually
-    // presses Save on that section. Returns a promise (resolves once the
-    // item contexts are fetched and their property changes are staged -
-    // NOT once they're sent; sending happens via EditRequestService.save's
-    // own submitBatch).
-    // Create-mode-only counterpart to _propagatePriorityToItems below - a row
-    // not yet posted (still transient) can have this stamped any number of
-    // times (it only ever lands in the row's own eventual deep-create
-    // payload), unlike a real posted item (see callers).
-    _applyCreatePriorityToRow: function (oRowContext) {
-      var sPriority = this.getView().getModel("priorityState").getProperty("/value");
-      if (sPriority) {
-        oRowContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sPriority);
-      }
-    },
-
-    _propagatePriorityToItems: function (oContext, sPriorityValue) {
-      var oModel = oContext.getModel();
-      var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oContext, undefined, undefined, {
-        $$updateGroupId: ServiceSchema.editUpdateGroup,
-        $select: ServiceSchema.itemProperties.deliveryPriority
-      });
-      return oItemsBinding.requestContexts(0, 9999).then(function (aContexts) {
-        aContexts.forEach(function (oItemContext) {
-          oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sPriorityValue);
-        });
       });
     },
 
@@ -4290,20 +4119,7 @@ sap.ui.define([
 
       Promise.resolve().then(function () {
         return that._deleteEmptyItemRows(oItemsBinding).then(function () {
-          // Harvest create-mode Priority onto every still-transient item. This
-          // promise boundary also routes synchronous setup failures through the
-          // same cleanup path as rejected backend requests.
-          var sCreatePriority = that.getView().getModel("priorityState").getProperty("/value");
-          if (sCreatePriority && oItemsBinding) {
-            oItemsBinding.getCurrentContexts().forEach(function (oItemContext) {
-              if (oItemContext.isTransient && oItemContext.isTransient()) {
-                var pSetPriority = oItemContext.setProperty(ServiceSchema.itemProperties.deliveryPriority, sCreatePriority);
-                if (pSetPriority && pSetPriority.catch) {
-                  pSetPriority.catch(function () {});
-                }
-              }
-            });
-          }
+          // This promise boundary also routes synchronous setup failures through the cleanup path.
           return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession, {
             shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId")
           });
@@ -4464,7 +4280,6 @@ sap.ui.define([
       this._loadDetailContact(sId);
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._bindDetailHeader();
-      this._computeHeaderPriority();
       this._computeHeaderTaxAmount();
       this._oSectionFactory.rebind();
       this._resetTransactionHistoryState(sId);
