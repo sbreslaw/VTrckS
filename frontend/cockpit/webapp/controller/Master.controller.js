@@ -4,6 +4,7 @@ sap.ui.define([
   "sap/ui/model/FilterOperator",
   "sap/ui/model/Sorter",
   "sap/ui/model/json/JSONModel",
+  "sap/ui/model/type/String",
   "sap/ui/core/Element",
   "sap/ui/core/Item",
   "sap/ui/core/ResizeHandler",
@@ -44,7 +45,7 @@ sap.ui.define([
   "cdc/vaccreq/service/ProviderSearchService",
   "cdc/vaccreq/util/ValueHelpTableFitter"
 ], function (
-  Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
+  Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
@@ -65,6 +66,12 @@ sap.ui.define([
   var RangeOperation = compLibrary.valuehelpdialog.ValueHelpRangeOperation;
   var DateRangeKeys = mLibrary.StandardDynamicDateRangeKeys;
   var SortOrder = coreLibrary.SortOrder;
+  // Must stay a String type: sap.ui.table.Column only parses * wildcards for String filter types.
+  var UpperCaseStringType = StringType.extend("cdc.vaccreq.model.type.UpperCaseString", {
+    parseValue: function () {
+      return StringType.prototype.parseValue.apply(this, arguments).toUpperCase();
+    }
+  });
   var CONDITION_OPERATIONS = [RangeOperation.EQ, RangeOperation.Contains, RangeOperation.BT,
     RangeOperation.StartsWith, RangeOperation.EndsWith, RangeOperation.LT, RangeOperation.LE,
     RangeOperation.GT, RangeOperation.GE, "Empty"];
@@ -1927,9 +1934,7 @@ sap.ui.define([
           showFilterMenuEntry: !!oDef.filterPath
         });
         if (oDef.filterUpperCase) {
-          // Code fields are upper case; a function filterType disables wildcard parsing, so Contains is set explicitly.
-          oColumn.setFilterType(function (sValue) { return sValue.toUpperCase(); });
-          oColumn.setDefaultFilterOperator(FilterOperator.Contains);
+          oColumn.setFilterType(new UpperCaseStringType());
         }
         oColumn.data("colKey", oDef.key);
         oColumn.data("baselineWidth", sWidth);
