@@ -214,6 +214,23 @@ sap.ui.define([
       createPartnerDeterminationProcedure: "TA"
     },
 
+    // D-1171: F4 services resolved at runtime from the property's ValueListReferences
+    // (ODataMetaModel#requestValueListInfo), the same mapping F3893 uses - so no F4
+    // entity set/property names are hardcoded. modelName = component model alias.
+    f4Services: {
+      salesDocumentUser: {
+        modelName: "salesDocumentUserVH"
+      }
+    },
+
+    // Common vocabulary terms read from a resolved value-list mapping.
+    valueListTerms: {
+      parameterInOut: "com.sap.vocabularies.Common.v1.ValueListParameterInOut",
+      parameterOut: "com.sap.vocabularies.Common.v1.ValueListParameterOut",
+      parameterDisplayOnly: "com.sap.vocabularies.Common.v1.ValueListParameterDisplayOnly",
+      text: "@com.sap.vocabularies.Common.v1.Text"
+    },
+
     // CustomerSalesAreaType (design/so.xml ~line 1131) - the Provider picker's
     // source. No single formatted-address field exists here (unlike
     // HeaderShipToPartyType), so the picker composes one from city/postal/country.

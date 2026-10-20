@@ -101,7 +101,7 @@
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="createdBy" label="{i18n>filterCreatedBy}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
-                    <Input id="filterCreatedBy" />
+                    <MultiInput id="filterCreatedBy" showValueHelp="true" valueHelpRequest=".onCreatedByValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="dialog" visibleInFilterBar="false">

@@ -185,23 +185,103 @@ sap.ui.define([
       ];
 
       aConfigs.forEach(function (oConfig) {
-        var oInput = this.byId(oConfig.controlId);
-        oInput.data("suggestionConfig", oConfig);
-        if (oConfig.loadSuggestions) {
-          oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
-        }
-        oInput.setShowSuggestion(true);
-        oInput.setFilterSuggests(false);
-        oInput.setStartSuggestion(1);
-        oInput.addSuggestionColumn(new MColumn({
-          header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
-        }));
-        oInput.addSuggestionColumn(new MColumn({
-          header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
-        }));
-        oInput.attachSuggest(this.onFilterSuggest, this);
-        oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+        this._configureFilterSuggestion(oConfig, oBundle);
       }, this);
+      this._requestCreatedByValueList().then(function (oValueList) {
+        this._configureFilterSuggestion(Object.assign({ controlId: "filterCreatedBy" }, oValueList), oBundle);
+      }.bind(this)).catch(function () {
+        // Reported when the user opens the value help (onCreatedByValueHelpRequest).
+      });
+    },
+
+    _configureFilterSuggestion: function (oConfig, oBundle) {
+      var oInput = this.byId(oConfig.controlId);
+      oInput.data("suggestionConfig", oConfig);
+      if (oConfig.loadSuggestions) {
+        oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
+      }
+      oInput.setShowSuggestion(true);
+      oInput.setFilterSuggests(false);
+      oInput.setStartSuggestion(1);
+      oInput.addSuggestionColumn(new MColumn({
+        header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
+      }));
+      oInput.addSuggestionColumn(new MColumn({
+        header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
+      }));
+      oInput.attachSuggest(this.onFilterSuggest, this);
+      oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+    },
+
+    // D-1171: the same value list as F3893's Created By filter - CreatedByUser's
+    // ValueListReferences (c_salesdocumentuservh F4 service), resolved by the meta model.
+    _requestCreatedByValueList: function () {
+      if (!this._oCreatedByValueListPromise) {
+        var oTerms = ServiceSchema.valueListTerms;
+        var sCreatedBy = ServiceSchema.headerProperties.createdBy;
+        var sModelName = ServiceSchema.f4Services.salesDocumentUser.modelName;
+        var oComponent = this.getOwnerComponent();
+        this._oCreatedByValueListPromise = oComponent.getModel().getMetaModel()
+          .requestValueListInfo("/" + ServiceSchema.entitySets.header + "/" + sCreatedBy)
+          .then(function (mValueLists) {
+            var oMapping = mValueLists[""] || mValueLists[Object.keys(mValueLists)[0]];
+            var aParameters = oMapping.Parameters || [];
+            var oKeyParameter = aParameters.find(function (oParameter) {
+              return (oParameter.$Type === oTerms.parameterInOut || oParameter.$Type === oTerms.parameterOut) &&
+                oParameter.LocalDataProperty && oParameter.LocalDataProperty.$PropertyPath === sCreatedBy;
+            });
+            if (!oKeyParameter) {
+              throw new Error("No value list parameter maps " + sCreatedBy);
+            }
+            var sEntitySet = oMapping.CollectionPath;
+            var sKey = oKeyParameter.ValueListProperty;
+            var oTextParameter = aParameters.find(function (oParameter) {
+              return oParameter.$Type === oTerms.parameterDisplayOnly;
+            });
+            return (oTextParameter ? Promise.resolve(oTextParameter.ValueListProperty)
+              : oMapping.$model.getMetaModel().requestObject("/" + sEntitySet + "/" + sKey + oTerms.text + "/$Path"))
+              .then(function (sDescription) {
+                if (!sDescription) {
+                  throw new Error("No text property in value list " + sEntitySet);
+                }
+                oComponent.setModel(oMapping.$model, sModelName);
+                return {
+                  modelName: sModelName,
+                  entitySet: sEntitySet,
+                  key: sKey,
+                  description: sDescription,
+                  keyLabel: "createdByHelpUser",
+                  descriptionLabel: "createdByHelpName"
+                };
+              });
+          });
+      }
+      return this._oCreatedByValueListPromise;
+    },
+
+    onCreatedByValueHelpRequest: function () {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      this._requestCreatedByValueList().then(function (oValueList) {
+        this._openStandardEntityValueHelp(this.byId("filterCreatedBy"), {
+          title: oBundle.getText("filterCreatedBy"),
+          modelName: oValueList.modelName,
+          entitySet: oValueList.entitySet,
+          key: oValueList.key,
+          descriptionKey: oValueList.description,
+          select: [oValueList.key, oValueList.description],
+          searchPaths: [oValueList.key, oValueList.description],
+          fields: [
+            { path: oValueList.key, labelKey: oValueList.keyLabel },
+            { path: oValueList.description, labelKey: oValueList.descriptionLabel }
+          ],
+          columns: [
+            { path: oValueList.key, labelKey: oValueList.keyLabel, width: "12rem" },
+            { path: oValueList.description, labelKey: oValueList.descriptionLabel, width: "24rem" }
+          ]
+        });
+      }.bind(this)).catch(function () {
+        MessageToast.show(oBundle.getText("createdByHelpLoadError"));
+      });
     },
 
     onFilterSuggest: function (oEvent) {
@@ -855,7 +935,8 @@ sap.ui.define([
         },
         filterRequestId: { label: oBundle.getText("filterRequestId"), path: ServiceSchema.keys.orderId },
         filterExisId: { label: oBundle.getText("filterExisId"), path: ServiceSchema.headerProperties.exisId },
-        filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId }
+        filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId },
+        filterCreatedBy: { label: oBundle.getText("filterCreatedBy"), path: ServiceSchema.headerProperties.createdBy }
       }[sControlId];
     },
 
@@ -1015,7 +1096,10 @@ sap.ui.define([
         ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee,
         oView.byId("filterEmployeeResponsible").getValue(), FilterOperator.EQ);
       this._pushNdcConditionFilters(aFilters);
-      this._pushIfValue(aFilters, ServiceSchema.headerProperties.createdBy, oView.byId("filterCreatedBy").getValue(), FilterOperator.Contains);
+      // CreatedByUser is IsUpperCase: typed IDs are matched EQ in upper case.
+      var oCreatedBy = oView.byId("filterCreatedBy");
+      oCreatedBy.setValue(oCreatedBy.getValue().trim().toUpperCase());
+      this._pushConditionFilters(aFilters, "filterCreatedBy");
 
       // Contact: RUNTIME-BLOCKED-BY-SERVICE — do not filter or expand
       // _SoldToPartyContactInfo on the master LIST. The custom backend provider
@@ -2065,7 +2149,7 @@ sap.ui.define([
         { id: "filterEmployeeResponsible", type: "value" },
         { id: "filterNdc", type: "conditions" },
         { id: "filterShipToParty", type: "value" },
-        { id: "filterCreatedBy", type: "value" },
+        { id: "filterCreatedBy", type: "conditions" },
         { id: "filterJurisdiction", type: "value" },
         { id: "filterDeliveryBlockReason", type: "key" },
         { id: "filterSalesOrderType", type: "key" },
