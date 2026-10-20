@@ -301,7 +301,9 @@ sap.ui.define([
       itemCategory: "SalesOrderItemCategory",
       netAmount: "NetAmount",
       currency: "TransactionCurrency",
-      exisId: "PurchaseOrderByCustomer",
+      // ExIS Item Number: SalesOrderItemType.ExisItemNumber (Edm.String, MaxLength 12) - from the
+      // code owner's live $metadata paste 2026-10-20; not yet in the 2026-09-30 snapshot.
+      exisId: "ExisItemNumber",
       deliveryStatus: "DeliveryStatus",
       deliveryStatusText: "DeliveryStatus_Text",
       rejectionReason: "SalesDocumentRjcnReason",
@@ -317,8 +319,8 @@ sap.ui.define([
       // are a temporary hardcoded set (Adult/Pediatric/Adult+Pediatric) until
       // a real value list is confirmed.
       orderIntention: "MaterialGroup1",
-      // No distinct "PO Reference" field at item level beyond PurchaseOrderByCustomer
-      // (already used for ExIS ID) — BLOCKED-BY-SERVICE, see PHASE2_AUDIT.md.
+      // Items grid PO Reference column is still unbound; PurchaseOrderByCustomer
+      // is no longer used for ExIS (now ExisItemNumber) and could back it.
       poReference: null,
       // Client requirement (2026-09-01): real field, carried over from the NDC's
       // own IndustryStandardName (productProperties above) on product selection,
@@ -414,9 +416,8 @@ sap.ui.define([
       statusText: "_SDProcessStatus/SDProcessStatus_Text",
       orderIntention: "MaterialGroup1",
       fundType: "MaterialGroup2",
-      // Same underlying field as itemProperties.exisId ("ExIS Item Number" in
-      // the Items grid) - SalesOrderItemType has no separate PO-reference
-      // property (Step-0, so.xml confirmed) - this IS the PO Reference.
+      // Item PO Reference (PurchaseOrderByCustomer); the Items grid's ExIS Item
+      // Number is the separate itemProperties.exisId (ExisItemNumber).
       poReference: "PurchaseOrderByCustomer",
       deliveryStatus: "DeliveryStatus",
       deliveryStatusText: "_DeliveryStatus/DeliveryStatus_Text",
