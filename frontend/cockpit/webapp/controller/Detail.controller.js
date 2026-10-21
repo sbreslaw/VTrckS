@@ -2471,6 +2471,7 @@ sap.ui.define([
     _openProviderValueHelpDialog: function (fnApply) {
       var oBundle = this.getResourceBundle();
       var oProps = ServiceSchema.customerSalesAreaProperties;
+      var fnToPick = this._providerRowToPick;
       var oArea = ServiceSchema.salesArea;
       var sSearchMode = ProviderSearchService.defaultMode;
       var iRowPageSize = 50;
@@ -2503,17 +2504,7 @@ sap.ui.define([
         rowSelectionChange: function (oEvent) {
           var oContext = oEvent.getParameter("rowContext");
           if (oContext) {
-            var oRow = oContext.getObject();
-            fnApply({
-              id: oRow[oProps.customer],
-              fullName: oRow[oProps.customerName],
-              address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
-                .filter(function (sPart) { return !!sPart; })
-                .join(", "),
-              salesOrganization: oRow[oProps.salesOrganization],
-              distributionChannel: oRow[oProps.distributionChannel],
-              division: oRow[oProps.division]
-            });
+            fnApply(fnToPick(oContext.getObject()));
             oDialog.close();
           }
         }
@@ -3492,9 +3483,12 @@ sap.ui.define([
       if (!oRowContext) {
         return;
       }
+      this._applyProviderPick(this._providerRowToPick(oRowContext.getObject()));
+    },
+
+    _providerRowToPick: function (oRow) {
       var oProps = ServiceSchema.customerSalesAreaProperties;
-      var oRow = oRowContext.getObject();
-      this._applyProviderPick({
+      return {
         id: oRow[oProps.customer],
         fullName: oRow[oProps.customerName],
         address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
@@ -3503,7 +3497,7 @@ sap.ui.define([
         salesOrganization: oRow[oProps.salesOrganization],
         distributionChannel: oRow[oProps.distributionChannel],
         division: oRow[oProps.division]
-      });
+      };
     },
 
     // Issue Batch 9-30-001 §3.3: free typing no longer auto-confirms a
@@ -3520,7 +3514,6 @@ sap.ui.define([
     // applies it via _applyProviderPick like a suggestion/VH pick would.
     onProviderChange: function (oEvent) {
       var that = this;
-      var oInput = oEvent.getSource();
       var sValue = oEvent.getParameter("value");
       var sConfirmed = this.getView().getModel("createEnrich").getProperty("/providerName");
       if (!sValue || sValue === sConfirmed) {
@@ -3548,17 +3541,7 @@ sap.ui.define([
       );
       oLookupBinding.requestContexts(0, 2).then(function (aContexts) {
         if (aContexts.length === 1) {
-          var oRow = aContexts[0].getObject();
-          that._applyProviderPick({
-            id: oRow[oProps.customer],
-            fullName: oRow[oProps.customerName],
-            address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
-              .filter(function (sPart) { return !!sPart; })
-              .join(", "),
-            salesOrganization: oRow[oProps.salesOrganization],
-            distributionChannel: oRow[oProps.distributionChannel],
-            division: oRow[oProps.division]
-          });
+          that._applyProviderPick(that._providerRowToPick(aContexts[0].getObject()));
         } else {
           that._setProviderValueState(false);
         }
@@ -4308,11 +4291,8 @@ sap.ui.define([
       }
     },
 
-    // Cross-app navigation (route query providerId, see _onCreateMatched):
-    // looks the provider up with the same CustomerSalesArea query/sales-area
-    // pre-filter as onProviderChange, then applies it through
-    // _applyProviderPick so it behaves exactly like a manual pick. Prefers the
-    // row in the configured sales area when the provider has several.
+    // Resolve the route's provider before using the normal selection flow.
+    // Prefer the configured sales area when the provider has several rows.
     _preselectProvider: function (sProviderId) {
       var that = this;
       var oView = this.getView();
@@ -4337,31 +4317,22 @@ sap.ui.define([
           !oView.getModel("createState").getProperty("/providerChosen");
       };
       oView.setBusy(true);
-      oLookupBinding.requestContexts(0, 20).then(function (aContexts) {
+      return oLookupBinding.requestContexts(0, 20).then(function (aContexts) {
         if (!fnIsCurrent()) {
           return;
         }
         var aRows = aContexts.map(function (oRowContext) { return oRowContext.getObject(); });
-        var oRow = aRows.filter(function (oCandidate) {
+        var oRow = aRows.find(function (oCandidate) {
           return oCandidate[oProps.distributionChannel] === oArea.distributionChannel &&
             oCandidate[oProps.division] === oArea.organizationDivision;
-        })[0] || aRows[0];
+        }) || aRows[0];
         if (!oRow) {
           MessageBox.information(oBundle.getText("startupProviderNotFound", [sProviderId]), {
             title: oBundle.getText("startupProviderNotFoundTitle")
           });
           return;
         }
-        that._applyProviderPick({
-          id: oRow[oProps.customer],
-          fullName: oRow[oProps.customerName],
-          address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
-            .filter(function (sPart) { return !!sPart; })
-            .join(", "),
-          salesOrganization: oRow[oProps.salesOrganization],
-          distributionChannel: oRow[oProps.distributionChannel],
-          division: oRow[oProps.division]
-        });
+        that._applyProviderPick(that._providerRowToPick(oRow));
       }).catch(function (oError) {
         if (!fnIsCurrent()) {
           return;
