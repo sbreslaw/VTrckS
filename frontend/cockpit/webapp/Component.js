@@ -1,10 +1,16 @@
 sap.ui.define([
   "sap/ui/core/UIComponent",
+  "sap/ui/core/routing/HashChanger",
   "sap/ui/model/json/JSONModel",
   "cdc/vaccreq/model/OrderModeConfig",
   "cdc/vaccreq/model/OrderAuthorization"
-], function (UIComponent, JSONModel, OrderModeConfig, OrderAuthorization) {
+], function (UIComponent, HashChanger, JSONModel, OrderModeConfig, OrderAuthorization) {
   "use strict";
+
+  // Intent-based navigation parameter: a source app opens New Provider Order
+  // for a given provider, e.g. #<SemanticObject>-<action>?providerId=1000123.
+  var PROVIDER_ID_PARAMETER = "providerId";
+  var CREATE_ROUTE = "create";
 
   return UIComponent.extend("cdc.vaccreq.Component", {
     metadata: {
@@ -27,7 +33,50 @@ sap.ui.define([
         }))
       }), "orderAuth");
       this._setShellTitle(oBundle.getText("appTitleOrderType", [oOrderContext.title]));
+      this._prepareStartupProvider(oComponentData.startupParameters);
       this.getRouter().initialize();
+    },
+
+    // Returns the startup providerId once; the Detail controller applies it to
+    // the first New Provider Order screen only, never to later "New" presses.
+    consumeStartupProviderId: function () {
+      var sProviderId = this._sStartupProviderId || "";
+      this._sStartupProviderId = "";
+      return sProviderId;
+    },
+
+    // Standard startup-parameter routing: with no inner-app hash, replace it
+    // with the create route before the router initializes. An explicit inner
+    // hash (bookmark/deep link) always wins; the provider is only kept when
+    // that hash already targets the create route.
+    _prepareStartupProvider: function (oStartupParameters) {
+      var vProviderId = oStartupParameters && oStartupParameters[PROVIDER_ID_PARAMETER];
+      var sProviderId = String((Array.isArray(vProviderId) ? vProviderId[0] : vProviderId) || "").trim();
+      this._sStartupProviderId = "";
+      if (!sProviderId) {
+        return;
+      }
+      var oRouter = this.getRouter();
+      var oHashChanger = HashChanger.getInstance();
+      var sHash = oHashChanger.getHash();
+      if (sHash) {
+        var oRouteInfo = oRouter.getRouteInfoByHash(sHash);
+        if (oRouteInfo && oRouteInfo.name === CREATE_ROUTE) {
+          this._sStartupProviderId = sProviderId;
+        }
+        return;
+      }
+      var oAuth = this.getModel("orderAuth");
+      var sOrderType = (this.getModel("orderContext").getProperty("/orderTypes") || []).map(function (oType) {
+        return oType.orderType;
+      }).filter(function (sType) {
+        return oAuth.getProperty("/types/" + sType + "/CREATE") === true;
+      })[0];
+      if (!sOrderType) {
+        return;
+      }
+      this._sStartupProviderId = sProviderId;
+      oHashChanger.replaceHash(oRouter.getURL(CREATE_ROUTE, { orderType: sOrderType }));
     },
 
     _setShellTitle: function (sTitle) {

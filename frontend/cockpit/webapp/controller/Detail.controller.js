@@ -4293,12 +4293,85 @@ sap.ui.define([
     // The category scopes Create; deep links to a type outside it (or without CREATE) are refused.
     _onCreateMatched: function (oEvent) {
       var sOrderType = String(oEvent.getParameter("arguments").orderType || "").toUpperCase();
+      var sStartupProviderId = this.getOwnerComponent().consumeStartupProviderId();
       if (this._getCreatableOrderTypes().indexOf(sOrderType) === -1) {
         MessageToast.show(this.getResourceBundle().getText("createOrderTypeNotAllowed", [sOrderType]));
         this._oRouter.navTo("master", {}, true);
         return;
       }
       this._enterCreateMode(sOrderType);
+      if (sStartupProviderId) {
+        this._preselectStartupProvider(sStartupProviderId);
+      }
+    },
+
+    // Cross-app navigation (startup parameter providerId, see Component.js):
+    // looks the provider up with the same CustomerSalesArea query/sales-area
+    // pre-filter as onProviderChange, then applies it through
+    // _applyProviderPick so it behaves exactly like a manual pick. Prefers the
+    // row in the configured sales area when the provider has several.
+    _preselectStartupProvider: function (sProviderId) {
+      var that = this;
+      var oView = this.getView();
+      var oContext = oView.getBindingContext();
+      var oBundle = this.getResourceBundle();
+      var oProps = ServiceSchema.customerSalesAreaProperties;
+      var oArea = ServiceSchema.salesArea;
+      var oLookupBinding = oView.getModel().bindList(
+        "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
+        [
+          new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
+          new Filter(oProps.customer, FilterOperator.EQ, sProviderId)
+        ],
+        {
+          $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
+            oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
+        }
+      );
+      var fnIsCurrent = function () {
+        return oView.getBindingContext() === oContext &&
+          oView.getModel("sectionFlags").getProperty("/createMode") &&
+          !oView.getModel("createState").getProperty("/providerChosen");
+      };
+      oView.setBusy(true);
+      oLookupBinding.requestContexts(0, 20).then(function (aContexts) {
+        if (!fnIsCurrent()) {
+          return;
+        }
+        var aRows = aContexts.map(function (oRowContext) { return oRowContext.getObject(); });
+        var oRow = aRows.filter(function (oCandidate) {
+          return oCandidate[oProps.distributionChannel] === oArea.distributionChannel &&
+            oCandidate[oProps.division] === oArea.organizationDivision;
+        })[0] || aRows[0];
+        if (!oRow) {
+          MessageBox.information(oBundle.getText("startupProviderNotFound", [sProviderId]), {
+            title: oBundle.getText("startupProviderNotFoundTitle")
+          });
+          return;
+        }
+        that._applyProviderPick({
+          id: oRow[oProps.customer],
+          fullName: oRow[oProps.customerName],
+          address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+            .filter(function (sPart) { return !!sPart; })
+            .join(", "),
+          salesOrganization: oRow[oProps.salesOrganization],
+          distributionChannel: oRow[oProps.distributionChannel],
+          division: oRow[oProps.division]
+        });
+      }).catch(function (oError) {
+        if (!fnIsCurrent()) {
+          return;
+        }
+        MessageExtractor.addNote(oBundle.getText("startupProviderLookupFailed", [sProviderId]), "Warning");
+        MessageExtractor.extract(oError, oContext && oContext.getPath(), oBundle);
+        that._openMessagePopover();
+      }).finally(function () {
+        if (oView.getBindingContext() === oContext) {
+          oView.setBusy(false);
+        }
+        oLookupBinding.destroy();
+      });
     },
 
     _enterCreateMode: function (sOrderType) {
