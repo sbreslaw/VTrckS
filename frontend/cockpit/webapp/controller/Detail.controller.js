@@ -2471,7 +2471,6 @@ sap.ui.define([
     _openProviderValueHelpDialog: function (fnApply) {
       var oBundle = this.getResourceBundle();
       var oProps = ServiceSchema.customerSalesAreaProperties;
-      var fnToPick = this._providerRowToPick;
       var oArea = ServiceSchema.salesArea;
       var sSearchMode = ProviderSearchService.defaultMode;
       var iRowPageSize = 50;
@@ -2504,7 +2503,17 @@ sap.ui.define([
         rowSelectionChange: function (oEvent) {
           var oContext = oEvent.getParameter("rowContext");
           if (oContext) {
-            fnApply(fnToPick(oContext.getObject()));
+            var oRow = oContext.getObject();
+            fnApply({
+              id: oRow[oProps.customer],
+              fullName: oRow[oProps.customerName],
+              address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+                .filter(function (sPart) { return !!sPart; })
+                .join(", "),
+              salesOrganization: oRow[oProps.salesOrganization],
+              distributionChannel: oRow[oProps.distributionChannel],
+              division: oRow[oProps.division]
+            });
             oDialog.close();
           }
         }
@@ -3483,12 +3492,9 @@ sap.ui.define([
       if (!oRowContext) {
         return;
       }
-      this._applyProviderPick(this._providerRowToPick(oRowContext.getObject()));
-    },
-
-    _providerRowToPick: function (oRow) {
       var oProps = ServiceSchema.customerSalesAreaProperties;
-      return {
+      var oRow = oRowContext.getObject();
+      this._applyProviderPick({
         id: oRow[oProps.customer],
         fullName: oRow[oProps.customerName],
         address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
@@ -3497,7 +3503,7 @@ sap.ui.define([
         salesOrganization: oRow[oProps.salesOrganization],
         distributionChannel: oRow[oProps.distributionChannel],
         division: oRow[oProps.division]
-      };
+      });
     },
 
     // Issue Batch 9-30-001 §3.3: free typing no longer auto-confirms a
@@ -3514,6 +3520,7 @@ sap.ui.define([
     // applies it via _applyProviderPick like a suggestion/VH pick would.
     onProviderChange: function (oEvent) {
       var that = this;
+      var oInput = oEvent.getSource();
       var sValue = oEvent.getParameter("value");
       var sConfirmed = this.getView().getModel("createEnrich").getProperty("/providerName");
       if (!sValue || sValue === sConfirmed) {
@@ -3541,7 +3548,17 @@ sap.ui.define([
       );
       oLookupBinding.requestContexts(0, 2).then(function (aContexts) {
         if (aContexts.length === 1) {
-          that._applyProviderPick(that._providerRowToPick(aContexts[0].getObject()));
+          var oRow = aContexts[0].getObject();
+          that._applyProviderPick({
+            id: oRow[oProps.customer],
+            fullName: oRow[oProps.customerName],
+            address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+              .filter(function (sPart) { return !!sPart; })
+              .join(", "),
+            salesOrganization: oRow[oProps.salesOrganization],
+            distributionChannel: oRow[oProps.distributionChannel],
+            division: oRow[oProps.division]
+          });
         } else {
           that._setProviderValueState(false);
         }
@@ -4332,7 +4349,16 @@ sap.ui.define([
           });
           return;
         }
-        that._applyProviderPick(that._providerRowToPick(oRow));
+        that._applyProviderPick({
+          id: oRow[oProps.customer],
+          fullName: oRow[oProps.customerName],
+          address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+            .filter(function (sPart) { return !!sPart; })
+            .join(", "),
+          salesOrganization: oRow[oProps.salesOrganization],
+          distributionChannel: oRow[oProps.distributionChannel],
+          division: oRow[oProps.division]
+        });
       }).catch(function (oError) {
         if (!fnIsCurrent()) {
           return;

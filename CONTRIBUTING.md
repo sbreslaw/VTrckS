@@ -30,9 +30,3 @@ git push -u origin feature/<short-task-slug>
 ## Design docs, task specs, project notes
 Maintained by the code owner outside this repo; the relevant excerpts come with each task or in the
 PR. If a PR implements a task spec you were given, reference it in the PR description.
-
-## Provider selection regression tests
-From `frontend/cockpit`, run `node --test webapp/test/unit/Detail.provider.test.cjs`.
-These dependency-free Node tests exercise the controller with UI5/OData test doubles:
-route parameters, manual selection mapping, sales-area preference, missing providers,
-lookup errors, and stale responses. They do not replace browser or live-backend testing.
