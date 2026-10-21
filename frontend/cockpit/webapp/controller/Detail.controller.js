@@ -4291,26 +4291,29 @@ sap.ui.define([
     // as a pure local scratchpad — a stand-in for the bindElement path the
     // "detail" route uses. No backend contact happens until Save.
     // The category scopes Create; deep links to a type outside it (or without CREATE) are refused.
+    // Cross-app navigation passes the provider as an optional route query,
+    // e.g. #<SemanticObject>-<action>&/create/ZKB?providerId=1000123.
     _onCreateMatched: function (oEvent) {
-      var sOrderType = String(oEvent.getParameter("arguments").orderType || "").toUpperCase();
-      var sStartupProviderId = this.getOwnerComponent().consumeStartupProviderId();
+      var oArgs = oEvent.getParameter("arguments");
+      var sOrderType = String(oArgs.orderType || "").toUpperCase();
+      var sProviderId = String((oArgs["?query"] || {}).providerId || "").trim();
       if (this._getCreatableOrderTypes().indexOf(sOrderType) === -1) {
         MessageToast.show(this.getResourceBundle().getText("createOrderTypeNotAllowed", [sOrderType]));
         this._oRouter.navTo("master", {}, true);
         return;
       }
       this._enterCreateMode(sOrderType);
-      if (sStartupProviderId) {
-        this._preselectStartupProvider(sStartupProviderId);
+      if (sProviderId) {
+        this._preselectProvider(sProviderId);
       }
     },
 
-    // Cross-app navigation (startup parameter providerId, see Component.js):
+    // Cross-app navigation (route query providerId, see _onCreateMatched):
     // looks the provider up with the same CustomerSalesArea query/sales-area
     // pre-filter as onProviderChange, then applies it through
     // _applyProviderPick so it behaves exactly like a manual pick. Prefers the
     // row in the configured sales area when the provider has several.
-    _preselectStartupProvider: function (sProviderId) {
+    _preselectProvider: function (sProviderId) {
       var that = this;
       var oView = this.getView();
       var oContext = oView.getBindingContext();
