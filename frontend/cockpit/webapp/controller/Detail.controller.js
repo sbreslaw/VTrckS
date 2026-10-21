@@ -4310,14 +4310,13 @@ sap.ui.define([
 
     // Resolve the route's provider before using the normal selection flow.
     // Prefer the configured sales area when the provider has several rows.
-    _preselectProvider: function (sProviderId) {
-      var that = this;
-      var oView = this.getView();
-      var oContext = oView.getBindingContext();
-      var oBundle = this.getResourceBundle();
-      var oProps = ServiceSchema.customerSalesAreaProperties;
-      var oArea = ServiceSchema.salesArea;
-      var oLookupBinding = oView.getModel().bindList(
+    _preselectProvider: async function (sProviderId) {
+      const oView = this.getView();
+      const oContext = oView.getBindingContext();
+      const oBundle = this.getResourceBundle();
+      const oProps = ServiceSchema.customerSalesAreaProperties;
+      const oArea = ServiceSchema.salesArea;
+      const oLookupBinding = oView.getModel().bindList(
         "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
         [
           new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
@@ -4328,50 +4327,53 @@ sap.ui.define([
             oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
         }
       );
-      var fnIsCurrent = function () {
-        return oView.getBindingContext() === oContext &&
-          oView.getModel("sectionFlags").getProperty("/createMode") &&
-          !oView.getModel("createState").getProperty("/providerChosen");
-      };
       oView.setBusy(true);
-      return oLookupBinding.requestContexts(0, 20).then(function (aContexts) {
-        if (!fnIsCurrent()) {
+      try {
+        const aContexts = await oLookupBinding.requestContexts(0, 20);
+        if (!this._isProviderPreselectionCurrent(oContext)) {
           return;
         }
-        var aRows = aContexts.map(function (oRowContext) { return oRowContext.getObject(); });
-        var oRow = aRows.find(function (oCandidate) {
-          return oCandidate[oProps.distributionChannel] === oArea.distributionChannel &&
-            oCandidate[oProps.division] === oArea.organizationDivision;
-        }) || aRows[0];
+        const aRows = aContexts.map(oRowContext => oRowContext.getObject());
+        const oRow = aRows.find(oCandidate =>
+          oCandidate[oProps.distributionChannel] === oArea.distributionChannel &&
+          oCandidate[oProps.division] === oArea.organizationDivision
+        ) || aRows[0];
         if (!oRow) {
           MessageBox.information(oBundle.getText("startupProviderNotFound", [sProviderId]), {
             title: oBundle.getText("startupProviderNotFoundTitle")
           });
           return;
         }
-        that._applyProviderPick({
+        this._applyProviderPick({
           id: oRow[oProps.customer],
           fullName: oRow[oProps.customerName],
           address: [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
-            .filter(function (sPart) { return !!sPart; })
+            .filter(Boolean)
             .join(", "),
           salesOrganization: oRow[oProps.salesOrganization],
           distributionChannel: oRow[oProps.distributionChannel],
           division: oRow[oProps.division]
         });
-      }).catch(function (oError) {
-        if (!fnIsCurrent()) {
+      } catch (oError) {
+        if (!this._isProviderPreselectionCurrent(oContext)) {
           return;
         }
         MessageExtractor.addNote(oBundle.getText("startupProviderLookupFailed", [sProviderId]), "Warning");
         MessageExtractor.extract(oError, oContext && oContext.getPath(), oBundle);
-        that._openMessagePopover();
-      }).finally(function () {
+        this._openMessagePopover();
+      } finally {
         if (oView.getBindingContext() === oContext) {
           oView.setBusy(false);
         }
         oLookupBinding.destroy();
-      });
+      }
+    },
+
+    _isProviderPreselectionCurrent: function (oContext) {
+      const oView = this.getView();
+      return oView.getBindingContext() === oContext &&
+        oView.getModel("sectionFlags").getProperty("/createMode") &&
+        !oView.getModel("createState").getProperty("/providerChosen");
     },
 
     _enterCreateMode: function (sOrderType) {
