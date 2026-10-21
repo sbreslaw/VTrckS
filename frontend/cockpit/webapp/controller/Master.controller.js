@@ -4,6 +4,7 @@ sap.ui.define([
   "sap/ui/model/FilterOperator",
   "sap/ui/model/Sorter",
   "sap/ui/model/json/JSONModel",
+  "sap/ui/model/type/String",
   "sap/ui/core/Element",
   "sap/ui/core/Item",
   "sap/ui/core/ResizeHandler",
@@ -26,11 +27,13 @@ sap.ui.define([
   "sap/m/MenuItem",
   "sap/m/SearchField",
   "sap/m/Token",
+  "sap/m/library",
   "sap/m/p13n/Popup",
   "sap/m/p13n/SelectionPanel",
   "sap/m/p13n/SortPanel",
   "sap/m/p13n/GroupPanel",
   "sap/ui/core/EventBus",
+  "sap/ui/core/library",
   "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
   "sap/ui/comp/filterbar/FilterBar",
   "sap/ui/comp/filterbar/FilterGroupItem",
@@ -40,13 +43,14 @@ sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/service/ProviderSearchService",
-  "cdc/vaccreq/util/ValueHelpTableFitter"
+  "cdc/vaccreq/util/ValueHelpTableFitter",
+  "cdc/vaccreq/util/FilterValue"
 ], function (
-  Controller, Filter, FilterOperator, Sorter, JSONModel, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
-  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token,
-  P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus,
+  Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
+  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
+  P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
-  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter
+  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue
 ) {
   "use strict";
 
@@ -61,6 +65,19 @@ sap.ui.define([
   var ROW_COUNT_DEBOUNCE_MS = 400;
   var RESIZE_DEBOUNCE_MS = 400;
   var RangeOperation = compLibrary.valuehelpdialog.ValueHelpRangeOperation;
+  var DateRangeKeys = mLibrary.StandardDynamicDateRangeKeys;
+  var SortOrder = coreLibrary.SortOrder;
+  // Must stay a String type: sap.ui.table.Column only parses * wildcards for String filter types.
+  var FunctionSafeStringType = StringType.extend("cdc.vaccreq.model.type.FunctionSafeString", {
+    parseValue: function () {
+      return FilterValue.forFunction(StringType.prototype.parseValue.apply(this, arguments));
+    }
+  });
+  var UpperCaseStringType = FunctionSafeStringType.extend("cdc.vaccreq.model.type.UpperCaseString", {
+    parseValue: function () {
+      return FunctionSafeStringType.prototype.parseValue.apply(this, arguments).toUpperCase();
+    }
+  });
   var CONDITION_OPERATIONS = [RangeOperation.EQ, RangeOperation.Contains, RangeOperation.BT,
     RangeOperation.StartsWith, RangeOperation.EndsWith, RangeOperation.LT, RangeOperation.LE,
     RangeOperation.GT, RangeOperation.GE, "Empty"];
@@ -94,7 +111,6 @@ sap.ui.define([
       // is guaranteed to match nothing (SalesOrder is a non-nullable key field,
       // never an empty string).
       this._aCurrentFilters = this._getNoResultsFilter();
-      this._iMaxHits = 50;
       this._bindMasterRows();
       this._refreshVariantsModel();
       this._refreshColumnVariantsModel();
@@ -185,23 +201,103 @@ sap.ui.define([
       ];
 
       aConfigs.forEach(function (oConfig) {
-        var oInput = this.byId(oConfig.controlId);
-        oInput.data("suggestionConfig", oConfig);
-        if (oConfig.loadSuggestions) {
-          oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
-        }
-        oInput.setShowSuggestion(true);
-        oInput.setFilterSuggests(false);
-        oInput.setStartSuggestion(1);
-        oInput.addSuggestionColumn(new MColumn({
-          header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
-        }));
-        oInput.addSuggestionColumn(new MColumn({
-          header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
-        }));
-        oInput.attachSuggest(this.onFilterSuggest, this);
-        oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+        this._configureFilterSuggestion(oConfig, oBundle);
       }, this);
+      this._requestCreatedByValueList().then(function (oValueList) {
+        this._configureFilterSuggestion(Object.assign({ controlId: "filterCreatedBy" }, oValueList), oBundle);
+      }.bind(this)).catch(function () {
+        // Reported when the user opens the value help (onCreatedByValueHelpRequest).
+      });
+    },
+
+    _configureFilterSuggestion: function (oConfig, oBundle) {
+      var oInput = this.byId(oConfig.controlId);
+      oInput.data("suggestionConfig", oConfig);
+      if (oConfig.loadSuggestions) {
+        oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
+      }
+      oInput.setShowSuggestion(true);
+      oInput.setFilterSuggests(false);
+      oInput.setStartSuggestion(1);
+      oInput.addSuggestionColumn(new MColumn({
+        header: new Text({ text: oBundle.getText(oConfig.keyLabel) })
+      }));
+      oInput.addSuggestionColumn(new MColumn({
+        header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
+      }));
+      oInput.attachSuggest(this.onFilterSuggest, this);
+      oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+    },
+
+    // D-1171: the same value list as F3893's Created By filter - CreatedByUser's
+    // ValueListReferences (c_salesdocumentuservh F4 service), resolved by the meta model.
+    _requestCreatedByValueList: function () {
+      if (!this._oCreatedByValueListPromise) {
+        var oTerms = ServiceSchema.valueListTerms;
+        var sCreatedBy = ServiceSchema.headerProperties.createdBy;
+        var sModelName = ServiceSchema.f4Services.salesDocumentUser.modelName;
+        var oComponent = this.getOwnerComponent();
+        this._oCreatedByValueListPromise = oComponent.getModel().getMetaModel()
+          .requestValueListInfo("/" + ServiceSchema.entitySets.header + "/" + sCreatedBy)
+          .then(function (mValueLists) {
+            var oMapping = mValueLists[""] || mValueLists[Object.keys(mValueLists)[0]];
+            var aParameters = oMapping.Parameters || [];
+            var oKeyParameter = aParameters.find(function (oParameter) {
+              return (oParameter.$Type === oTerms.parameterInOut || oParameter.$Type === oTerms.parameterOut) &&
+                oParameter.LocalDataProperty && oParameter.LocalDataProperty.$PropertyPath === sCreatedBy;
+            });
+            if (!oKeyParameter) {
+              throw new Error("No value list parameter maps " + sCreatedBy);
+            }
+            var sEntitySet = oMapping.CollectionPath;
+            var sKey = oKeyParameter.ValueListProperty;
+            var oTextParameter = aParameters.find(function (oParameter) {
+              return oParameter.$Type === oTerms.parameterDisplayOnly;
+            });
+            return (oTextParameter ? Promise.resolve(oTextParameter.ValueListProperty)
+              : oMapping.$model.getMetaModel().requestObject("/" + sEntitySet + "/" + sKey + oTerms.text + "/$Path"))
+              .then(function (sDescription) {
+                if (!sDescription) {
+                  throw new Error("No text property in value list " + sEntitySet);
+                }
+                oComponent.setModel(oMapping.$model, sModelName);
+                return {
+                  modelName: sModelName,
+                  entitySet: sEntitySet,
+                  key: sKey,
+                  description: sDescription,
+                  keyLabel: "createdByHelpUser",
+                  descriptionLabel: "createdByHelpName"
+                };
+              });
+          });
+      }
+      return this._oCreatedByValueListPromise;
+    },
+
+    onCreatedByValueHelpRequest: function () {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      this._requestCreatedByValueList().then(function (oValueList) {
+        this._openStandardEntityValueHelp(this.byId("filterCreatedBy"), {
+          title: oBundle.getText("filterCreatedBy"),
+          modelName: oValueList.modelName,
+          entitySet: oValueList.entitySet,
+          key: oValueList.key,
+          descriptionKey: oValueList.description,
+          select: [oValueList.key, oValueList.description],
+          searchPaths: [oValueList.key, oValueList.description],
+          fields: [
+            { path: oValueList.key, labelKey: oValueList.keyLabel },
+            { path: oValueList.description, labelKey: oValueList.descriptionLabel }
+          ],
+          columns: [
+            { path: oValueList.key, labelKey: oValueList.keyLabel, width: "12rem" },
+            { path: oValueList.description, labelKey: oValueList.descriptionLabel, width: "24rem" }
+          ]
+        });
+      }.bind(this)).catch(function () {
+        MessageToast.show(oBundle.getText("createdByHelpLoadError"));
+      });
     },
 
     onFilterSuggest: function (oEvent) {
@@ -228,7 +324,7 @@ sap.ui.define([
         oBinding = oInput.getBinding("suggestionRows");
       }
 
-      var sValue = (oEvent.getParameter("suggestValue") || "").trim();
+      var sValue = FilterValue.forFunction((oEvent.getParameter("suggestValue") || "").trim());
       if (oConfig.loadSuggestions) {
         var iRequest = (oInput.data("suggestionRequest") || 0) + 1;
         oInput.data("suggestionRequest", iRequest);
@@ -408,7 +504,7 @@ sap.ui.define([
       fnCreateFieldControls(oInitialSearchMode ? oInitialSearchMode.fields : oConfig.fields);
       var fnGetFilters = function () {
         var aFilters = [];
-        var sSearchValue = oBasicSearch.getValue();
+        var sSearchValue = FilterValue.forFunction(oBasicSearch.getValue());
         if (sSearchValue) {
           aFilters.push(new Filter({
             filters: oConfig.searchPaths.map(function (sPath) {
@@ -418,7 +514,7 @@ sap.ui.define([
           }));
         }
         aFieldControls.forEach(function (oFieldControl) {
-          var sValue = oFieldControl.control.getValue();
+          var sValue = FilterValue.forFunction(oFieldControl.control.getValue());
           if (sValue) {
             aFilters.push(new Filter(oFieldControl.definition.path, FilterOperator.Contains, sValue));
           }
@@ -652,7 +748,7 @@ sap.ui.define([
         return "'" + String(sValue).replace(/'/g, "''") + "'";
       };
       var fnContains = function (sProperty, sValue) {
-        return "contains(" + sProperty + "," + fnQuote(sValue) + ")";
+        return "contains(" + sProperty + "," + fnQuote(FilterValue.forFunction(sValue)) + ")";
       };
       if (sBasicSearch) {
         aFilters.push("(" + fnContains(sIdentificationNumber, sBasicSearch) + " or " +
@@ -698,13 +794,14 @@ sap.ui.define([
       };
       var sValue1 = fnQuote(oCondition.value1);
       var sValue2 = fnQuote(oCondition.value2);
+      var sFunctionValue = fnQuote(FilterValue.forFunction(oCondition.value1));
       return {
         EQ: sProperty + " eq " + sValue1,
         Empty: sProperty + " eq ''",
-        Contains: "contains(" + sProperty + "," + sValue1 + ")",
+        Contains: "contains(" + sProperty + "," + sFunctionValue + ")",
         BT: "(" + sProperty + " ge " + sValue1 + " and " + sProperty + " le " + sValue2 + ")",
-        StartsWith: "startswith(" + sProperty + "," + sValue1 + ")",
-        EndsWith: "endswith(" + sProperty + "," + sValue1 + ")",
+        StartsWith: "startswith(" + sProperty + "," + sFunctionValue + ")",
+        EndsWith: "endswith(" + sProperty + "," + sFunctionValue + ")",
         LT: sProperty + " lt " + sValue1,
         LE: sProperty + " le " + sValue1,
         GT: sProperty + " gt " + sValue1,
@@ -855,7 +952,12 @@ sap.ui.define([
         },
         filterRequestId: { label: oBundle.getText("filterRequestId"), path: ServiceSchema.keys.orderId },
         filterExisId: { label: oBundle.getText("filterExisId"), path: ServiceSchema.headerProperties.exisId },
-        filterProvider: { label: oBundle.getText("filterProvider"), path: ServiceSchema.headerProperties.providerId }
+        filterProvider: {
+          label: oBundle.getText("filterProvider"),
+          path: ServiceSchema.headerProperties.providerId,
+          typedPaths: [ServiceSchema.headerProperties.providerId, ServiceSchema.headerProperties.providerName]
+        },
+        filterCreatedBy: { label: oBundle.getText("filterCreatedBy"), path: ServiceSchema.headerProperties.createdBy }
       }[sControlId];
     },
 
@@ -869,7 +971,8 @@ sap.ui.define([
         return oToken.data("range");
       }).filter(Boolean);
       if (!aConditions.length && oInput.getValue() && !oConfig.selectionOnly) {
-        aConditions.push({ exclude: false, operation: RangeOperation.EQ, value1: oInput.getValue() });
+        this._pushTypedFilter(aFilters, oConfig.typedPaths || [oConfig.path], oInput.getValue(), RangeOperation.EQ);
+        return;
       }
       var aIncludeFilters = [];
       var aExcludeFilters = [];
@@ -905,7 +1008,13 @@ sap.ui.define([
           GE: FilterOperator.LT
         }[sOperator];
       }
-      return sOperator ? new Filter(sPath, sOperator, oCondition.value1, oCondition.value2) : null;
+      if (!sOperator) {
+        return null;
+      }
+      var bFunction = [FilterOperator.Contains, FilterOperator.StartsWith, FilterOperator.EndsWith,
+        FilterOperator.NotContains, FilterOperator.NotStartsWith, FilterOperator.NotEndsWith].indexOf(sOperator) !== -1;
+      return new Filter(sPath, sOperator,
+        bFunction ? FilterValue.forFunction(oCondition.value1) : oCondition.value1, oCondition.value2);
     },
 
     _getInputConditions: function (sControlId) {
@@ -918,9 +1027,61 @@ sap.ui.define([
         };
       });
       if (!aConditions.length && oInput.getValue()) {
-        aConditions.push({ exclude: false, operation: RangeOperation.EQ, value1: oInput.getValue() });
+        var oTypedCondition = this._parseTypedCondition(oInput.getValue(), RangeOperation.EQ);
+        if (oTypedCondition) {
+          aConditions.push(oTypedCondition);
+        }
       }
       return aConditions;
+    },
+
+    // Same typed syntax as the table column filters: *x*, x*, *x, =x, !=x, <x, <=x, >x, >=x, a..b.
+    _parseTypedCondition: function (sValue, sDefaultOperation) {
+      var sText = (sValue || "").trim();
+      var aBetween = sText.match(/^(.+?)\.\.(.+)$/);
+      if (aBetween) {
+        return { exclude: false, operation: RangeOperation.BT, value1: aBetween[1].trim(), value2: aBetween[2].trim() };
+      }
+      var aPrefix = [
+        ["!=", RangeOperation.EQ, true], ["<=", RangeOperation.LE], [">=", RangeOperation.GE],
+        ["=", RangeOperation.EQ], ["<", RangeOperation.LT], [">", RangeOperation.GT]
+      ].find(function (aEntry) {
+        return sText.indexOf(aEntry[0]) === 0;
+      });
+      if (aPrefix) {
+        var sOperand = sText.slice(aPrefix[0].length).trim();
+        return sOperand ? { exclude: !!aPrefix[2], operation: aPrefix[1], value1: sOperand } : null;
+      }
+      var bLeading = sText.charAt(0) === "*";
+      var bTrailing = sText.length > 1 && sText.charAt(sText.length - 1) === "*";
+      var sCore = sText.replace(/^\*/, "").replace(/\*$/, "");
+      if (!sCore) {
+        return null;
+      }
+      var sOperation = sDefaultOperation;
+      if (bLeading && bTrailing) {
+        sOperation = RangeOperation.Contains;
+      } else if (bLeading) {
+        sOperation = RangeOperation.EndsWith;
+      } else if (bTrailing) {
+        sOperation = RangeOperation.StartsWith;
+      }
+      return { exclude: false, operation: sOperation, value1: sCore };
+    },
+
+    // Exclusions must hold for every path; inclusions for any path.
+    _pushTypedFilter: function (aFilters, aPaths, sValue, sDefaultOperation) {
+      var oCondition = this._parseTypedCondition(sValue, sDefaultOperation);
+      if (!oCondition) {
+        return;
+      }
+      var aPathFilters = aPaths.map(function (sPath) {
+        return this._createConditionFilter(sPath, oCondition);
+      }, this).filter(Boolean);
+      if (aPathFilters.length) {
+        aFilters.push(aPathFilters.length === 1 ? aPathFilters[0]
+          : new Filter({ filters: aPathFilters, and: !!oCondition.exclude }));
+      }
     },
 
     _pushNdcConditionFilters: function (aFilters) {
@@ -1011,11 +1172,14 @@ sap.ui.define([
       this._pushConditionFilters(aFilters, "filterRequestId");
       this._pushConditionFilters(aFilters, "filterExisId");
       this._pushConditionFilters(aFilters, "filterProvider");
-      this._pushIfValue(aFilters,
-        ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee,
-        oView.byId("filterEmployeeResponsible").getValue(), FilterOperator.EQ);
+      this._pushTypedFilter(aFilters,
+        [ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee],
+        oView.byId("filterEmployeeResponsible").getValue(), RangeOperation.EQ);
       this._pushNdcConditionFilters(aFilters);
-      this._pushIfValue(aFilters, ServiceSchema.headerProperties.createdBy, oView.byId("filterCreatedBy").getValue(), FilterOperator.Contains);
+      // CreatedByUser is IsUpperCase: typed IDs are matched EQ in upper case.
+      var oCreatedBy = oView.byId("filterCreatedBy");
+      oCreatedBy.setValue(oCreatedBy.getValue().trim().toUpperCase());
+      this._pushConditionFilters(aFilters, "filterCreatedBy");
 
       // Contact: RUNTIME-BLOCKED-BY-SERVICE — do not filter or expand
       // _SoldToPartyContactInfo on the master LIST. The custom backend provider
@@ -1030,7 +1194,7 @@ sap.ui.define([
       // PHASE2_AUDIT.md), not yet exercised against the live service in this pass.
       var sShipToId = ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.id;
       var sShipToName = ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.fullName;
-      this._pushOrFilter(aFilters, [sShipToId, sShipToName], oView.byId("filterShipToParty").getValue());
+      this._pushTypedFilter(aFilters, [sShipToId, sShipToName], oView.byId("filterShipToParty").getValue(), RangeOperation.Contains);
 
       // Priority: BLOCKED-BY-SERVICE as a master-list filter — DeliveryPriority
       // exists only on SalesOrderItemType, not on the header entity (see
@@ -1040,7 +1204,7 @@ sap.ui.define([
       aFilters.push(this._getOrderTypeFilter());
 
       if (ServiceSchema.showJurisdictionFilter) {
-        this._pushIfValue(aFilters, ServiceSchema.headerProperties.salesOffice, oView.byId("filterJurisdiction").getValue(), FilterOperator.Contains);
+        this._pushTypedFilter(aFilters, [ServiceSchema.headerProperties.salesOffice], oView.byId("filterJurisdiction").getValue(), RangeOperation.Contains);
       }
 
       var aStatusKeys = oView.byId("filterStatus").getSelectedKeys();
@@ -1054,23 +1218,12 @@ sap.ui.define([
         }));
       }
 
-      var oDateRange = oView.byId("filterCreatedOn");
-      var oDateFrom = oDateRange.getDateValue();
-      var oDateTo = oDateRange.getSecondDateValue();
-      if (oDateFrom && oDateTo) {
-        aFilters.push(new Filter(ServiceSchema.headerProperties.createdOn, FilterOperator.BT, oDateFrom, oDateTo));
+      var oCreatedOnFilter = this._getCreatedOnFilter();
+      if (oCreatedOnFilter) {
+        aFilters.push(oCreatedOnFilter);
       }
 
       var oTable = this.byId("requestsTable");
-      var iMaxHits = oView.byId("filterMaxHits").getValue();
-      // NOTE: $top/$skip cannot be set as OData V4 list-binding parameters
-      // ("System query option $top is not supported" — confirmed at runtime,
-      // see NOTES.md); V4 paging is fully automatic for sap.ui.table.Table's
-      // virtual scrolling. iMaxHits is captured for the variant state and any
-      // future $apply(top(...))-based cap, but is not enforced as a hard
-      // fetch limit here.
-      this._iMaxHits = iMaxHits;
-
       this._aCurrentFilters = aFilters;
       var oBinding = oTable.getBinding("rows");
       if (oBinding) {
@@ -1092,8 +1245,46 @@ sap.ui.define([
 
     onFilterBarClear: function () {
       this._applyVariantValues({});
-      this.byId("filterMaxHits").setValue(50);
       this.onSearch();
+    },
+
+    // D-1172: CreationDate is Edm.Date, so bounds go out as YYYY-MM-DD strings.
+    // FROM/TO resolve to a single date (StandardDynamicDateOption#toDates).
+    _getCreatedOnFilter: function () {
+      var oControl = this.byId("filterCreatedOn");
+      var oValue = oControl.getValue();
+      if (!oValue || !oControl.getOption(oValue.operator)) {
+        return null;
+      }
+      var aDates = oControl.toDates(oValue);
+      var sPath = ServiceSchema.headerProperties.createdOn;
+      var fnFormat = function (oDate) {
+        return oDate.getFullYear() + "-" + String(oDate.getMonth() + 1).padStart(2, "0") + "-" +
+          String(oDate.getDate()).padStart(2, "0");
+      };
+      if (oValue.operator === DateRangeKeys.FROM) {
+        return new Filter(sPath, FilterOperator.GE, fnFormat(aDates[0]));
+      }
+      if (oValue.operator === DateRangeKeys.TO) {
+        return new Filter(sPath, FilterOperator.LE, fnFormat(aDates[0]));
+      }
+      return new Filter(sPath, FilterOperator.BT, fnFormat(aDates[0]), fnFormat(aDates[1] || aDates[0]));
+    },
+
+    // Variants saved before D-1172 hold the DateRangeSelection shape {from, to}.
+    _toDynamicDateValue: function (vValue) {
+      if (vValue && vValue.operator) {
+        return {
+          operator: vValue.operator,
+          values: (vValue.values || []).map(function (vEntry) {
+            return vEntry && vEntry.date ? new Date(vEntry.date) : vEntry;
+          })
+        };
+      }
+      if (vValue && vValue.from && vValue.to) {
+        return { operator: DateRangeKeys.DATERANGE, values: [new Date(vValue.from), new Date(vValue.to)] };
+      }
+      return undefined;
     },
 
     _navigateToOrder: function (sId) {
@@ -1444,33 +1635,9 @@ sap.ui.define([
       });
     },
 
-    _pushOrFilter: function (aFilters, aPaths, sValue, sOperator) {
-      if (!sValue) {
-        return;
-      }
-      var aOrFilters = aPaths.map(function (sPath) {
-        return new Filter(sPath, sOperator, sValue);
-      });
-      aFilters.push(new Filter({ filters: aOrFilters, and: false }));
-    },
-
     _applyFilterAvailability: function () {
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
       var sTooltip = oBundle.getText("availableWithE008Service");
-
-      // Contact: RUNTIME-BLOCKED-BY-SERVICE — filtering/expanding
-      // _SoldToPartyContactInfo on the master LIST crashes the backend
-      // (ASSERTION_FAILED in CL_SD_S4H_STD_PARTNER_CONTACT=CM002, confirmed via
-      // ST22 short dump 2026-08-03, see NOTES.md).
-      this.byId("filterContact").setEnabled(false);
-      this.byId("filterContact").setTooltip(sTooltip);
-
-      // Rejection Reason: no header-level reason-code field exists on this
-      // service (only an item-level SalesDocumentRjcnReason) — filtering the
-      // master list by it is not supported without an item-level query, same
-      // class of limitation as NDC.
-      this.byId("filterRejectionReason").setEnabled(false);
-      this.byId("filterRejectionReason").setTooltip(sTooltip);
 
       // Priority: DeliveryPriority exists only on SalesOrderItemType in this
       // service (design/so.xml) — there is no header-level Priority field to
@@ -1527,6 +1694,7 @@ sap.ui.define([
         {
           key: "requestId", i18nKey: "colRequestId", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.keys.orderId,
+          filterPath: ServiceSchema.keys.orderId,
           createCell: function () {
             return new Link({
               text: { path: ServiceSchema.keys.orderId, formatter: formatter.masterRequestId },
@@ -1541,7 +1709,6 @@ sap.ui.define([
         },
         {
           key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "14rem",
-          sortPath: ServiceSchema.headerProperties.description,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1552,6 +1719,9 @@ sap.ui.define([
         {
           key: "salesOrderType", i18nKey: "colSalesOrderType", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.headerProperties.salesOrderType,
+          // Filters the type code (e.g. ZKB), not the displayed title.
+          filterPath: ServiceSchema.headerProperties.salesOrderType,
+          filterUpperCase: true,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1571,6 +1741,7 @@ sap.ui.define([
         {
           key: "provider", i18nKey: "colProvider", hAlign: "Begin", width: "18rem",
           sortPath: ServiceSchema.headerProperties.providerId,
+          filterPath: ServiceSchema.headerProperties.providerName,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1588,7 +1759,6 @@ sap.ui.define([
         },
         {
           key: "status", i18nKey: "colStatus", hAlign: "Begin", width: "10rem",
-          sortPath: ServiceSchema.headerProperties.userStatus,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1598,7 +1768,6 @@ sap.ui.define([
         },
         {
           key: "contact", i18nKey: "colContact", hAlign: "Begin", width: "10rem",
-          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             return new Text({
               wrapping: false,
@@ -1635,7 +1804,6 @@ sap.ui.define([
         },
         {
           key: "employeeResponsible", i18nKey: "colEmployeeResponsible", hAlign: "Begin", width: "8rem",
-          sortPath: ServiceSchema.keys.orderId,
           createCell: function () {
             // RUNTIME-BLOCKED-BY-SERVICE: selecting ResponsibleEmployee via the
             // _SoldToPartyContactInfo navigation causes a backend 500
@@ -1648,6 +1816,8 @@ sap.ui.define([
         {
           key: "createdBy", i18nKey: "colCreatedBy", hAlign: "Begin", width: "10rem",
           sortPath: ServiceSchema.headerProperties.createdBy,
+          filterPath: ServiceSchema.headerProperties.createdBy,
+          filterUpperCase: true,
           createCell: function () {
             return new HBox({
               width: "100%",
@@ -1748,9 +1918,9 @@ sap.ui.define([
     // without a visual group-header divider row. This is a documented
     // limitation, not a guess — see NOTES.md.
     //
-    // Only columns with a real, single bindable server property (sortPath) are
-    // offered as sort/group candidates (see _getColumnDefs); columns without
-    // one (description, contact, employeeResponsible) are excluded.
+    // Only columns with a sortPath are offered as sort/group candidates (D-1178:
+    // requestId, salesOrderType, provider, createdAt, createdBy) - from the
+    // column header menu and from the p13n dialog alike.
     _buildSorters: function (oLayout) {
       var mDefsByKey = {};
       this._aColumnDefs.forEach(function (oDef) { mDefsByKey[oDef.key] = oDef; });
@@ -1759,7 +1929,7 @@ sap.ui.define([
       var oSort = oLayout.sort;
 
       if (oGroup && mDefsByKey[oGroup.key] && mDefsByKey[oGroup.key].sortPath) {
-        aSorters.push(new Sorter(mDefsByKey[oGroup.key].sortPath, false));
+        aSorters.push(new Sorter(mDefsByKey[oGroup.key].sortPath, !!(oSort && oSort.key === oGroup.key && oSort.descending)));
       }
       if (oSort && mDefsByKey[oSort.key] && mDefsByKey[oSort.key].sortPath && (!oGroup || oGroup.key !== oSort.key)) {
         aSorters.push(new Sorter(mDefsByKey[oSort.key].sortPath, !!oSort.descending));
@@ -1782,6 +1952,7 @@ sap.ui.define([
       oTable.removeAllColumns();
       aVisibleDefs.forEach(function (oDef) {
         var sWidth = (oLayout.widths && oLayout.widths[oDef.key]) || oDef.width || "10rem";
+        var sSortOrder = this._getColumnSortOrder(oLayout, oDef.key);
         var oColumn = new Column({
           label: new Text({ text: oBundle.getText(oDef.i18nKey) }),
           template: oDef.createCell(),
@@ -1790,12 +1961,20 @@ sap.ui.define([
           resizable: true,
           autoResizable: true,
           sortProperty: oDef.sortPath || "",
-          showSortMenuEntry: true
+          showSortMenuEntry: !!oDef.sortPath,
+          sortOrder: sSortOrder,
+          // Deprecated, but the 1.136 header renderer still needs it to show the sort icon.
+          sorted: sSortOrder !== SortOrder.None,
+          filterProperty: oDef.filterPath || "",
+          showFilterMenuEntry: !!oDef.filterPath
         });
+        if (oDef.filterPath) {
+          oColumn.setFilterType(oDef.filterUpperCase ? new UpperCaseStringType() : new FunctionSafeStringType());
+        }
         oColumn.data("colKey", oDef.key);
         oColumn.data("baselineWidth", sWidth);
         oTable.addColumn(oColumn);
-      });
+      }, this);
 
       // oTable.setFixedColumnCount(Math.min(FIXED_COLUMN_KEYS.length, aVisibleDefs.length));
       this.byId("requestsRowMode").setRowCount(oLayout.rowCount || 10);
@@ -1812,6 +1991,35 @@ sap.ui.define([
       if (oRowsBinding) {
         oRowsBinding.attachDataRequested(function () { oTable.setBusy(true); });
         oRowsBinding.attachDataReceived(function () { oTable.setBusy(false); });
+      }
+    },
+
+    _getColumnSortOrder: function (oLayout, sKey) {
+      if (!oLayout.sort || oLayout.sort.key !== sKey) {
+        return SortOrder.None;
+      }
+      return oLayout.sort.descending ? SortOrder.Descending : SortOrder.Ascending;
+    },
+
+    // D-1178: one source of sort - the header menu writes layout.sort (like the
+    // p13n dialog) and the binding is sorted via _buildSorters, so the group stays primary.
+    onMasterTableSort: function (oEvent) {
+      oEvent.preventDefault();
+      var oColumn = oEvent.getParameter("column");
+      var sSortOrder = oEvent.getParameter("sortOrder");
+      var oLayout = this._getColumnLayout();
+      oLayout.sort = sSortOrder === SortOrder.None ? null
+        : { key: oColumn.data("colKey"), descending: sSortOrder === SortOrder.Descending };
+      this._saveColumnLayout(oLayout);
+      var oTable = this.byId("requestsTable");
+      oTable.getColumns().forEach(function (oTableColumn) {
+        var sColumnSortOrder = this._getColumnSortOrder(oLayout, oTableColumn.data("colKey"));
+        oTableColumn.setSortOrder(sColumnSortOrder);
+        oTableColumn.setSorted(sColumnSortOrder !== SortOrder.None);
+      }, this);
+      var oBinding = oTable.getBinding("rows");
+      if (oBinding) {
+        oBinding.sort(this._buildSorters(oLayout));
       }
     },
 
@@ -1880,9 +2088,8 @@ sap.ui.define([
       var aSelectableDefs = aOrderedDefs.filter(function (oDef) {
         return FIXED_COLUMN_KEYS.indexOf(oDef.key) === -1;
       });
-      // Only columns with a real, single bindable server property can be
-      // sorted/grouped (see _getColumnDefs' sortPath / _buildSorters note).
-      var aSortableDefs = aSelectableDefs.filter(function (oDef) { return !!oDef.sortPath; });
+      // Sort/group candidates include the fixed Order column (D-1178).
+      var aSortableDefs = aOrderedDefs.filter(function (oDef) { return !!oDef.sortPath; });
 
       var aSelectionItems = aSelectableDefs.map(function (oDef, iIndex) {
         return {
@@ -2065,12 +2272,12 @@ sap.ui.define([
         { id: "filterEmployeeResponsible", type: "value" },
         { id: "filterNdc", type: "conditions" },
         { id: "filterShipToParty", type: "value" },
-        { id: "filterCreatedBy", type: "value" },
+        { id: "filterCreatedBy", type: "conditions" },
         { id: "filterJurisdiction", type: "value" },
         { id: "filterDeliveryBlockReason", type: "key" },
         { id: "filterSalesOrderType", type: "key" },
         { id: "filterStatus", type: "keys" },
-        { id: "filterCreatedOn", type: "dateRange" }
+        { id: "filterCreatedOn", type: "dynamicDateRange" }
       ];
     },
 
@@ -2094,11 +2301,14 @@ sap.ui.define([
             break;
           case "key": oValues[oDef.id] = oControl.getSelectedKey(); break;
           case "keys": oValues[oDef.id] = oControl.getSelectedKeys(); break;
-          case "dateRange":
-            oValues[oDef.id] = {
-              from: oControl.getDateValue() ? oControl.getDateValue().toISOString() : null,
-              to: oControl.getSecondDateValue() ? oControl.getSecondDateValue().toISOString() : null
-            };
+          case "dynamicDateRange":
+            var oDateValue = oControl.getValue();
+            oValues[oDef.id] = oDateValue && oControl.getOption(oDateValue.operator) ? {
+              operator: oDateValue.operator,
+              values: oDateValue.values.map(function (vEntry) {
+                return vEntry instanceof Date ? { date: vEntry.toISOString() } : vEntry;
+              })
+            } : null;
             break;
           default: break;
         }
@@ -2122,9 +2332,8 @@ sap.ui.define([
             break;
           case "key": oControl.setSelectedKey(vValue || oDef.defaultValue || ""); break;
           case "keys": oControl.setSelectedKeys(vValue || []); break;
-          case "dateRange":
-            oControl.setDateValue(vValue && vValue.from ? new Date(vValue.from) : null);
-            oControl.setSecondDateValue(vValue && vValue.to ? new Date(vValue.to) : null);
+          case "dynamicDateRange":
+            oControl.setValue(this._toDynamicDateValue(vValue));
             break;
           default: break;
         }
@@ -2189,7 +2398,6 @@ sap.ui.define([
       }
       if (sKey === STANDARD_VARIANT_KEY) {
         this._applyVariantValues({});
-        this.byId("filterMaxHits").setValue(50);
         VariantStore.setLastSelectedKey(FILTER_VARIANT_KEY, null);
         this.onSearch();
         return;

@@ -86,12 +86,7 @@
                 <!-- Dialog-only group ("Filters" adapt dialog only) -->
                 <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
-                    <DateRangeSelection id="filterCreatedOn" />
-                  </fb:control>
-                </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="contact" label="{i18n>filterContact}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <Input id="filterContact" />
+                    <DynamicDateRange id="filterCreatedOn" standardOptions="DATE,DATERANGE,TODAY,YESTERDAY,LASTDAYS,LASTWEEKS,LASTMONTHS,THISWEEK,THISMONTH,FROM,TO" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="shipToParty" label="{i18n>filterShipToParty}" groupName="dialog" visibleInFilterBar="false">
@@ -101,7 +96,7 @@
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="createdBy" label="{i18n>filterCreatedBy}" groupName="dialog" visibleInFilterBar="false">
                   <fb:control>
-                    <Input id="filterCreatedBy" />
+                    <MultiInput id="filterCreatedBy" showValueHelp="true" valueHelpRequest=".onCreatedByValueHelpRequest" />
                   </fb:control>
                 </fb:FilterGroupItem>
                 <fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="dialog" visibleInFilterBar="false">
@@ -124,16 +119,6 @@
                     <ComboBox id="filterDeliveryBlockReason" />
                   </fb:control>
                 </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="rejectionReason" label="{i18n>filterRejectionReason}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <Input id="filterRejectionReason" />
-                  </fb:control>
-                </fb:FilterGroupItem>
-                <fb:FilterGroupItem name="maxHits" label="{i18n>filterMaxHits}" groupName="dialog" visibleInFilterBar="false">
-                  <fb:control>
-                    <Slider id="filterMaxHits" min="10" max="100" step="10" value="50" />
-                  </fb:control>
-                </fb:FilterGroupItem>
               </fb:filterGroupItems>
             </fb:FilterBar>
       </f:DynamicPageHeader>
@@ -149,6 +134,7 @@
           enableColumnReordering="true"
           columnMove=".onColumnMove"
           columnResize=".onColumnResize"
+          sort=".onMasterTableSort"
           rowsUpdated=".onRowsUpdated"
           >
           <t:rowMode>
