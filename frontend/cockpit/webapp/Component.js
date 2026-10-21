@@ -33,7 +33,7 @@ sap.ui.define([
         }))
       }), "orderAuth");
       this._setShellTitle(oBundle.getText("appTitleOrderType", [oOrderContext.title]));
-      this._prepareStartupProvider(oComponentData.startupParameters);
+      this._prepareStartupProvider(this._getStartupProviderId(oComponentData));
       this.getRouter().initialize();
     },
 
@@ -45,13 +45,22 @@ sap.ui.define([
       return sProviderId;
     },
 
+    // FLP intent-based navigation delivers providerId as a startup parameter.
+    // Standalone runs (index.html, no FLP) have no startupParameters at all,
+    // so fall back to the page's own query string (index.html?providerId=...).
+    _getStartupProviderId: function (oComponentData) {
+      var oStartupParameters = oComponentData.startupParameters;
+      var vProviderId = oStartupParameters
+        ? oStartupParameters[PROVIDER_ID_PARAMETER]
+        : new URLSearchParams(window.location.search).get(PROVIDER_ID_PARAMETER);
+      return String((Array.isArray(vProviderId) ? vProviderId[0] : vProviderId) || "").trim();
+    },
+
     // Standard startup-parameter routing: with no inner-app hash, replace it
     // with the create route before the router initializes. An explicit inner
     // hash (bookmark/deep link) always wins; the provider is only kept when
     // that hash already targets the create route.
-    _prepareStartupProvider: function (oStartupParameters) {
-      var vProviderId = oStartupParameters && oStartupParameters[PROVIDER_ID_PARAMETER];
-      var sProviderId = String((Array.isArray(vProviderId) ? vProviderId[0] : vProviderId) || "").trim();
+    _prepareStartupProvider: function (sProviderId) {
       this._sStartupProviderId = "";
       if (!sProviderId) {
         return;
