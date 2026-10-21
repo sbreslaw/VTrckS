@@ -4346,9 +4346,7 @@ sap.ui.define([
         MessageExtractor.extract(oError, oContext && oContext.getPath(), oBundle);
         this._openMessagePopover();
       } finally {
-        if (oView.getBindingContext() === oContext) {
-          oView.setBusy(false);
-        }
+        oView.setBusy(false);
         oLookupBinding.destroy();
       }
     },
