@@ -170,7 +170,7 @@
                 },
                 {
                     "name": "create",
-                    "pattern": "create/{orderType}",
+                    "pattern": "create/{orderType}:?query:",
                     "layout": "MidColumnFullScreen",
                     "target": [
                         "master",

@@ -4291,15 +4291,131 @@ sap.ui.define([
     // as a pure local scratchpad — a stand-in for the bindElement path the
     // "detail" route uses. No backend contact happens until Save.
     // The category scopes Create; deep links to a type outside it (or without CREATE) are refused.
+    // Cross-app navigation passes the provider as an optional route query,
+    // e.g. #<SemanticObject>-<action>&/create/ZKB?providerId=1000123.
     _onCreateMatched: function (oEvent) {
-      var sOrderType = String(oEvent.getParameter("arguments").orderType || "").toUpperCase();
+      var oArgs = oEvent.getParameter("arguments");
+      var sOrderType = String(oArgs.orderType || "").toUpperCase();
+      var sProviderId = String((oArgs["?query"] || {}).providerId || "").trim();
       if (this._getCreatableOrderTypes().indexOf(sOrderType) === -1) {
         MessageToast.show(this.getResourceBundle().getText("createOrderTypeNotAllowed", [sOrderType]));
         this._oRouter.navTo("master", {}, true);
         return;
       }
       this._enterCreateMode(sOrderType);
+      if (sProviderId) {
+        this._preselectProvider(sProviderId);
+      }
     },
+
+    // Resolve the route's provider before using the normal selection flow.
+    // Prefer the configured sales area (distribution channel + division); if the
+    // provider has no row for that exact sales area, fall back to its first row
+    // (a provider may legitimately exist under a different sales area).
+    _preselectProvider: async function (sProviderId) {
+      const oView = this.getView();
+      const oContext = oView.getBindingContext();
+      const oBundle = this.getResourceBundle();
+
+      const oLookupBinding = this._createProviderLookupBinding(sProviderId);
+
+      oView.setBusy(true);
+      try {
+        const aContexts = await oLookupBinding.requestContexts(0, this.MAX_PROVIDER_ROWS);
+
+        if (!this._isProviderPreselectionCurrent(oContext)) {
+          return;
+        }
+
+        const aRows = aContexts.map(oRowContext => oRowContext.getObject());
+        const oRow = this._selectBestProviderRow(aRows, ServiceSchema.salesArea);
+
+        if (!oRow) {
+          MessageBox.information(oBundle.getText("startupProviderNotFound", [sProviderId]), {
+            title: oBundle.getText("startupProviderNotFoundTitle")
+          });
+          return;
+        }
+
+        this._applyProviderPick(this._mapRowToProviderPick(oRow));
+      } catch (oError) {
+        if (!this._isProviderPreselectionCurrent(oContext)) {
+          return;
+        }
+        MessageExtractor.addNote(oBundle.getText("startupProviderLookupFailed", [sProviderId]), "Warning");
+        MessageExtractor.extract(oError, oContext && oContext.getPath(), oBundle);
+        this._openMessagePopover();
+      } finally {
+        oView.setBusy(false);
+        oLookupBinding.destroy();
+      }
+    },
+
+    // --- Helpers : Begin : Provider Preselection ----------------------------------
+
+    // Max provider rows to fetch for sales-area resolution.
+    MAX_PROVIDER_ROWS: 20,
+
+    // Builds the list binding that fetches a provider's sales-area rows.
+    _createProviderLookupBinding: function (sProviderId) {
+      const oProps = ServiceSchema.customerSalesAreaProperties;
+      const oArea = ServiceSchema.salesArea;
+
+      return this.getView().getModel().bindList(
+        "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
+        [
+          new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
+          new Filter(oProps.customer, FilterOperator.EQ, sProviderId)
+        ],
+        {
+          $select: [
+            oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode,
+            oProps.countryText, oProps.salesOrganization, oProps.distributionChannel,
+            oProps.division
+          ].join(",")
+        }
+      );
+    },
+
+    // Pure selection rule: prefer the exact sales-area match, else first row.
+    // Kept dependency-free so it can be unit-tested without OData/UI mocks.
+    _selectBestProviderRow: function (aRows, oArea) {
+      const oProps = ServiceSchema.customerSalesAreaProperties;
+      return aRows.find(oCandidate =>
+        oCandidate[oProps.distributionChannel] === oArea.distributionChannel &&
+        oCandidate[oProps.division] === oArea.organizationDivision
+      ) || aRows[0];
+    },
+
+    // Maps a sales-area row to the provider-pick shape consumed by the UI.
+    _mapRowToProviderPick: function (oRow) {
+      const oProps = ServiceSchema.customerSalesAreaProperties;
+      return {
+        id: oRow[oProps.customer],
+        fullName: oRow[oProps.customerName],
+        address: this._formatProviderAddress(oRow),
+        salesOrganization: oRow[oProps.salesOrganization],
+        distributionChannel: oRow[oProps.distributionChannel],
+        division: oRow[oProps.division]
+      };
+    },
+
+    // Single source of truth for provider address formatting.
+    _formatProviderAddress: function (oRow) {
+      const oProps = ServiceSchema.customerSalesAreaProperties;
+      return [oRow[oProps.cityName], oRow[oProps.postalCode], oRow[oProps.countryText]]
+        .filter(Boolean)
+        .join(", ");
+    },
+
+    _isProviderPreselectionCurrent: function (oContext) {
+      const oView = this.getView();
+      return oView.getBindingContext() === oContext &&
+        oView.getModel("sectionFlags").getProperty("/createMode") &&
+        !oView.getModel("createState").getProperty("/providerChosen");
+    },
+
+    // --- Helpers : End : Provider Preselection ----------------------------------
 
     _enterCreateMode: function (sOrderType) {
       this._destroyCreateContext();
