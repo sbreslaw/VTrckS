@@ -152,6 +152,14 @@ sap.ui.define([
     return oOption ? oOption.text : sCategoryKey || "";
   }
 
+  // Return Orders session prompt 1.3: CustomerPurchaseOrderSuplmnt is Edm.String(4) but the
+  // StepInput control's own `value` property is numeric - one-way display conversion only
+  // (Detail.controller.js#onNoOfBoxesChange does the reverse number->string write).
+  function fnNoOfBoxesValue(sValue) {
+    var iValue = parseInt(sValue, 10);
+    return isNaN(iValue) ? 1 : iValue;
+  }
+
   return {
     masterRequestId: function (sOrderId) {
       return sOrderId || "";
@@ -193,6 +201,10 @@ sap.ui.define([
 
     categoryText: function (sCategoryKey, aOptions) {
       return fnCategoryText(sCategoryKey, aOptions);
+    },
+
+    noOfBoxesValue: function (sValue) {
+      return fnNoOfBoxesValue(sValue);
     },
 
     masterCreatedOn: function (sValue) {

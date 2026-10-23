@@ -99,12 +99,13 @@ sap.ui.define([
 
   var ITEMS_COLUMNS_KEY = "itemsColumns";
   var ITEMS_COLUMN_KEYS = [
-    "rowAction", "optOut", "itemNumber", "exisId", "brand", "ndcCode", "ndcDescription",
+    "rowAction", "optOut", "itemNumber", "exisId", "brand", "ndcCode", "lotNumber", "expirationDate", "ndcDescription",
     "qty", "uom", "orderIntention", "fundType", "poReference", "deliveryStatus", "netValue", "rejectionReason"
   ];
   var ITEMS_COLUMN_I18N = {
     rowAction: "colRowAction", optOut: "colOptOutAncillary", itemNumber: "colItemNumber",
-    exisId: "colExisId", brand: "colBrand", ndcCode: "colNdcCode", ndcDescription: "colNdcDescription",
+    exisId: "colExisId", brand: "colBrand", ndcCode: "colNdcCode", lotNumber: "colLotNumber",
+    expirationDate: "colExpirationDate", ndcDescription: "colNdcDescription",
     qty: "itemQty", uom: "itemUom", orderIntention: "colOrderIntention", fundType: "colFundType",
     poReference: "colPoReference", deliveryStatus: "colDeliveryStatus", netValue: "itemNetAmount",
     rejectionReason: "colRejectionReason"
@@ -173,6 +174,7 @@ sap.ui.define([
       // items load (change mode) - see _computeAncillaryParents.
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadRejectionReasonVH();
+      this._loadReturnTypeVH();
       this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
     },
@@ -404,6 +406,8 @@ sap.ui.define([
           orderIntention: "\u2014",
           fundType: oCtx.getProperty(ServiceSchema.itemProperties.fundType),
           poReference: "\u2014",
+          lotNumber: oCtx.getProperty(ServiceSchema.itemProperties.batch),
+          expirationDate: oCtx.getProperty(ServiceSchema.itemProperties.expirationDate),
           deliveryStatus: oCtx.getProperty(ServiceSchema.navigation.itemToDeliveryStatus + "/" + ServiceSchema.itemProperties.deliveryStatusText),
           netValue: oCtx.getProperty(ServiceSchema.itemProperties.netAmount),
           rejectionReason: mRejectionText[oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)] || ""
@@ -1225,6 +1229,60 @@ sap.ui.define([
 
     onFundTypeModelContextChange: function (oEvent) {
       this._bindFundTypeValueHelp(oEvent.getSource());
+    },
+
+    // Return Orders session prompt 1.3: CustomerPurchaseOrderSuplmnt is Edm.String(4) - the
+    // StepInput's own numeric value is converted back to a string here (its binding is
+    // OneWay, formatter.noOfBoxesValue handles the opposite direction for display).
+    onNoOfBoxesChange: function (oEvent) {
+      var oContext = this.getView().getBindingContext();
+      oContext.setProperty(ServiceSchema.headerProperties.noOfBoxes, String(oEvent.getParameter("value")));
+    },
+
+    // Return Orders session prompt 3.1: Lot Number options are product-specific - bound per
+    // row to po>/BatchValueHelp filtered by the row's Product (Matnr), same lazy-per-row
+    // pattern as Order Intention above. BatchValueHelpType has no separate description
+    // property (ServiceSchema.providerOrderService.batchValueHelpProperties) - key and text
+    // are both the batch number itself.
+    _bindBatchValueHelp: function (oSelect) {
+      var oRowContext = oSelect && oSelect.getBindingContext();
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.batchValueHelpProperties;
+      if (!oRowContext) {
+        return;
+      }
+      var sNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material);
+      var sFilterKey = [oRowContext.getPath(), sNdc || ""].join("|");
+      if (oSelect.data("batchFilterKey") === sFilterKey) {
+        return;
+      }
+      oSelect.data("batchFilterKey", sFilterKey);
+      oSelect.unbindAggregation("items");
+      if (!sNdc) {
+        return;
+      }
+      oSelect.bindAggregation("items", {
+        path: "po>/" + oSchema.entitySets.batchValueHelp,
+        parameters: { $select: [oProps.material, oProps.batch].join(",") },
+        filters: [new Filter(oProps.material, FilterOperator.EQ, sNdc)],
+        template: new CoreItem({
+          key: "{po>" + oProps.batch + "}",
+          text: "{po>" + oProps.batch + "}"
+        })
+      });
+    },
+
+    onBatchModelContextChange: function (oEvent) {
+      this._bindBatchValueHelp(oEvent.getSource());
+    },
+
+    onBatchChange: function (oEvent) {
+      var sBatch = oEvent.getParameter("selectedItem") ? oEvent.getParameter("selectedItem").getKey() : oEvent.getParameter("value");
+      var oRowContext = oEvent.getSource().getBindingContext();
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+      oRowContext.setProperty(ServiceSchema.itemProperties.batch, sBatch || "").catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
     },
 
     _refreshFundTypeValueHelp: function (oRowContext, sNdc, sOrderIntention) {
@@ -3821,6 +3879,30 @@ sap.ui.define([
       });
     },
 
+    // Return Orders session prompt 1.1: one-time load of the Return Type code list into a
+    // JSON model (Details.fragment.xml ComboBox items + formatter.categoryText display Text).
+    // VaccineReturnType is a po>-model, read-only EntitySet, global fixed-value list (not
+    // per-order-type) - mirrors _loadRejectionReasonVH's JSON-model pattern rather than a
+    // live po>/VaccineReturnType binding, both to avoid a second live request per field and
+    // any autoExpandSelect $select-pollution risk on the header's own default-model binding.
+    _loadReturnTypeVH: function () {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.vaccineReturnTypeProperties;
+      var oVHModel = new JSONModel({ list: [] });
+      this.getView().setModel(oVHModel, "returnTypes");
+      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
+        "/" + oSchema.entitySets.vaccineReturnType, undefined, undefined, undefined,
+        { $select: [oProps.code, oProps.text].join(",") }
+      );
+      oListBinding.requestContexts(0, 200).then(function (aContexts) {
+        oVHModel.setProperty("/list", aContexts.map(function (oCtx) {
+          return { key: oCtx.getProperty(oProps.code), text: oCtx.getProperty(oProps.text) };
+        }));
+      }, function () {
+        // Non-fatal: the ComboBox/display-text formatter then only sees an empty list.
+      });
+    },
+
     // --- Session Prompt (Detail View Adjustments) 3.3: virtual header Tax
     // Amount - TaxAmount only exists on SalesOrderItemType (so.xml); this is
     // a plain client-side SUM, read-only, NEVER part of any create/edit
@@ -4464,7 +4546,6 @@ sap.ui.define([
       var oMode = OrderModeConfig.resolveOrderType(sOrderType);
       var oView = this.getView();
       this._sOrderType = oMode.orderType;
-      var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
       var oFlags = oView.getModel("sectionFlags");
       var oNav = oView.getModel("sectionsNav");
       oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui));
@@ -4475,10 +4556,50 @@ sap.ui.define([
         }
       });
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
-      oView.getModel("enums").setProperty("/EDIT_STATUS", this._resolveEnumOptions(aEditStatusOptions));
+      this._loadOrderStatusVH(oMode.orderType);
       this._loadCategoryOptions(oMode);
       // A section un-hidden by this order type may already be expanded.
       this._oSectionFactory.rebind();
+    },
+
+    // Status field (Details.fragment.xml, mapped to ServiceSchema.headerProperties.
+    // userStatus/UserStatusDerived) - the Change-Mode Select's items now come from the
+    // live po>/OrderStatus entity set (OrderStatusType, key OrderType+Status), filtered
+    // to the current order type, replacing the old static per-order-type
+    // editStatusOptions array. "key"/"text" keep the same {code, "code description"}
+    // shape the existing masterStatusCode/detailStatusText formatters and
+    // onDetailStatusChange already expect. Request-token guarded like
+    // _loadCategoryOptions, since an order-type switch can fire this more than once.
+    _loadOrderStatusVH: function (sOrderType) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.orderStatusProperties;
+      var oEnumsModel = this.getView().getModel("enums");
+      var iRequest = (this._iOrderStatusRequest || 0) + 1;
+      this._iOrderStatusRequest = iRequest;
+      if (!sOrderType) {
+        oEnumsModel.setProperty("/EDIT_STATUS", []);
+        return;
+      }
+      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
+        "/" + oSchema.entitySets.orderStatus, undefined, undefined,
+        new Filter(oProps.orderType, FilterOperator.EQ, sOrderType),
+        { $select: [oProps.status, oProps.text].join(",") }
+      );
+      oListBinding.requestContexts(0, 200).then(function (aContexts) {
+        if (this._iOrderStatusRequest !== iRequest) {
+          return;
+        }
+        oEnumsModel.setProperty("/EDIT_STATUS", aContexts.map(function (oCtx) {
+          var sStatus = oCtx.getProperty(oProps.status);
+          var sText = oCtx.getProperty(oProps.text);
+          return { key: sStatus, text: sText ? (sStatus + " " + sText) : sStatus };
+        }));
+      }.bind(this), function () {
+        if (this._iOrderStatusRequest === iRequest) {
+          // Non-fatal: the Select then just offers no options.
+          oEnumsModel.setProperty("/EDIT_STATUS", []);
+        }
+      }.bind(this));
     },
 
     _loadCategoryOptions: function (oMode) {

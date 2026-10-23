@@ -67,7 +67,10 @@ sap.ui.define([
     ServiceSchema.itemProperties.qty317,
     ServiceSchema.itemProperties.chipQty,
     ServiceSchema.itemProperties.panQty,
-    ServiceSchema.itemProperties.resQty
+    ServiceSchema.itemProperties.resQty,
+    // Return Orders session prompt 3.1/3.2.
+    ServiceSchema.itemProperties.batch,
+    ServiceSchema.itemProperties.expirationDate
   ];
 
   // Never JSON.stringify the message model's data in a log statement —
