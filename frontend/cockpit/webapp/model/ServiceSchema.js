@@ -149,6 +149,20 @@ sap.ui.define([
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
+      // Return Orders session prompt (design/metadata/so_C_SALESORDERMANAGE_2026-10-23.xml,
+      // Edm.String(4), dynamic __FieldControl/SpecialProcessingCode, no static
+      // Immutable/Computed annotation) - VH is po>/VaccineReturnType (SpecialProcessingCode/
+      // SpecialProcessingText), see providerOrderService below.
+      returnType: "SpecialProcessingCode",
+      // Return Orders session prompt (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.Date,
+      // no FieldControl annotation) - request item 1.2 "ExIS <type> Date".
+      exisDate: "CustomerPurchaseOrderDate",
+      // Return Orders session prompt (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.String(4),
+      // no FieldControl annotation) - request item 1.3 "No. of Boxes".
+      noOfBoxes: "CustomerPurchaseOrderSuplmnt",
+      // Return Orders session prompt 1.5: no mapping/VH supplied in issues/return-rework.md -
+      // BLOCKED-BY-SERVICE, rendered as a disabled pending placeholder only (OPEN_QUESTIONS.md).
+      labelAddress: null,
       // C_SalesOrderManage header Description field. Open for entry on Create
       // (Details.fragment.xml); see updatableHeaderProperties below for the
       // create-replay persistence note.
@@ -367,7 +381,15 @@ sap.ui.define([
       // SalesOrderItemType (so.xml ~line 131) - summed client-side into the
       // virtual header Tax Amount field (headerProperties.taxAmount is null;
       // this is the only real source).
-      taxAmount: "TaxAmount"
+      taxAmount: "TaxAmount",
+      // Return Orders session prompt 3.1 (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.String(10),
+      // dynamic __FieldControl/Batch, no static Immutable/Computed annotation). The request
+      // specifies po>/BatchValueHelp (Matnr/Batch) as this field's value help, filtered by the
+      // row's Product - not the item entity's own default F4, if any (not independently checked).
+      batch: "Batch",
+      // Return Orders session prompt 3.2 (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.Date,
+      // nullable, no FieldControl/Computed annotation - a plain writable item field).
+      expirationDate: "ExpirationDate"
     },
 
     // Items paste validation limits (SalesOrderItemType): ExisItemNumber
@@ -750,7 +772,11 @@ sap.ui.define([
         providerDeliveries: "ProvOrdDelvs",
         // Header Priority value help (PriorityTypeType). TODO-VERIFY: entity set name not in the 2026-10-19 snapshot.
         priorityType: "PriorityType",
-        orderIntention: "OrderIntention"
+        orderIntention: "OrderIntention",
+        // Return Orders session prompt 1.1/3.1 (design/metadata/zui_providerorder_meta_2026-10-23.xml):
+        // both entity sets confirmed present (not searchable/insertable/updatable - read-only F4 lookups).
+        vaccineReturnType: "VaccineReturnType",
+        batchValueHelp: "BatchValueHelp"
       },
       // OrderIntentionType (design/metadata/zui_providerorder_meta_2026-10-19.xml): key NDC + OrderingIntention + SortOrder.
       orderIntentionProperties: {
@@ -807,6 +833,17 @@ sap.ui.define([
         relationshipCategory: "RelationshipCategory",
         validityStartDate: "ValidityStartDate",
         validityEndDate: "ValidityEndDate"
+      },
+      // VaccineReturnTypeType (zui_providerorder_meta_2026-10-23.xml): key SpecialProcessingCode.
+      vaccineReturnTypeProperties: {
+        code: "SpecialProcessingCode",
+        text: "SpecialProcessingText"
+      },
+      // BatchValueHelpType (zui_providerorder_meta_2026-10-23.xml): key Matnr + Batch (the
+      // material filter field is named "Matnr", NOT "Product" - confirmed from the live metadata).
+      batchValueHelpProperties: {
+        material: "Matnr",
+        batch: "Batch"
       }
     },
 
@@ -840,7 +877,15 @@ sap.ui.define([
       // static Immutable/Computed annotation in so.xml, same as the other
       // fields in this list. Retires the old ZZ_BSARK_SDH/enum-based Category
       // concept entirely (never a real header field to begin with).
-      category: "CustomerPurchaseOrderType"
+      category: "CustomerPurchaseOrderType",
+      // Return Orders session prompt 1.1: dynamic __FieldControl/SpecialProcessingCode (no
+      // static Immutable/Computed annotation) - TODO-VERIFY PATCHable live, same caveat class
+      // as Priority/ShippingType above.
+      returnType: "SpecialProcessingCode",
+      // Return Orders session prompt 1.2/1.3: neither has a FieldControl or Immutable/Computed
+      // annotation in the metadata.
+      exisDate: "CustomerPurchaseOrderDate",
+      noOfBoxes: "CustomerPurchaseOrderSuplmnt"
       // SalesOrganization/DistributionChannel/OrganizationDivision were tried
       // here 2026-08-21 and reverted same day: backend rejects the PATCH with
       // "Read-only fields must not be changed" on an existing order, despite
@@ -850,8 +895,12 @@ sap.ui.define([
 
     // Item Quantity is the only Step-0-confirmed editable item property
     // (SAP__common.FieldControl-governed, no Immutable/Computed annotation).
+    // Return Orders session prompt 3.1/3.2: Batch (dynamic FieldControl, TODO-VERIFY PATCHable
+    // live) and ExpirationDate (no FieldControl/Computed annotation) added the same way.
     updatableItemProperties: {
-      quantity: "RequestedQuantity"
+      quantity: "RequestedQuantity",
+      batch: "Batch",
+      expirationDate: "ExpirationDate"
     },
 
     // Update group for all edit-session PATCHes/creates (EditRequestService.js
