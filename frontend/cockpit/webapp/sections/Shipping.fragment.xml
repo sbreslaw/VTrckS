@@ -115,7 +115,14 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<!-- Return Orders session prompt 1.4.1: moved into Details.fragment.xml
+						for _RET order types (shown there instead - orderUi>/fields/
+						detailsShippingCondition/visible defaults true for _RET). Stays here,
+						unmoved, for ZKB/ZREP, where that same flag is explicitly set to
+						false (OrderModeConfig.js) - so this FormElement's visibility is
+						simply the logical inverse of the Details one, driven by the same
+						single config key (no separate id to keep in sync). -->
+					<f:FormElement visible="{= ${orderUi>/fields/detailsShippingCondition/visible} === false }">
 						<f:label>
 							<Label text="{i18n>shippingCondition}">
 								<layoutData>
