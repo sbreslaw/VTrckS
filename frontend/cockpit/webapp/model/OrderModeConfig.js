@@ -21,10 +21,31 @@ sap.ui.define([
   //   XML    - visible="{= ${orderUi>/<kind>/<id>/visible} !== false }"
   //            (editable: append "&& ${orderUi>/<kind>/<id>/editable} !== false")
   //   JS     - uiFlag(oUi, kind, id, flag)
-  // Ids currently configured: fields detailsExisId, detailsCreatedAt;
-  // fieldGroups detailsValue; sections inventory. Sections and columns are
-  // wired generically for every id; for fields/fieldGroups add the XML binding
-  // when you add the config entry.
+  // Ids currently configured: fields detailsExisId, detailsCreatedAt,
+  // detailsReturnType, detailsExisDate, detailsNoOfBoxes,
+  // detailsShippingCondition, detailsLabelAddress; fieldGroups detailsValue;
+  // columns lotNumber, expirationDate; sections inventory. Sections and
+  // columns are wired generically for every id; for fields/fieldGroups add
+  // the XML binding when you add the config entry.
+  //
+  // Return Orders session prompt (prompts/E008_ReturnOrders_Fields_Session_
+  // Prompt.md): the 5 new/moved header fields and 2 new item columns are
+  // visible for _RET order types only (ZISL/ZCFR/ZWST/ZKR, the default -
+  // uiFlag()'s bDefault !== false) and explicitly hidden on ZKB/ZREP below.
+  var RETURN_ORDER_UI_HIDDEN = {
+    fields: {
+      detailsReturnType: { visible: false },
+      detailsExisDate: { visible: false },
+      detailsNoOfBoxes: { visible: false },
+      detailsShippingCondition: { visible: false },
+      detailsLabelAddress: { visible: false }
+    },
+    columns: {
+      lotNumber: { visible: false },
+      expirationDate: { visible: false }
+    }
+  };
+
   function baselineType(sOrderType, sTitleKey) {
     return {
       orderType: sOrderType,
@@ -40,25 +61,42 @@ sap.ui.define([
   }
 
   var ORDER_TYPES = {
-    ZKB: baselineType("ZKB", "orderTypeZkb"),
+    ZKB: {
+      orderType: "ZKB",
+      titleKey: "orderTypeZkb",
+      defaults: {},
+      createStatusDefault: "",
+      createStatusOptions: [],
+      editStatusOptions: [],
+      categoryOptions: [],
+      createCategoryDefaultKey: "",
+      ui: {
+        fields: Object.assign({}, RETURN_ORDER_UI_HIDDEN.fields),
+        fieldGroups: {},
+        columns: Object.assign({}, RETURN_ORDER_UI_HIDDEN.columns),
+        sections: {}
+      }
+    },
     ZREP: {
       orderType: "ZREP",
       titleKey: "orderTypeZrep",
       defaults: {},
       createStatusDefault: "2A",
-      createStatusOptions: ZREP_STATUS_OPTIONS,
-      editStatusOptions: ZREP_STATUS_OPTIONS,
+      // createStatusOptions: ZREP_STATUS_OPTIONS,
+      // editStatusOptions: ZREP_STATUS_OPTIONS,
+      createStatusOptions: [],
+      editStatusOptions: [],
       categoryOptions: [],
       createCategoryDefaultKey: "",
       ui: {
-        fields: {
+        fields: Object.assign({
           detailsExisId: { visible: false },
           detailsCreatedAt: { visible: false }
-        },
+        }, RETURN_ORDER_UI_HIDDEN.fields),
         fieldGroups: {
           detailsValue: { visible: false }
         },
-        columns: {},
+        columns: Object.assign({}, RETURN_ORDER_UI_HIDDEN.columns),
         sections: {
           inventory: { visible: false }
         }
