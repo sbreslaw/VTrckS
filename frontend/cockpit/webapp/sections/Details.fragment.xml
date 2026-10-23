@@ -32,7 +32,7 @@
 				<f:formElements>
 					<f:FormElement>
 						<f:label>
-							<Label text="{i18n>detailRequestId}" required="false">
+							<Label text="{parts: [{path: 'i18n>detailRequestIdTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
@@ -119,7 +119,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement  visible="{= ${orderUi>/fields/providerAddress/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>providerAddress}" required="false">
 								<layoutData>
@@ -147,7 +147,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/contact/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>contact}" required="false">
 								<layoutData>
@@ -188,7 +188,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/employeeResponsible/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>colEmployeeResponsible}" required="false">
 								<layoutData>
@@ -220,7 +220,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/priority/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>filterPriority}" required="false">
 								<layoutData>
@@ -249,7 +249,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/returnReason/visible} !== false }">
 						<f:label>
 							<!-- Return Orders session prompt 4.2: typed title ("Vaccine Return reason")
 								when an order type is known, falling back to the plain i18n>otherReason text
@@ -401,7 +401,7 @@
 						the metadata (so.xml 2026-10-23). -->
 					<f:FormElement visible="{= ${orderUi>/fields/detailsReturnType/visible} !== false }">
 						<f:label>
-							<Label text="{i18n>detailsReturnType}" required="false">
+							<Label text="{parts: [{path: 'i18n>detailsReturnTypeTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
@@ -434,85 +434,6 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement visible="{= ${orderUi>/fields/detailsExisDate/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>detailsExisDate}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<DatePicker
-									width="100%"
-									value="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}"
-									visible="{sectionFlags>/details/editing}"
-									editable="{= ${orderUi>/fields/detailsExisDate/editable} !== false }"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
-
-					<f:FormElement visible="{= ${orderUi>/fields/detailsShippingCondition/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>detailsShippingCondition}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- Shown here for _RET order types only (Return Orders session
-								prompt 1.4.1); ZKB/ZREP still show this same field in
-								Shipping.fragment.xml instead (that FormElement's visibility is
-								the logical inverse of this flag - see its comment there). -->
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<ComboBox
-									width="100%"
-									selectedKey="{ShippingCondition}"
-									visible="{sectionFlags>/details/editing}"
-									editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: '/ShippingCondition'}">
-									<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
-								</ComboBox>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
-
-					<f:FormElement visible="{= ${orderUi>/fields/detailsLabelAddress/visible} !== false }">
-						<f:label>
-							<Label text="{i18n>detailsLabelAddress}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- BLOCKED-BY-SERVICE (Return Orders session prompt 1.5): no backend
-								field/VH was supplied for this request - see OPEN_QUESTIONS.md.
-								Disabled placeholder only, same "editable=false + tooltip"
-								convention as the Employee Responsible createMode field above
-								(i18n>createEnrichmentUnavailable). -->
-							<Input value="" editable="false" tooltip="{i18n>availableWithE008Service}">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Input>
-						</f:fields>
-					</f:FormElement>
 
 <!-- SPACER -->
 					<f:FormElement>
@@ -551,6 +472,32 @@
 
 					</f:FormElement>
 
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisDate/visible} !== false }">
+						<f:label>
+							<Label text="{parts: [{path: 'i18n>detailsExisDateTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<DatePicker
+									width="100%"
+									value="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisDate/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
 <!-- SPACER -->
 					<f:FormElement>
 						<!-- <f:label>
@@ -588,7 +535,7 @@
 								String type bound straight to a numeric control property. -->
 							<VBox>
 								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
+									<l:GridData span="XL3 L3 M3 S12"/>
 								</layoutData>
 								<Text text="{CustomerPurchaseOrderSuplmnt}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<StepInput
@@ -605,7 +552,62 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsShippingCondition/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsShippingCondition}" required="false">
+								<layoutData>
+									<l:GridData span="XL2 L2 M2 S12" linebreak="false"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Shown here for _RET order types only (Return Orders session
+								prompt 1.4.1); ZKB/ZREP still show this same field in
+								Shipping.fragment.xml instead (that FormElement's visibility is
+								the logical inverse of this flag - see its comment there). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL3 L3 M3 S12"/>
+								</layoutData>
+								<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{ShippingCondition}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/ShippingCondition'}">
+									<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsLabelAddress/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsLabelAddress}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- BLOCKED-BY-SERVICE (Return Orders session prompt 1.5): no backend
+								field/VH was supplied for this request - see OPEN_QUESTIONS.md.
+								Disabled placeholder only, same "editable=false + tooltip"
+								convention as the Employee Responsible createMode field above
+								(i18n>createEnrichmentUnavailable). -->
+							<Input value="" editable="false" tooltip="{i18n>availableWithE008Service}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/netValue/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
 								<layoutData>
@@ -623,7 +625,7 @@
 
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/taxAmount/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>taxAmount}" required="false">
 								<layoutData>
@@ -648,7 +650,7 @@
 
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/grossValue/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>grossValue}" required="false">
 								<layoutData>
@@ -697,7 +699,7 @@
 
 <!-- NOTES -->
 
-			<f:FormContainer title="{i18n>detailsNotes}">
+			<f:FormContainer title="{i18n>detailsNotes}" visible="{= ${orderUi>/fields/notes/visible} !== false }">
 				<!-- Full row; label/field spans halved so they align with the half-width containers above. -->
 				<f:layoutData>
 					<l:GridData span="XL12 L12 M12 S12" linebreak="true"/>
