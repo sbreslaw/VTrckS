@@ -383,9 +383,10 @@ sap.ui.define([
       // this is the only real source).
       taxAmount: "TaxAmount",
       // Return Orders session prompt 3.1 (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.String(10),
-      // dynamic __FieldControl/Batch, no static Immutable/Computed annotation). The request
-      // specifies po>/BatchValueHelp (Matnr/Batch) as this field's value help, filtered by the
-      // row's Product - not the item entity's own default F4, if any (not independently checked).
+      // dynamic __FieldControl/Batch, no static Immutable/Computed annotation). The item's own
+      // metadata carries a standard ValueListReferences F4 (i_batchstdvh) - this field
+      // deliberately uses po>/BatchValueHelp (Matnr/Batch) instead, filtered by the row's
+      // Product, per the request.
       batch: "Batch",
       // Return Orders session prompt 3.2 (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.Date,
       // nullable, no FieldControl/Computed annotation - a plain writable item field).
