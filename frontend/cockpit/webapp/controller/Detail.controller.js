@@ -553,6 +553,12 @@ sap.ui.define([
       if (sSectionId === "shipping") {
         this._prepareShippingEdit(oContext);
       }
+      if (sSectionId === "details") {
+        // Seeds the single Status Select (now shared with createMode) with the
+        // order's current status code - its selectedKey is createEnrich>/status.
+        this.getView().getModel("createEnrich").setProperty("/status",
+          formatter.masterStatusCode(oContext.getProperty(ServiceSchema.headerProperties.userStatus)));
+      }
     },
 
     _prepareShippingEdit: function (oContext) {
@@ -653,11 +659,13 @@ sap.ui.define([
       this._endEditSession(sSectionId);
     },
 
+    // createMode's selectedKey is two-way bound straight to createEnrich>/status -
+    // nothing further to do here until the (still-unbuilt) enrichment action exists.
     onDetailStatusChange: function (oEvent) {
       var oSelect = oEvent.getSource();
       var oSelectedItem = oSelect.getSelectedItem();
       var oContext = oSelect.getBindingContext();
-      if (!oContext || !oSelectedItem) {
+      if (!oContext || !oSelectedItem || this.getView().getModel("sectionFlags").getProperty("/createMode")) {
         return;
       }
       var oStatusContext = oSelectedItem.getBindingContext("enums");
@@ -2296,9 +2304,6 @@ sap.ui.define([
         oFlags.setProperty("/" + sId + "/editing", bOn);
       });
       if (bOn) {
-        var aCreateStatusOptions = OrderModeConfig.resolveOrderType(this._sCreateOrderType).createStatusOptions;
-        this.getView().getModel("enums").setProperty("/STATUS",
-          this._resolveEnumOptions(aCreateStatusOptions.length ? aCreateStatusOptions : Enums.STATUS));
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
@@ -2347,7 +2352,6 @@ sap.ui.define([
     // directly without a runtime i18n lookup in the XML.
     _createEnumsModel: function () {
       return new JSONModel({
-        STATUS: this._resolveEnumOptions(Enums.STATUS),
         EDIT_STATUS: this._resolveEnumOptions(Enums.EDIT_STATUS)
       });
     },

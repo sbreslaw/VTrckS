@@ -249,37 +249,6 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement visible="{= ${orderUi>/fields/returnReason/visible} !== false }">
-						<f:label>
-							<!-- Return Orders session prompt 4.2: typed title ("Vaccine Return reason")
-								when an order type is known, falling back to the plain i18n>otherReason text
-								otherwise (formatter.formatText returns "" for a falsy pattern). -->
-							<Label text="{parts: [{path: 'i18n>detailsOrderReasonTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
-								unaffected outside createMode (normal Change-Mode editing). -->
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<ComboBox
-									width="100%"
-									selectedKey="{SDDocumentReason}"
-									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: '/SDDocumentReason'}">
-									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-								</ComboBox>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
 
 					<f:FormElement>
 						<f:label>
@@ -339,10 +308,13 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Status derivation on create is also part of the still-
-								unbuilt enrichment action per ADDENDUM-001 - must stay
-								user-selectable per the create-order design, hardcoded
-								Select in createMode, local-only until then. -->
+							<!-- One Select for both modes, items from the live po>/OrderStatus
+								VH (filtered by order type, Detail.controller.js#_loadOrderStatusVH).
+								Change-Mode writes straight through to UserStatusDerived
+								(.onDetailStatusChange); createMode only buffers into
+								createEnrich>/status - status derivation on create is still part
+								of the not-yet-built enrichment action per ADDENDUM-001, so the
+								selection there stays local-only until that action exists. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
@@ -350,20 +322,13 @@
 								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
 									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
 								<Select
-									selectedKey="{path: 'UserStatusDerived', formatter: '.formatter.masterStatusCode'}"
-									visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/details/editing} }"
+									selectedKey="{createEnrich>/status}"
+									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
 									width="100%"
 									forceSelection="false"
+									tooltip="{= ${sectionFlags>/createMode} ? ${i18n>createEnrichmentUnavailable} : '' }"
 									change=".onDetailStatusChange"
 									items="{enums>/EDIT_STATUS}">
-									<core:Item key="{enums>key}" text="{enums>text}" />
-								</Select>
-								<Select
-									selectedKey="{createEnrich>/status}"
-									visible="{sectionFlags>/createMode}"
-									width="100%"
-									tooltip="{i18n>createEnrichmentUnavailable}"
-									items="{enums>/STATUS}">
 									<core:Item key="{enums>key}" text="{enums>text}" />
 								</Select>
 							</VBox>
@@ -429,6 +394,38 @@
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
 									items="{returnTypes>/list}">
 									<core:Item key="{returnTypes>key}" text="{returnTypes>text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/orderReason/visible} !== false }">
+						<f:label>
+							<!-- Return Orders session prompt 4.2: typed title ("Vaccine Return reason")
+								when an order type is known, falling back to the plain i18n>otherReason text
+								otherwise (formatter.formatText returns "" for a falsy pattern). -->
+							<Label text="{parts: [{path: 'i18n>detailsOrderReasonTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+								unaffected outside createMode (normal Change-Mode editing). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{SDDocumentReason}"
+									visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/SDDocumentReason'}">
+									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
 								</ComboBox>
 							</VBox>
 						</f:fields>
