@@ -38,12 +38,28 @@ sap.ui.define([
       detailsExisDate: { visible: false },
       detailsNoOfBoxes: { visible: false },
       detailsShippingCondition: { visible: false },
-      detailsLabelAddress: { visible: false }
+      detailsLabelAddress: { visible: false },
+      grossValue: { visible: false },
+      taxAmount: { visible: false },
+      netValue: { visible: false },
+      priority: { visible: false },
+      notes: { visible: false }
     },
     columns: {
       lotNumber: { visible: false },
       expirationDate: { visible: false }
     }
+  };
+
+  var PROVIDER_ORDER_UI_HIDDEN = {
+    fields: {
+      grossValue: { visible: false },
+      taxAmount: { visible: false },
+      netValue: { visible: false },
+      priority: { visible: false },
+      notes: { visible: false }
+    },
+    columns: {}
   };
 
   function baselineType(sOrderType, sTitleKey) {
@@ -103,10 +119,109 @@ sap.ui.define([
       }
     },
     // Returns (_RET): UI differences TBD by functional, add here.
-    ZISL: baselineType("ZISL", "orderTypeZisl"),
-    ZCFR: baselineType("ZCFR", "orderTypeZcfr"),
-    ZWST: baselineType("ZWST", "orderTypeZwst"),
-    ZKR: baselineType("ZKR", "orderTypeZkr")
+    ZISL: {
+      orderType: "ZISL",
+      titleKey: "orderTypeZisl",
+      defaults: {},
+      createStatusDefault: "2A",
+      // createStatusOptions: ZREP_STATUS_OPTIONS,
+      // editStatusOptions: ZREP_STATUS_OPTIONS,
+      createStatusOptions: [],
+      editStatusOptions: [],
+      categoryOptions: [],
+      createCategoryDefaultKey: "",
+      ui: {
+        fields: Object.assign({
+          detailsNoOfBoxes: { visible: false },
+          detailsShippingCondition: { visible: false },
+          detailsLabelAddress: { visible: false }
+        }, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fieldGroups: {
+          detailsValue: { visible: false }
+        },
+        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
+        sections: {
+          inventory: { visible: false }
+        }
+      }
+    },
+    ZCFR: {
+      orderType: "ZCFR",
+      titleKey: "orderTypeZcfr",
+      defaults: {},
+      createStatusDefault: "2A",
+      // createStatusOptions: ZREP_STATUS_OPTIONS,
+      // editStatusOptions: ZREP_STATUS_OPTIONS,
+      createStatusOptions: [],
+      editStatusOptions: [],
+      categoryOptions: [],
+      createCategoryDefaultKey: "",
+      ui: {
+        fields: Object.assign({
+          detailsNoOfBoxes: { visible: false },
+          detailsShippingCondition: { visible: false },
+          detailsLabelAddress: { visible: false },
+          detailsExisDate: { visible: false },
+          detailsReturnType: { visible: false }
+        }, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fieldGroups: {
+          detailsValue: { visible: false }
+        },
+        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
+        sections: {
+          inventory: { visible: false }
+        }
+      }
+    },
+    ZWST: {
+      orderType: "ZWST",
+      titleKey: "orderTypeZwst",
+      defaults: {},
+      createStatusDefault: "2A",
+      // createStatusOptions: ZREP_STATUS_OPTIONS,
+      // editStatusOptions: ZREP_STATUS_OPTIONS,
+      createStatusOptions: [],
+      editStatusOptions: [],
+      categoryOptions: [],
+      createCategoryDefaultKey: "",
+      ui: {
+        fields: Object.assign({
+          detailsNoOfBoxes: { visible: false },
+          detailsShippingCondition: { visible: false },
+          detailsLabelAddress: { visible: false },
+          detailsReturnType: { visible: false }
+        }, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fieldGroups: {
+          detailsValue: { visible: false }
+        },
+        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
+        sections: {
+          inventory: { visible: false }
+        }
+      }
+    },
+    ZKR: {
+      orderType: "ZKR",
+      titleKey: "orderTypeZkr",
+      defaults: {},
+      createStatusDefault: "2A",
+      // createStatusOptions: ZREP_STATUS_OPTIONS,
+      // editStatusOptions: ZREP_STATUS_OPTIONS,
+      createStatusOptions: [],
+      editStatusOptions: [],
+      categoryOptions: [],
+      createCategoryDefaultKey: "",
+      ui: {
+        fields: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fieldGroups: {
+          detailsValue: { visible: false }
+        },
+        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
+        sections: {
+          inventory: { visible: false }
+        }
+      }
+    }
   };
 
   // Category scopes Master search and Create; an order still displays per its own type.
