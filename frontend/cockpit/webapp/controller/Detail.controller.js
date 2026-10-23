@@ -4546,7 +4546,6 @@ sap.ui.define([
       var oMode = OrderModeConfig.resolveOrderType(sOrderType);
       var oView = this.getView();
       this._sOrderType = oMode.orderType;
-      var aEditStatusOptions = oMode.editStatusOptions.length ? oMode.editStatusOptions : Enums.EDIT_STATUS;
       var oFlags = oView.getModel("sectionFlags");
       var oNav = oView.getModel("sectionsNav");
       oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui));
@@ -4557,10 +4556,50 @@ sap.ui.define([
         }
       });
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
-      oView.getModel("enums").setProperty("/EDIT_STATUS", this._resolveEnumOptions(aEditStatusOptions));
+      this._loadOrderStatusVH(oMode.orderType);
       this._loadCategoryOptions(oMode);
       // A section un-hidden by this order type may already be expanded.
       this._oSectionFactory.rebind();
+    },
+
+    // Status field (Details.fragment.xml, mapped to ServiceSchema.headerProperties.
+    // userStatus/UserStatusDerived) - the Change-Mode Select's items now come from the
+    // live po>/OrderStatus entity set (OrderStatusType, key OrderType+Status), filtered
+    // to the current order type, replacing the old static per-order-type
+    // editStatusOptions array. "key"/"text" keep the same {code, "code description"}
+    // shape the existing masterStatusCode/detailStatusText formatters and
+    // onDetailStatusChange already expect. Request-token guarded like
+    // _loadCategoryOptions, since an order-type switch can fire this more than once.
+    _loadOrderStatusVH: function (sOrderType) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema.orderStatusProperties;
+      var oEnumsModel = this.getView().getModel("enums");
+      var iRequest = (this._iOrderStatusRequest || 0) + 1;
+      this._iOrderStatusRequest = iRequest;
+      if (!sOrderType) {
+        oEnumsModel.setProperty("/EDIT_STATUS", []);
+        return;
+      }
+      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
+        "/" + oSchema.entitySets.orderStatus, undefined, undefined,
+        new Filter(oProps.orderType, FilterOperator.EQ, sOrderType),
+        { $select: [oProps.status, oProps.text].join(",") }
+      );
+      oListBinding.requestContexts(0, 200).then(function (aContexts) {
+        if (this._iOrderStatusRequest !== iRequest) {
+          return;
+        }
+        oEnumsModel.setProperty("/EDIT_STATUS", aContexts.map(function (oCtx) {
+          var sStatus = oCtx.getProperty(oProps.status);
+          var sText = oCtx.getProperty(oProps.text);
+          return { key: sStatus, text: sText ? (sStatus + " " + sText) : sStatus };
+        }));
+      }.bind(this), function () {
+        if (this._iOrderStatusRequest === iRequest) {
+          // Non-fatal: the Select then just offers no options.
+          oEnumsModel.setProperty("/EDIT_STATUS", []);
+        }
+      }.bind(this));
     },
 
     _loadCategoryOptions: function (oMode) {

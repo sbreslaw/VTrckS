@@ -777,7 +777,11 @@ sap.ui.define([
         // Return Orders session prompt 1.1/3.1 (design/metadata/zui_providerorder_meta_2026-10-23.xml):
         // both entity sets confirmed present (not searchable/insertable/updatable - read-only F4 lookups).
         vaccineReturnType: "VaccineReturnType",
-        batchValueHelp: "BatchValueHelp"
+        batchValueHelp: "BatchValueHelp",
+        // Status field (Details.fragment.xml, OrderStatusType, key OrderType+Status) -
+        // replaces the static per-order-type editStatusOptions array with a live VH,
+        // filtered by the current order's own SalesOrderType.
+        orderStatus: "OrderStatus"
       },
       // OrderIntentionType (design/metadata/zui_providerorder_meta_2026-10-19.xml): key NDC + OrderingIntention + SortOrder.
       orderIntentionProperties: {
@@ -845,6 +849,14 @@ sap.ui.define([
       batchValueHelpProperties: {
         material: "Matnr",
         batch: "Batch"
+      },
+      // OrderStatusType (zui_providerorder_meta, key OrderType+Status): StatusProfile is
+      // part of the key/entity shape but not currently consumed client-side.
+      orderStatusProperties: {
+        orderType: "OrderType",
+        status: "Status",
+        text: "StatusTextDescription",
+        statusProfile: "StatusProfile"
       }
     },
 
