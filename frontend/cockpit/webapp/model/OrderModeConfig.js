@@ -23,10 +23,13 @@ sap.ui.define([
   //   JS     - uiFlag(oUi, kind, id, flag)
   // Ids currently configured: fields detailsExisId, detailsCreatedAt,
   // detailsReturnType, detailsExisDate, detailsNoOfBoxes,
-  // detailsShippingCondition, detailsLabelAddress; fieldGroups detailsValue;
-  // columns lotNumber, expirationDate; sections inventory. Sections and
-  // columns are wired generically for every id; for fields/fieldGroups add
-  // the XML binding when you add the config entry.
+  // detailsShippingCondition, detailsLabelAddress, grossValue, taxAmount,
+  // netValue, priority, notes; fieldGroups detailsValue; columns lotNumber,
+  // expirationDate, brand; sections inventory, shippingTransactions,
+  // transactionHistory, orgData, priceTotals, paymentMethod,
+  // scheduledActions, status, dates, partiesInvolved, attachments. Sections
+  // and columns are wired generically for every id; for fields/fieldGroups
+  // add the XML binding when you add the config entry.
   //
   // Return Orders session prompt (prompts/E008_ReturnOrders_Fields_Session_
   // Prompt.md): the 5 new/moved header fields and 2 new item columns are
@@ -48,7 +51,10 @@ sap.ui.define([
     columns: {
       lotNumber: { visible: false },
       expirationDate: { visible: false }
+    },
+    sections: {
     }
+
   };
 
   var PROVIDER_ORDER_UI_HIDDEN = {
@@ -59,7 +65,22 @@ sap.ui.define([
       priority: { visible: false },
       notes: { visible: false }
     },
-    columns: {}
+    columns: {
+      brand: { visible: false }
+    },
+    sections: {
+      inventory: { visible: false },
+      shippingTransactions: { visible: false },
+      transactionHistory: { visible: false },
+      orgData: { visible: false },
+      priceTotals: { visible: false },
+      paymentMethod: { visible: false },
+      scheduledActions: { visible: false },
+      status: { visible: false },
+      dates: { visible: false },
+      partiesInvolved: { visible: false },
+      attachments: { visible: false }
+    }
   };
 
   function baselineType(sOrderType, sTitleKey) {
@@ -113,9 +134,7 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, RETURN_ORDER_UI_HIDDEN.columns),
-        sections: {
-          inventory: { visible: false }
-        }
+        sections: Object.assign({}, RETURN_ORDER_UI_HIDDEN.sections)
       }
     },
     // Returns (_RET): UI differences TBD by functional, add here.
@@ -140,9 +159,7 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: {
-          inventory: { visible: false }
-        }
+        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
       }
     },
     ZCFR: {
@@ -168,9 +185,7 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: {
-          inventory: { visible: false }
-        }
+        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
       }
     },
     ZWST: {
@@ -195,9 +210,7 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: {
-          inventory: { visible: false }
-        }
+        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
       }
     },
     ZKR: {
@@ -217,9 +230,7 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: {
-          inventory: { visible: false }
-        }
+        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
       }
     }
   };
