@@ -1,0 +1,65 @@
+<!-- Architecture adapted from frontend/cockpit/webapp/view/Detail.view.xml @ VTrckS —
+     same DynamicPage + anchor-bar + SectionFactory-driven panel stack, trimmed to
+     read-only MVP-1 (prompt §1 scope guard): no f:actions (no Save/Cancel/New/Copy/
+     Create Return/Create Replacement/Preview/Refresh/Validate), no f:footer
+     (no create flow in this app). Every OData-bound property on this page is set
+     programmatically in Detail.controller.js (ServiceSchema.*-driven composite
+     bindings) — never a raw path literal here, per repo convention. -->
+<mvc:View
+	controllerName="cdc.vaccret.controller.Detail"
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	xmlns:f="sap.f"
+	xmlns:core="sap.ui.core">
+	<f:DynamicPage id="detailPage" fitContent="true" preserveHeaderStateOnScroll="true" class="detailObjectPage">
+		<f:title>
+			<f:DynamicPageTitle class="detailObjectPageTitle">
+				<f:heading>
+					<Title id="detailTitle" level="H1" class="detailObjectTitle" />
+				</f:heading>
+				<f:expandedContent>
+					<HBox renderType="Bare" wrap="Wrap" alignItems="Center" class="detailHeaderFacts">
+						<items>
+							<Text id="detailCreatedOnBy" class="detailHeaderFact" />
+							<ObjectNumber id="detailNetValue" class="detailHeaderValue" />
+						</items>
+					</HBox>
+				</f:expandedContent>
+				<f:content>
+					<HBox renderType="Bare" alignItems="Center" class="detailStatusRow">
+						<GenericTag id="detailStatus" design="StatusIconHidden" />
+					</HBox>
+				</f:content>
+				<f:navigationActions>
+					<Button
+						id="messagePopoverBtn"
+						icon="sap-icon://message-popup"
+						text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
+						type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
+						press=".onMessagePopoverPress" />
+					<Button id="enterFullScreen" icon="sap-icon://full-screen" type="Transparent"
+						visible="{= !${appView>/actionButtonsInfo/midColumn/fullScreen} }" press=".toggleFullScreen" />
+					<Button id="exitFullScreen" icon="sap-icon://exit-full-screen" type="Transparent"
+						visible="{= ${appView>/actionButtonsInfo/midColumn/fullScreen} }" press=".toggleFullScreen" />
+					<Button icon="sap-icon://decline" type="Transparent" tooltip="{i18n>close}" press=".onCloseColumn" />
+				</f:navigationActions>
+			</f:DynamicPageTitle>
+		</f:title>
+		<f:header>
+			<f:DynamicPageHeader class="detailAnchorHeader">
+				<HBox id="detailAnchorBar" wrap="NoWrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}" class="detailAnchorBar">
+					<items>
+						<Link text="{sectionsNav>title}" visible="{sectionsNav>visible}" press=".onAnchorPress" class="detailAnchorLink">
+							<customData>
+								<core:CustomData key="panelId" value="{sectionsNav>id}" writeToDom="false" />
+							</customData>
+						</Link>
+					</items>
+				</HBox>
+			</f:DynamicPageHeader>
+		</f:header>
+		<f:content>
+			<VBox id="sectionsContainer" class="detailSections sapUiResponsiveContentPadding" />
+		</f:content>
+	</f:DynamicPage>
+</mvc:View>

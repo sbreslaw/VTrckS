@@ -1,0 +1,129 @@
+<mvc:View
+	controllerName="cdc.vaccret.controller.Master"
+	xmlns:mvc="sap.ui.core.mvc"
+	xmlns="sap.m"
+	xmlns:f="sap.f"
+	xmlns:fb="sap.ui.comp.filterbar"
+	xmlns:t="sap.ui.table"
+	xmlns:rowmodes="sap.ui.table.rowmodes"
+	xmlns:core="sap.ui.core">
+	<f:DynamicPage id="masterPage" class="masterListPage" fitContent="false" headerExpanded="true" toggleHeaderOnTitleClick="true">
+		<f:title>
+			<f:DynamicPageTitle class="masterVariantTitle">
+				<f:heading>
+					<VariantManagement
+						id="filterVariantManagement"
+						selectedKey="*standard*"
+						supportApplyAutomatically="false"
+						supportDefault="false"
+						supportFavorites="false"
+						supportPublic="false"
+						select=".onVariantSelect"
+						save=".onVariantSave"
+						manage=".onVariantManage"
+						items="{variants>/items}">
+						<items>
+							<VariantItem
+								key="{variants>key}"
+								title="{variants>title}"
+								changeable="{variants>changeable}"
+								remove="{variants>remove}"
+								rename="{variants>rename}" />
+						</items>
+					</VariantManagement>
+				</f:heading>
+			</f:DynamicPageTitle>
+		</f:title>
+		<f:header>
+			<f:DynamicPageHeader class="masterFilterHeader" pinnable="true">
+				<fb:FilterBar
+					id="filterBar"
+					class="masterSearchFilterBar"
+					search=".onSearch"
+					showFilterConfiguration="true"
+					showClearOnFB="false"
+					showRestoreOnFB="false"
+					filterBarExpanded="true">
+					<fb:filterGroupItems>
+						<!-- Provider/PIN picker is the ONE value-help dialog in this app
+							(copied from the cockpit, prompt §1 scope guard — no other
+							filter below gets a value-help dialog). -->
+						<fb:FilterGroupItem name="providerPin" label="{i18n>filterProviderPin}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<MultiInput id="filterProviderPin" showValueHelp="true" valueHelpRequest=".onProviderPinValueHelpRequest" />
+							</fb:control>
+						</fb:FilterGroupItem>
+						<fb:FilterGroupItem name="returnId" label="{i18n>filterReturnId}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<MultiInput id="filterReturnId" />
+							</fb:control>
+						</fb:FilterGroupItem>
+						<fb:FilterGroupItem name="exisId" label="{i18n>filterExisId}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<MultiInput id="filterExisId" />
+							</fb:control>
+						</fb:FilterGroupItem>
+						<fb:FilterGroupItem name="returnType" label="{i18n>filterReturnType}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<MultiComboBox id="filterReturnType" />
+							</fb:control>
+						</fb:FilterGroupItem>
+						<fb:FilterGroupItem name="returnsOrderReason" label="{i18n>filterReason}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<ComboBox id="filterReturnsOrderReason" showClearIcon="true" />
+							</fb:control>
+						</fb:FilterGroupItem>
+						<fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<!-- DateRangeSelection (simpler than DynamicDateRange) — prompt
+									§4.2 accepts this fallback; see NOTES.md D-1172 parity note. -->
+								<DateRangeSelection id="filterCreatedOn" />
+							</fb:control>
+						</fb:FilterGroupItem>
+						<fb:FilterGroupItem name="status" label="{i18n>filterStatus}" groupName="default" visibleInFilterBar="true">
+							<fb:control>
+								<MultiComboBox id="filterStatus" />
+							</fb:control>
+						</fb:FilterGroupItem>
+					</fb:filterGroupItems>
+				</fb:FilterBar>
+			</f:DynamicPageHeader>
+		</f:header>
+		<f:content>
+			<VBox class="masterTableShell" renderType="Bare" width="100%">
+				<t:Table
+					id="returnsTable"
+					class="masterResultsTable"
+					selectionMode="None"
+					alternateRowColors="false"
+					columnHeaderHeight="32"
+					enableColumnReordering="true"
+					columnMove=".onColumnMove"
+					columnResize=".onColumnResize"
+					sort=".onMasterTableSort"
+					rowsUpdated=".onRowsUpdated">
+					<t:rowMode>
+						<rowmodes:Fixed id="returnsRowMode" rowCount="10" rowContentHeight="32" />
+					</t:rowMode>
+					<t:noData>
+						<IllustratedMessage
+							illustrationType="sapIllus-NoSearchResults"
+							title="{i18n>masterNoDataFoundTitle}"
+							description="{= ${view>/masterHasSearch} ? ${i18n>masterNoDataFoundDescription} : ${i18n>masterNoDataBeforeSearch} }" />
+					</t:noData>
+					<t:extension>
+						<OverflowToolbar class="masterTableToolbar">
+							<Title text="{parts: ['i18n>masterTitle', 'returnContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
+							<ToolbarSpacer />
+							<Button
+								icon="sap-icon://action-settings"
+								type="Transparent"
+								tooltip="{i18n>tablePersonalize}"
+								press=".onMasterTablePersonalize" />
+						</OverflowToolbar>
+					</t:extension>
+				</t:Table>
+			</VBox>
+		</f:content>
+	</f:DynamicPage>
+</mvc:View>

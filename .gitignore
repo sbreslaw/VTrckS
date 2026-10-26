@@ -11,6 +11,11 @@ frontend/cockpit/webapp/**/*-dbg.js
 frontend/cockpit/webapp/**/*.js.map
 frontend/cockpit/.fiori-tools/
 frontend/cockpit/archive.zip
+frontend/returns/dist/
+frontend/returns/webapp/**/Component-preload.js
+frontend/returns/webapp/**/*-dbg.js
+frontend/returns/webapp/**/*.js.map
+frontend/returns/.fiori-tools/
 *.mtar
 
 # ---- Local environment / secrets (never commit) ----

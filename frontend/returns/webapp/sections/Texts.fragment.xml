@@ -1,0 +1,23 @@
+<core:FragmentDefinition
+	xmlns="sap.m"
+	xmlns:core="sap.ui.core">
+	<Table
+		id="textsTable"
+		items="{_Text}"
+		noDataText="{i18n>textsNoData}">
+		<columns>
+			<Column><Text text="{i18n>colLongTextId}" /></Column>
+			<Column><Text text="{i18n>colLanguage}" /></Column>
+			<Column><Text text="{i18n>colLongText}" /></Column>
+		</columns>
+		<items>
+			<ColumnListItem>
+				<cells>
+					<Text text="{LongTextID}" />
+					<Text text="{Language}" />
+					<Text text="{LongText}" wrapping="true" />
+				</cells>
+			</ColumnListItem>
+		</items>
+	</Table>
+</core:FragmentDefinition>
