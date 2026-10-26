@@ -1012,6 +1012,9 @@ sap.ui.define([
       }
       this._refreshFundTypeValueHelp(oRowContext);
       this._bindOrderIntentionValueHelp(this._getRowSelect(this._getRowForContext(oRowContext), ServiceSchema.itemProperties.orderIntention));
+      // modelContextChange (onBatchModelContextChange) only fires once, when the row's
+      // context is first set - a later NDC pick on the same row needs this explicit rebind.
+      this._bindBatchValueHelp(this._getRowSelect(this._getRowForContext(oRowContext), ServiceSchema.itemProperties.batch));
       this._checkItemRowComplete(oRowContext);
     },
 
