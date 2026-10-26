@@ -25,7 +25,8 @@ sap.ui.define([
   // detailsReturnType, detailsExisDate, detailsNoOfBoxes,
   // detailsShippingCondition, detailsLabelAddress, grossValue, taxAmount,
   // netValue, priority, notes; fieldGroups detailsValue; columns lotNumber,
-  // expirationDate, brand; sections inventory, shippingTransactions,
+  // expirationDate, brand, orderIntention, fundType; sections inventory,
+  // shippingTransactions,
   // transactionHistory, orgData, priceTotals, paymentMethod,
   // scheduledActions, status, dates, partiesInvolved, attachments. Sections
   // and columns are wired generically for every id; for fields/fieldGroups
@@ -66,7 +67,9 @@ sap.ui.define([
       notes: { visible: false }
     },
     columns: {
-      brand: { visible: false }
+      brand: { visible: false },
+      orderIntention: { visible: false },
+      fundType: { visible: false }
     },
     sections: {
       inventory: { visible: false },
