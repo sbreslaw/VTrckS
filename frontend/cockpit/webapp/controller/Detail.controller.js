@@ -1701,13 +1701,17 @@ sap.ui.define([
     // edits against the backend (repo memory, round 23 live-test rounds
     // 2/3). Incomplete rows remain inactive because the backend accepts a
     // zero-quantity create without durably persisting it, causing later 404s.
+    // Fund type/order intention are skipped when their columns are hidden
+    // for this order type (Return orders: PROVIDER_ORDER_UI_HIDDEN) - a
+    // hidden field can never be filled in, so it must not block the post.
     _isScratchRowComplete: function (oRowContext) {
       var oProps = ServiceSchema.itemProperties;
+      var oOrderUi = this.getView().getModel("orderUi").getData();
       var fQty = parseFloat(oRowContext.getProperty(oProps.quantity));
       return !!oRowContext.getProperty(oProps.material)
         && !isNaN(fQty) && fQty > 0
-        && !!oRowContext.getProperty(oProps.fundType)
-        && !!oRowContext.getProperty(oProps.orderIntention);
+        && (!OrderModeConfig.uiFlag(oOrderUi, "columns", "fundType", "visible") || !!oRowContext.getProperty(oProps.fundType))
+        && (!OrderModeConfig.uiFlag(oOrderUi, "columns", "orderIntention", "visible") || !!oRowContext.getProperty(oProps.orderIntention));
     },
 
     // bInactive create() (_addItemRows, post-session-bound branch) only
