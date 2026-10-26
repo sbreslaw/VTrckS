@@ -4,8 +4,9 @@ sap.ui.define([
   "sap/ui/model/FilterOperator",
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/Enums",
-  "cdc/vaccreq/model/MessageExtractor"
-], function (Messaging, Filter, FilterOperator, ServiceSchema, Enums, MessageExtractor) {
+  "cdc/vaccreq/model/MessageExtractor",
+  "cdc/vaccreq/model/OrderModeConfig"
+], function (Messaging, Filter, FilterOperator, ServiceSchema, Enums, MessageExtractor, OrderModeConfig) {
   "use strict";
 
   // CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — reinstates
@@ -380,11 +381,16 @@ sap.ui.define([
       return iValid >= Enums.MIN_ITEMS;
     },
 
-    hasIncompleteItems: function (oItemsBinding) {
+    // oOrderUi (orderUi model's data) decides whether Fund Type/Order Intention are even
+    // shown for this order type (Return orders: PROVIDER_ORDER_UI_HIDDEN, OrderModeConfig.js)
+    // - a hidden column can never be completed, so it must not block Save.
+    hasIncompleteItems: function (oItemsBinding, oOrderUi) {
       if (!oItemsBinding || !oItemsBinding.getCurrentContexts) {
         return false;
       }
       var oProps = ServiceSchema.itemProperties;
+      var bCheckFundType = OrderModeConfig.uiFlag(oOrderUi, "columns", "fundType", "visible");
+      var bCheckOrderIntention = OrderModeConfig.uiFlag(oOrderUi, "columns", "orderIntention", "visible");
       return oItemsBinding.getCurrentContexts().some(function (oContext) {
         if (oContext.getProperty(oProps.higherLevelItem)) {
           return false;
@@ -394,8 +400,8 @@ sap.ui.define([
         }
         var fQty = parseFloat(oContext.getProperty(oProps.quantity));
         return isNaN(fQty) || fQty <= 0
-          || !oContext.getProperty(oProps.fundType)
-          || !oContext.getProperty(oProps.orderIntention);
+          || (bCheckFundType && !oContext.getProperty(oProps.fundType))
+          || (bCheckOrderIntention && !oContext.getProperty(oProps.orderIntention));
       });
     },
 

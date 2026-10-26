@@ -696,7 +696,7 @@ sap.ui.define([
       }
       var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
       var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
-      if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding)) {
+      if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding, this.getView().getModel("orderUi").getData())) {
         MessageToast.show(oBundle.getText("itemsIncompleteItemsError"));
         return;
       }
@@ -4175,7 +4175,7 @@ sap.ui.define([
         this._oSectionFactory.expandSection("items");
         return;
       }
-      if (CreateOrderService.hasIncompleteItems(oItemsBinding)) {
+      if (CreateOrderService.hasIncompleteItems(oItemsBinding, this.getView().getModel("orderUi").getData())) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
         MessageToast.show(oBundle.getText("createRequestIncompleteItemsError"));
