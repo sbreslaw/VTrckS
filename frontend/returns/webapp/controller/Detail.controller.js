@@ -61,6 +61,13 @@ sap.ui.define([
       }
     },
 
+    // SectionFactory.js content-loaded hook — required by its ctor signature.
+    // No section here needs a load-time reaction yet (MVP-1: every section's
+    // table binds declaratively in its own fragment's XML, see e.g.
+    // Items.fragment.xml's `items="{_Item}"`); kept as an explicit no-op
+    // rather than omitted, so a future section hook has an obvious home.
+    _onSectionContentLoaded: function (sSectionId) {},
+
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {

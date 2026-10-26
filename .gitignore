@@ -16,6 +16,7 @@ frontend/returns/webapp/**/Component-preload.js
 frontend/returns/webapp/**/*-dbg.js
 frontend/returns/webapp/**/*.js.map
 frontend/returns/.fiori-tools/
+frontend/returns/archive.zip
 *.mtar
 
 # ---- Local environment / secrets (never commit) ----

@@ -29,7 +29,7 @@ builder:
           name: ZCDC_VTRCKS_RET
           description: CDC Manage Returns
           package: ZCM
-          transport: TODO-VERIFY
+          transport: DH1K900363
         exclude:
           - /test/
           - /localService/
