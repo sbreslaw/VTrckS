@@ -867,6 +867,27 @@ sap.ui.define([
       });
       VariantStore.save(FILTER_VARIANT_KEY, oData);
       this._refreshVariantsModel();
+    },
+
+    // --- Create entry points (prompt §4A.1) — one button per
+    // ReturnTypeConfig type; the MenuButton's own default action press is
+    // the split-button's first/most-recent type (ZISL, matching
+    // ReturnTypeConfig.getScopeReturnTypes()'s own first entry). ---
+
+    onCreatePress: function () {
+      this._navToCreate(ReturnTypeConfig.getScopeReturnTypes()[0]);
+    },
+
+    onCreateMenuItemSelected: function (oEvent) {
+      var oItem = oEvent.getParameter("item");
+      this._navToCreate(oItem && oItem.getKey());
+    },
+
+    _navToCreate: function (sReturnType) {
+      if (!sReturnType) {
+        return;
+      }
+      this._oRouter.navTo("create", { returnType: sReturnType });
     }
   });
 });
