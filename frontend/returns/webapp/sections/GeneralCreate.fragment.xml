@@ -1,0 +1,120 @@
+<core:FragmentDefinition
+	xmlns="sap.m"
+	xmlns:core="sap.ui.core"
+	xmlns:f="sap.ui.layout.form"
+	xmlns:l="sap.ui.layout">
+	<!-- Create mode (prompt §4A.3/§4A.4): "provider-first" phasing — only the
+		Sold-To field is usable until a party is picked (createState>/soldToChosen);
+		every field below it then two-way-binds straight against the session's
+		transient header context (Detail.controller.js#_onCreateSoldToConfirm sets
+		the view's binding context to it, groupId "vrCreate" — see
+		CreateReturnService.js doc comment for why no local JS scratch buffer is
+		needed here, unlike the cockpit). Always sap.ui.layout.form.Form with
+		FormContainers, never SimpleForm. -->
+	<f:Form id="createGeneralForm" width="auto" editable="true">
+		<f:layout>
+			<f:ResponsiveGridLayout
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2"
+				columnsL="2"
+				columnsM="1"
+				singleContainerFullSize="false" />
+		</f:layout>
+		<f:formContainers>
+			<f:FormContainer title="{createState>/returnTypeText}">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldSoldToParty}" required="true">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Input
+								id="createSoldToInput"
+								value="{createState>/soldToDisplay}"
+								editable="{= !${createState>/soldToChosen} }"
+								showValueHelp="true"
+								valueHelpRequest=".onCreateSoldToValueHelpRequest"
+								placeholder="{i18n>filterProviderPin}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement visible="{createState>/soldToChosen}">
+						<f:label>
+							<Label text="{i18n>fieldReturnDate}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<DatePicker
+								value="{path: 'CustomerReturnDate', type: 'sap.ui.model.odata.type.Date', constraints: {displayFormat: 'Date'}}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</DatePicker>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement visible="{createState>/soldToChosen}">
+						<f:label>
+							<Label text="{i18n>fieldReason}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<!-- Items populated in JS (Detail.controller.js#_populateCreateValueHelps),
+								same convention as Master.controller.js#_populateValueHelp. -->
+							<Select id="createReasonSelect" selectedKey="{ReturnsOrderReason}" forceSelection="false">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Select>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement visible="{createState>/soldToChosen}">
+						<f:label>
+							<Label text="{i18n>fieldExisId}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Input value="{PurchaseOrderByCustomer}" maxLength="35">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement visible="{createState>/soldToChosen}">
+						<f:label>
+							<Label text="{i18n>fieldShippingCondition}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Select id="createShippingConditionSelect" selectedKey="{ShippingCondition}" forceSelection="false">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Select>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement visible="{createState>/soldToChosen}">
+						<f:label>
+							<Label text="{i18n>fieldRequestedDeliveryDate}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<DatePicker
+								value="{path: 'RequestedDeliveryDate', type: 'sap.ui.model.odata.type.Date', constraints: {displayFormat: 'Date'}}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</DatePicker>
+						</f:fields>
+					</f:FormElement>
+				</f:formElements>
+			</f:FormContainer>
+		</f:formContainers>
+	</f:Form>
+</core:FragmentDefinition>

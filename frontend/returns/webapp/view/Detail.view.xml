@@ -18,7 +18,7 @@
 					<Title id="detailTitle" level="H1" class="detailObjectTitle" />
 				</f:heading>
 				<f:expandedContent>
-					<HBox renderType="Bare" wrap="Wrap" alignItems="Center" class="detailHeaderFacts">
+					<HBox renderType="Bare" wrap="Wrap" alignItems="Center" class="detailHeaderFacts" visible="{= !${createState>/active} }">
 						<items>
 							<Text id="detailCreatedOnBy" class="detailHeaderFact" />
 							<ObjectNumber id="detailNetValue" class="detailHeaderValue" />
@@ -26,7 +26,7 @@
 					</HBox>
 				</f:expandedContent>
 				<f:content>
-					<HBox renderType="Bare" alignItems="Center" class="detailStatusRow">
+					<HBox renderType="Bare" alignItems="Center" class="detailStatusRow" visible="{= !${createState>/active} }">
 						<GenericTag id="detailStatus" design="StatusIconHidden" />
 					</HBox>
 				</f:content>
@@ -46,7 +46,7 @@
 			</f:DynamicPageTitle>
 		</f:title>
 		<f:header>
-			<f:DynamicPageHeader class="detailAnchorHeader">
+			<f:DynamicPageHeader class="detailAnchorHeader" visible="{= !${createState>/active} }">
 				<HBox id="detailAnchorBar" wrap="NoWrap" renderType="Bare" justifyContent="Start" items="{sectionsNav>/list}" class="detailAnchorBar">
 					<items>
 						<Link text="{sectionsNav>title}" visible="{sectionsNav>visible}" press=".onAnchorPress" class="detailAnchorLink">
@@ -59,7 +59,19 @@
 			</f:DynamicPageHeader>
 		</f:header>
 		<f:content>
-			<VBox id="sectionsContainer" class="detailSections sapUiResponsiveContentPadding" />
+			<VBox id="sectionsContainer" class="detailSections sapUiResponsiveContentPadding" visible="{= !${createState>/active} }" />
+			<VBox id="createContent" class="detailSections sapUiResponsiveContentPadding" visible="{createState>/active}">
+				<core:Fragment fragmentName="cdc.vaccret.sections.GeneralCreate" type="XML" />
+				<core:Fragment fragmentName="cdc.vaccret.sections.ItemsCreate" type="XML" />
+			</VBox>
 		</f:content>
+		<f:footer>
+			<OverflowToolbar visible="{createState>/active}">
+				<ToolbarSpacer />
+				<Button id="createSaveButton" text="{i18n>createFooterSave}" type="Emphasized" enabled="{createState>/soldToChosen}" press=".onCreateSavePress" />
+				<Button id="createCancelButton" text="{i18n>createFooterCancel}" press=".onCreateCancelPress" />
+			</OverflowToolbar>
+		</f:footer>
 	</f:DynamicPage>
 </mvc:View>
+

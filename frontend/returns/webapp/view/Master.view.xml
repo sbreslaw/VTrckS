@@ -115,6 +115,24 @@
 						<OverflowToolbar class="masterTableToolbar">
 							<Title text="{parts: ['i18n>masterTitle', 'returnContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
 							<ToolbarSpacer />
+							<MenuButton
+								id="createReturnButton"
+								text="{i18n>createButton}"
+								type="Emphasized"
+								buttonMode="Split"
+								useDefaultActionOnly="false"
+								defaultAction=".onCreatePress">
+								<menu>
+									<Menu itemSelected=".onCreateMenuItemSelected">
+										<items>
+											<MenuItem key="ZISL" text="{i18n>returnTypeZisl}" />
+											<MenuItem key="ZXFR" text="{i18n>returnTypeZxfr}" />
+											<MenuItem key="ZWST" text="{i18n>returnTypeZwst}" />
+											<MenuItem key="ZKR" text="{i18n>returnTypeZkr}" />
+										</items>
+									</Menu>
+								</menu>
+							</MenuButton>
 							<Button
 								icon="sap-icon://action-settings"
 								type="Transparent"
