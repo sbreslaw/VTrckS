@@ -3800,7 +3800,11 @@ sap.ui.define([
       // read) back into the row on every field edit - reduces how often the
       // allocation-cache reapply above is even needed, doesn't replace it
       // (the create POST itself still unavoidably returns a representation).
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.ZZ_FIELDS).join(",") });
+      // ADR-002 PR1: FundLogicService.ZZ_FIELDS (the six ZZ*QTY mirrors) are
+      // all null/undefined on ReturnsSchema (order-specific custom fields,
+      // no Returns equivalent) - filter before join, or a null entry becomes
+      // an empty $select segment (trailing/duplicate commas, parser error).
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.ZZ_FIELDS.filter(function (sField) { return !!sField; })).join(",") });
       oTable.bindItems(oBindingInfo);
       // bindItems() always creates a fresh binding instance - re-attach here
       // (see _onItemCreateActivate) rather than relying on one set up once.
@@ -4437,7 +4441,7 @@ sap.ui.define([
       this._setCreateMode(false);
       var sHeaderSelect = ["SAP__Messages", ServiceSchema.headerProperties.salesOrderType].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
         return ServiceSchema.updatableHeaderProperties[sKey];
-      })).join(",");
+      })).filter(function (sProp) { return !!sProp; }).join(",");
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have

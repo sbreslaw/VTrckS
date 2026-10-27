@@ -191,19 +191,27 @@ sap.ui.define([
   // {CustomerReturn}) and cannot be fixed by an orderUi visible toggle alone
   // (Form FormElement visibility, unlike sap.m.Table column visibility, does
   // NOT exclude the bound property from autoExpandSelect's $select). For
-  // those, the profile declares its own <name>.<profileId>.fragment.xml
-  // variant; every other profile (today: "orders") has no variant file and
-  // keeps using the shared <name>.fragment.xml. Fragment.load's resource
-  // fetch fails (404) BEFORE any control is instantiated, so retrying with
-  // the base name after a rejected variant load is safe - no partial/
-  // colliding controls are left behind under the shared `id: sId` prefix.
+  // those, the profile declares its own variant under a `<profileId>/`
+  // subfolder (e.g. `sections/returns/Details.fragment.xml`); every other
+  // profile (today: "orders") has no variant file and keeps using the
+  // shared `<name>.fragment.xml`. Fragment.load's resource fetch fails
+  // (404) BEFORE any control is instantiated, so retrying with the base
+  // name after a rejected variant load is safe - no partial/colliding
+  // controls are left behind under the shared `id: sId` prefix.
+  // NOTE: Fragment.load's `name` resolves EVERY "." in the string to a "/"
+  // (module-path convention) - a variant suffix cannot be appended as a
+  // literal dot onto the existing dotted name (that previously produced
+  // ".../sections/Items/returns.fragment.xml", a 404 - confirmed live). The
+  // profile id must be its own path SEGMENT, inserted before the last one.
   SectionFactory.prototype._loadFragment = function (sId, sFragment) {
     var oController = this._oView.getController();
     var sProfileId = ServiceSchema.profileId;
     if (!sProfileId || sProfileId === "orders") {
       return Fragment.load({ id: sId, name: sFragment, controller: oController });
     }
-    return Fragment.load({ id: sId, name: sFragment + "." + sProfileId, controller: oController })
+    var iLastDot = sFragment.lastIndexOf(".");
+    var sVariantName = sFragment.slice(0, iLastDot) + "." + sProfileId + sFragment.slice(iLastDot);
+    return Fragment.load({ id: sId, name: sVariantName, controller: oController })
       .catch(function () {
         return Fragment.load({ id: sId, name: sFragment, controller: oController });
       });
