@@ -86,38 +86,48 @@ sap.ui.define([
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
       netValue: "TotalNetAmount",
+      // Header-level TaxAmount/GrossAmount confirmed genuinely absent on
+      // CustomerReturnManageType (2026-10-27 metadata) - item-level TaxAmount
+      // is the only real source (see itemProperties.taxAmount below).
       taxAmount: null,
       grossAmount: null,
       currency: "TransactionCurrency",
-      paymentMethod: null,
+      // 2026-10-27 metadata re-audit: confirmed real on CustomerReturnManageType
+      // (previously wrongly marked null/absent) - unmapped for PR1 (read-only,
+      // OrgData/PaymentMethod sections stay hidden for _RET regardless).
+      paymentMethod: "PaymentMethod",
       salesOrderType: "CustomerReturnType",
-      salesOrganization: null,
-      distributionChannel: null,
-      division: null,
-      salesOffice: null,
-      salesGroup: null,
+      salesOrganization: "SalesOrganization",
+      distributionChannel: "DistributionChannel",
+      division: "OrganizationDivision",
+      salesOffice: "SalesOffice",
+      salesGroup: "SalesGroup",
       shippingCondition: "ShippingCondition",
       deliveryStatus: null,
       deliveryBlockStatus: null,
       deliveryBlockReason: null,
-      billingBlockReason: null,
+      billingBlockReason: "HeaderBillingBlockReason",
       billingBlockStatus: null,
       billingStatus: null,
-      paymentTerms: null,
+      paymentTerms: "CustomerPaymentTerms",
       priority: null,
       orderReason: "ReturnsOrderReason",
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
-      // The "return type" concept IS the header's own salesOrderType
-      // (CustomerReturnType) on this service - no separate SpecialProcessingCode
-      // field exists (that was an orders-only bolt-on). Hidden via orderUi
-      // detailsReturnType for every _RET type.
-      returnType: null,
-      // CustomerPurchaseOrderDate - absent (not in the live-verified returns
-      // ServiceSchema.js headerProperties list). Hidden via orderUi detailsExisDate.
-      exisDate: null,
-      // CustomerPurchaseOrderSuplmnt - absent. Hidden via orderUi detailsNoOfBoxes.
-      noOfBoxes: null,
+      // 2026-10-27 metadata re-audit: SpecialProcessingCode IS real on
+      // CustomerReturnManageType (previous comment wrongly claimed it didn't
+      // exist) - Details.fragment.xml's detailsReturnType FormElement was
+      // already correctly bound to it all along, just hidden via orderUi.
+      returnType: "SpecialProcessingCode",
+      // 2026-10-27 metadata re-audit: CustomerPurchaseOrderDate IS real
+      // (previous comment wrongly claimed it was absent) - Details.fragment.xml's
+      // detailsExisDate FormElement was already correctly bound, just hidden.
+      exisDate: "CustomerPurchaseOrderDate",
+      // 2026-10-27 metadata re-audit: CustomerPurchaseOrderSuplmnt IS real
+      // (previous comment wrongly claimed it was absent) - FormElement restored
+      // in Details.fragment.xml (returns copy), same StepInput+formatter pattern
+      // as the orders-side fragment.
+      noOfBoxes: "CustomerPurchaseOrderSuplmnt",
       labelAddress: null,
       // ZOrdDesc - absent; no free-text header description field confirmed on
       // CustomerReturnManageType.
@@ -141,12 +151,12 @@ sap.ui.define([
       salesEmployee: null
     },
 
-    // HeaderShipToPartyType (via _ShipToParty) - confirmed shape differs
-    // slightly from orders' (no AddressID property documented).
+    // HeaderShipToPartyType (via _ShipToParty) - 2026-10-27 metadata re-audit:
+    // AddressID IS real (previous comment wrongly claimed it was undocumented).
     shipToPartyProperties: {
       id: "Partner",
       fullName: "FullName",
-      addressId: null,
+      addressId: "AddressID",
       address: "FormattedPostalAddressDesc"
     },
 
@@ -189,17 +199,18 @@ sap.ui.define([
       higherLevelItem: "HigherLevelItem",
       quantity: "RequestedQuantity",
       unit: "RequestedQuantityUnit",
-      itemCategory: null,
+      // 2026-10-27 metadata re-audit: confirmed real as "CustomerReturnItemCategory"
+      // (Edm.String, MaxLength 4) on CustomerReturnItemManageType.
+      itemCategory: "CustomerReturnItemCategory",
       netAmount: "NetAmount",
       currency: "TransactionCurrency",
-      // NOTE (ADR-002 Step-0 follow-up, found this session - not one of the
-      // original "4 literal XML hazards"): this service's item-level exisId
-      // property is PurchaseOrderByCustomer, NOT ExisItemNumber like orders.
-      // Items.fragment.xml's exisId column still hardcodes {ExisItemNumber} -
-      // hidden for _RET via OrderModeConfig.js RETURNS_UI_HIDDEN.columns.exisId
-      // (added this session) until a 5th sub-fragment pair is built. See
-      // OPEN_QUESTIONS.md.
-      exisId: "PurchaseOrderByCustomer",
+      // CORRECTED (2026-10-27 metadata re-audit): ExisItemNumber IS real on
+      // CustomerReturnItemManageType (Edm.String, MaxLength 12) - a prior round
+      // this session wrongly assumed it was absent (based on the OLDER
+      // 2026-10-26 metadata dump, which omitted it) and switched this to
+      // PurchaseOrderByCustomer; reverted now to match Orders' own
+      // itemProperties.exisId convention (OrdersSchema.js).
+      exisId: "ExisItemNumber",
       deliveryStatus: null,
       deliveryStatusText: null,
       rejectionReason: "SalesDocumentRjcnReason",
@@ -215,16 +226,21 @@ sap.ui.define([
       panQty: null,
       resQty: null,
       deliveryPriority: null,
-      taxAmount: null,
+      // 2026-10-27 metadata re-audit: confirmed real (Edm.Decimal, Precision 13,
+      // Scale variable) on CustomerReturnItemManageType.
+      taxAmount: "TaxAmount",
       batch: "Batch",
-      // Not in the live-verified returns itemProperties list - absent.
-      expirationDate: null
+      // 2026-10-27 metadata re-audit: confirmed real (Edm.Date) on
+      // CustomerReturnItemManageType - Items.fragment.xml's ExpirationDate
+      // DatePicker was already correctly bound to it all along.
+      expirationDate: "ExpirationDate"
     },
 
     // Mapped from the live-verified returns ServiceSchema.js itemFieldLimits/
-    // headerFieldLimits into OrdersSchema's key shape.
+    // headerFieldLimits into OrdersSchema's key shape. exisIdMaxLength matches
+    // ExisItemNumber's own MaxLength (12, 2026-10-27 metadata), same as orders.
     itemFieldLimits: {
-      exisIdMaxLength: 35,
+      exisIdMaxLength: 12,
       ndcMaxLength: 18,
       qtyMax: null
     },
@@ -270,7 +286,10 @@ sap.ui.define([
       totalQtyDelivered: null,
       orderQuantityUnit: null,
       netAmount: "NetAmount",
-      taxAmount: null,
+      // 2026-10-27 metadata re-audit: confirmed real (same TaxAmount property
+      // as itemProperties.taxAmount above) - unmapped for PR1 (priceTotals
+      // section stays hidden for every _RET type regardless).
+      taxAmount: "TaxAmount",
       netPricePerUnit: null,
       pricingUnit: null,
       grossValue: null,
@@ -291,6 +310,11 @@ sap.ui.define([
       itemEntitySet: "ItemPricingElement",
       headerNavigation: "_PricingElement",
       itemNavigation: "_ItemPricingElement",
+      // 2026-10-27 metadata re-audit: rateValueIsNull/conditionQuantity/
+      // conditionQuantityUnit/conditionAmountIsNull/transactionCurrency are all
+      // confirmed real on Header/ItemPricingElementType (previously wrongly
+      // marked null/absent) - unmapped for PR1 (priceTotals section stays
+      // hidden for every _RET type regardless).
       properties: {
         step: null,
         counter: null,
@@ -299,13 +323,13 @@ sap.ui.define([
         rateRatio: "ConditionRateRatio",
         rateValueIsAmount: "ConditionRateValueIsAmount",
         rateValueIsRatio: "ConditionRateValueIsRatio",
-        rateValueIsNull: null,
+        rateValueIsNull: "ConditionRateValueIsNull",
         conditionCurrency: "ConditionCurrency",
-        conditionQuantity: null,
-        conditionQuantityUnit: null,
+        conditionQuantity: "ConditionQuantity",
+        conditionQuantityUnit: "ConditionQuantityUnit",
         conditionAmount: "ConditionAmount",
-        conditionAmountIsNull: null,
-        transactionCurrency: null
+        conditionAmountIsNull: "ConditionAmountIsNull",
+        transactionCurrency: "TransactionCurrency"
       }
     },
 
@@ -352,24 +376,28 @@ sap.ui.define([
 
     contactPartnerFunction: null,
 
-    // HeaderPartnerType - confirmed shape is much smaller than orders' (no
-    // customer/contactPerson/phone/email/postalCode/cityName/country/street/
-    // houseNumber properties documented); Parties section hidden anyway.
+    // HeaderPartnerType - 2026-10-27 metadata re-audit: customer/contactPerson/
+    // phone(InternationalPhoneNumber)/email(EmailAddress)/postalCode/cityName/
+    // country/streetName/houseNumber are ALL confirmed real (previous comment
+    // wrongly claimed a much smaller shape than orders'). Mapped for
+    // correctness, but _Partner/HeaderPartner reads still 500 on this service
+    // (confirmed backend bug, NOTES.md) - Parties section stays hidden for
+    // every _RET order type regardless until the backend bug is fixed.
     headerPartnerProperties: {
       salesOrder: "CustomerReturn",
       partnerFunction: "PartnerFunction",
-      customer: null,
+      customer: "Customer",
       partner: "Partner",
-      contactPerson: null,
+      contactPerson: "ContactPerson",
       fullName: "FullName",
-      phone: null,
-      email: null,
+      phone: "InternationalPhoneNumber",
+      email: "EmailAddress",
       address: "FormattedPostalAddressDesc",
-      postalCode: null,
-      cityName: null,
-      country: null,
-      streetName: null,
-      houseNumber: null,
+      postalCode: "PostalCode",
+      cityName: "CityName",
+      country: "Country",
+      streetName: "StreetName",
+      houseNumber: "HouseNumber",
       entityControl: null
     },
 
@@ -501,7 +529,9 @@ sap.ui.define([
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw
     // JS number, not a string, on this service); Batch confirmed PATCHable;
-    // ExpirationDate not confirmed to exist on this item type at all.
+    // ExpirationDate confirmed to exist (2026-10-27 metadata) but its
+    // PATCH-ability was not independently re-confirmed this session - stays
+    // null (read-only) until verified.
     updatableItemProperties: {
       quantity: "RequestedQuantity",
       batch: "Batch",

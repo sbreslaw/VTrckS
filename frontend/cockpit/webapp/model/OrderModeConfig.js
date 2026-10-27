@@ -78,14 +78,11 @@ sap.ui.define([
       // sap.m.Table (documented UI5 behavior), same mechanism as brand/
       // orderIntention/fundType/poReference above.
       optOut: { visible: false },
-      deliveryStatus: { visible: false },
-      // 5th literal-binding hazard found beyond ADR-002's original audit:
-      // item exisId column binds literal ExisItemNumber (absent on
-      // CustomerReturnItemManageType - returns' own equivalent is
-      // PurchaseOrderByCustomer). Hidden for _RET rather than a 5th
-      // sub-fragment pair (PR1 is read-only, minor column) - flagged in
-      // OPEN_QUESTIONS.md as a PR2 follow-up candidate.
-      exisId: { visible: false }
+      deliveryStatus: { visible: false }
+      // exisId column UN-HIDDEN (2026-10-27 metadata re-audit): ExisItemNumber
+      // IS real on CustomerReturnItemManageType - the prior "5th literal-binding
+      // hazard" hide was based on the OLDER 2026-10-26 metadata, which omitted
+      // it. Items.fragment.xml's exisId Input is bound to it directly again.
     },
     sections: {
       inventory: { visible: false },
@@ -111,15 +108,6 @@ sap.ui.define([
   // despite ALL being absent on this service for every _RET type alike).
   var RETURNS_UI_HIDDEN = {
     fields: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.fields, {
-      // SpecialProcessingCode absent on CustomerReturnManageType - the "return
-      // type" concept IS the header's own CustomerReturnType (salesOrderType),
-      // already shown via the Order Type picker/Master. Confirmed against the
-      // live-verified frontend/returns ServiceSchema.js headerProperties list.
-      detailsReturnType: { visible: false },
-      // CustomerPurchaseOrderDate absent.
-      detailsExisDate: { visible: false },
-      // CustomerPurchaseOrderSuplmnt absent.
-      detailsNoOfBoxes: { visible: false },
       // Already a non-functional BLOCKED-BY-SERVICE disabled placeholder in
       // every mode (no backend field/VH for ANY order type) - hidden for
       // consistency rather than showing a dead placeholder.
@@ -128,6 +116,12 @@ sap.ui.define([
       // ShippingCondition IS a real, PATCHable CustomerReturnManage property
       // (NOTES.md "Returns MVP-2 Step-0") and Details.fragment.xml's own
       // comment says this field is "Shown here for _RET order types only".
+      //
+      // detailsReturnType/detailsExisDate/detailsNoOfBoxes UN-HIDDEN (2026-10-27
+      // metadata re-audit): SpecialProcessingCode/CustomerPurchaseOrderDate/
+      // CustomerPurchaseOrderSuplmnt are ALL confirmed real on
+      // CustomerReturnManageType - the prior hide ("absent on this service")
+      // was based on the OLDER 2026-10-26 metadata, which omitted them.
     }),
     columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
     sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)

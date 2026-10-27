@@ -93,11 +93,13 @@
                SalesOrderItem. -->
           <Link text="{CustomerReturnItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
             press=".onItemNumberPress" />
-          <!-- ADR-002 5th literal-binding hazard (OPEN_QUESTIONS.md): item-level
-               exisId is PurchaseOrderByCustomer on this service, not ExisItemNumber
-               (that property doesn't exist here at all and crashed every Items
-               load, even with this column hidden). -->
-          <Input value="{PurchaseOrderByCustomer}" visible="{itemsColumns>/exisId}" change=".onItemExisChange"
+          <!-- CORRECTED (2026-10-27 metadata re-audit): ExisItemNumber IS real on
+               CustomerReturnItemManageType (MaxLength 12) - a prior round this
+               session wrongly assumed it was absent (based on the OLDER
+               2026-10-26 metadata, which omitted it) and switched this to
+               PurchaseOrderByCustomer; reverted to match Orders' own exisId
+               convention (ReturnsSchema.js itemProperties.exisId). -->
+          <Input value="{ExisItemNumber}" visible="{itemsColumns>/exisId}" change=".onItemExisChange"
             enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
           <!-- Brand is authoritative from the selected Product. ZZIndustryStandardName
             (the orders-side pre-POST local-copy fallback) does not exist on this
