@@ -21,6 +21,13 @@
                 "settings": {
                     "odataVersion": "4.0"
                 }
+            },
+            "f4ProductService": {
+                "uri": "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
             }
         },
         "crossNavigation": {
@@ -104,6 +111,14 @@
                     "groupId": "$auto"
                 }
             },
+            "f4Product": {
+                "dataSource": "f4ProductService",
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "groupId": "$auto"
+                }
+            },
             "view": {
                 "type": "sap.ui.model.json.JSONModel",
                 "settings": {
@@ -148,6 +163,15 @@
                 {
                     "name": "detail",
                     "pattern": "detail/{returnId}",
+                    "layout": "MidColumnFullScreen",
+                    "target": [
+                        "master",
+                        "detail"
+                    ]
+                },
+                {
+                    "name": "create",
+                    "pattern": "create/{returnType}",
                     "layout": "MidColumnFullScreen",
                     "target": [
                         "master",

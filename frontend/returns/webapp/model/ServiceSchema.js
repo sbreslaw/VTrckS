@@ -59,6 +59,61 @@ sap.ui.define([], function () {
       itemId: "CustomerReturnItem"
     },
 
+    // MVP-2 Create/Edit (prompts/E008_Returns_MVP2_CRUD_Session_Prompt.md §4A/§4B).
+    // Sticky-session write surface, verified live in Step-0
+    // (traces/returns-create-probe-2026-10-26.md) — fully-qualified bound
+    // action names per ui_customerreturnmanage_2026-10-26.xml.
+    namespace: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001",
+    actions: {
+      createWithCustomerReturnType: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreateWithCustomerReturnType",
+      prepareForEdit: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.PrepareForEdit",
+      saveChanges: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.SaveChanges",
+      // Unbound ActionImport (metadata EntityContainer) — invoked as
+      // "/DiscardChanges(...)", never bound to a context (same convention as
+      // the cockpit's ServiceSchema.discardAction).
+      discardChanges: "/DiscardChanges",
+      setRejectionReason: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.SetRejectionReason",
+      removeRejectionReason: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.RemoveRejectionReason"
+    },
+
+    // Batch group ids — same isolation convention as the cockpit
+    // (CreateOrderService.js/EditRequestService.js doc comments): "vrCreate"
+    // is the ONLY group live-tested as needed for 4A (Step-0 found header
+    // PATCHes stick without a post-SaveChanges replay batch, so no
+    // "vrCreateReplay" group is wired yet — kept as a documented name only in
+    // case a future field proves otherwise); "vrEdit" is the 4B edit-session
+    // group (PrepareForEdit → PATCH → SaveChanges, mirrors EditRequestService).
+    groups: {
+      create: "vrCreate",
+      createReplay: "vrCreateReplay",
+      edit: "vrEdit"
+    },
+
+    // Control annotation property names (present on every read of
+    // CustomerReturnManage/CustomerReturnItemManage — prompt §2.3).
+    control: {
+      field: "__FieldControl",
+      entity: "__EntityControl",
+      operation: "__OperationControl",
+      createByAssociation: "__CreateByAssociationControl"
+    },
+
+    // Edm.MaxLength limits this app enforces client-side (Input maxLength),
+    // read directly from ui_customerreturnmanage_2026-10-26.xml — never
+    // hand-guessed (prompt §4A.5 itemFieldLimits).
+    itemFieldLimits: {
+      product: 18,
+      batch: 10,
+      requestedQuantityUnit: 3,
+      purchaseOrderByCustomer: 35,
+      returnsRefundType: 1
+    },
+    headerFieldLimits: {
+      purchaseOrderByCustomer: 35,
+      returnsOrderReason: 3,
+      shippingCondition: 2
+    },
+
     buildHeaderPath: function (sReturnId) {
       return "/" + this.sets.header + "('" + String(sReturnId).replace(/'/g, "''") + "')";
     },
@@ -170,11 +225,44 @@ sap.ui.define([], function () {
     po: {
       serviceRoot: "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
       entitySets: {
-        soldToDetails: "SoldToDetails"
+        soldToDetails: "SoldToDetails",
+        // MVP-2 Create (Step-0 §6): c_soldtosalesareavh carries no sales-area
+        // triad at all — CreateWithCustomerReturnType's
+        // SalesOrganization/DistributionChannel/OrganizationDivision come
+        // from THIS existing entity set instead (zui_providerorder_meta
+        // CustomerSalesAreaType, live-confirmed
+        // traces/returns-create-probe-2026-10-26.md §6).
+        customerSalesArea: "CustomerSalesArea"
       },
       soldToDetailsProperties: {
         soldToParty: "SoldToParty",
         identificationNumber: "IdentificationNumber"
+      },
+      customerSalesAreaProperties: {
+        customer: "Customer",
+        salesOrganization: "SalesOrganization",
+        distributionChannel: "DistributionChannel",
+        division: "Division"
+      }
+    },
+
+    // MVP-2 Create (prompt §4A.5): Product value help, sales-area-restricted
+    // — registered as its own OData V4 model ("f4Product", manifest.json) on
+    // the srvd_f4 service, NOT the main service (the UI_CUSTOMERRETURNMANAGE
+    // metadata only REFERENCES it via ValueListReferences). Step-0 §6 found
+    // the Batch VH (i_batchstdvh) needs a Plant an item doesn't have at
+    // create time — left unwired pending OPEN_QUESTIONS.md follow-up; Lot is
+    // a plain Input for now (no typeahead), same conservative-default
+    // instruction as the other open functional questions.
+    f4Product: {
+      serviceRoot: "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001/",
+      entitySet: "C_CustRetProdBySlsOrgDistrChnl",
+      properties: {
+        salesOrganization: "SalesOrganization",
+        distributionChannel: "DistributionChannel",
+        product: "Product",
+        productName: "ProductName",
+        requestedQuantityUnit: "RequestedQuantityUnit"
       }
     }
   };
