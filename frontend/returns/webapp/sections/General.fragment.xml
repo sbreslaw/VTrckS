@@ -1,0 +1,191 @@
+<core:FragmentDefinition
+	xmlns="sap.m"
+	xmlns:core="sap.ui.core"
+	xmlns:f="sap.ui.layout.form"
+	xmlns:l="sap.ui.layout">
+	<!-- Read-only (MVP-1 scope guard — no editable:true anywhere, prompt §4.3.1).
+		Always sap.ui.layout.form.Form with FormContainers, never SimpleForm. -->
+	<f:Form width="auto" editable="false">
+		<f:layout>
+			<f:ResponsiveGridLayout
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2"
+				columnsL="2"
+				columnsM="1"
+				singleContainerFullSize="false" />
+		</f:layout>
+		<f:formContainers>
+			<f:FormContainer title="{i18n>sectionGeneral}">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldReturnNo}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{CustomerReturn}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldReturnType}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_CustomerReturnType/CustomerReturnType_Text}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldReturnDate}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CustomerReturnDate', formatter: '.formatter.returnDate'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldProvider}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'SoldToParty'}, {path: 'SoldToPartyName'}], formatter: '.formatter.soldToPartyText'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldExisId}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'PurchaseOrderByCustomer', formatter: '.formatter.orDash'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldReason}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: '_ReturnsOrderReason/ReturnsOrderReason_Text', formatter: '.formatter.orDash'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldShippingCondition}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: '_ShippingCondition/ShippingCondition_Text', formatter: '.formatter.orDash'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldRequestedDeliveryDate}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'RequestedDeliveryDate', formatter: '.formatter.requestedDeliveryDate'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldStatus}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectStatus
+								text="{_OverallSDProcessStatus/OverallSDProcessStatus_Text}"
+								state="{path: 'OvrlSDProcessStatusCriticality', formatter: '.formatter.statusState'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</ObjectStatus>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldIncompletion}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'SlsDocOvrlGenIncompltnStsText', formatter: '.formatter.orDash'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldCreatedBy}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<!-- _CreatedByUser/UserDescription if the nav resolves; else the raw ID (prompt §4.3.1). -->
+							<Text text="{parts: [{path: '_CreatedByUser/UserDescription'}, {path: 'CreatedByUser'}], formatter: '.formatter.orDash'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldCreatedOn}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.creationDate'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>fieldNetAmount}">
+								<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'TotalNetAmount'}, {path: 'TransactionCurrency'}], formatter: '.formatter.netAmountText'}">
+								<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+				</f:formElements>
+			</f:FormContainer>
+		</f:formContainers>
+	</f:Form>
+</core:FragmentDefinition>

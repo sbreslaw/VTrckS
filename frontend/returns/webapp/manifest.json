@@ -1,0 +1,174 @@
+{
+    "_version": "1.67.0",
+    "sap.app": {
+        "id": "cdc.vaccret",
+        "type": "application",
+        "i18n": "i18n/i18n.properties",
+        "title": "{{appTitle}}",
+        "description": "{{appDescription}}",
+        "dataSources": {
+            "mainService": {
+                "uri": "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd/sap/ui_customerreturnmanage/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0",
+                    "localUri": "localService/metadata.xml"
+                }
+            },
+            "providerOrderService": {
+                "uri": "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
+            }
+        },
+        "crossNavigation": {
+            "inbounds": {
+                "manageReturns-display": {
+                    "semanticObject": "ManageReturns",
+                    "action": "display",
+                    "title": "{{appTitle}}",
+                    "signature": {
+                        "parameters": {},
+                        "additionalParameters": "allowed"
+                    }
+                }
+            }
+        },
+        "sourceTemplate": {
+            "id": "@sap/ux-app-migrator:freestyle",
+            "version": "1.29.0",
+            "toolsId": "e008-returns-mvp1"
+        }
+    },
+    "sap.ui": {
+        "technology": "UI5",
+        "fullWidth": true,
+        "icons": {},
+        "deviceTypes": {
+            "desktop": true,
+            "tablet": true,
+            "phone": true
+        }
+    },
+    "sap.ui5": {
+        "rootView": {
+            "viewName": "cdc.vaccret.view.App",
+            "type": "XML",
+            "id": "app"
+        },
+        "contentDensities": {
+            "compact": true,
+            "cozy": false
+        },
+        "dependencies": {
+            "minUI5Version": "1.136.0",
+            "libs": {
+                "sap.ui.core": {},
+                "sap.m": {},
+                "sap.f": {},
+                "sap.ui.layout": {},
+                "sap.ui.comp": {},
+                "sap.ui.unified": {},
+                "sap.ui.table": {}
+            }
+        },
+        "services": {
+            "ShellUIService": {
+                "factoryName": "sap.ushell.ui5service.ShellUIService"
+            }
+        },
+        "models": {
+            "i18n": {
+                "type": "sap.ui.model.resource.ResourceModel",
+                "settings": {
+                    "bundleName": "cdc.vaccret.i18n.i18n"
+                }
+            },
+            "": {
+                "dataSource": "mainService",
+                "preload": true,
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "earlyRequests": true,
+                    "groupId": "$auto"
+                }
+            },
+            "po": {
+                "dataSource": "providerOrderService",
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "groupId": "$auto"
+                }
+            },
+            "view": {
+                "type": "sap.ui.model.json.JSONModel",
+                "settings": {
+                    "data": {
+                        "masterCount": 0,
+                        "masterHasSearch": false,
+                        "masterBusy": false
+                    }
+                }
+            }
+        },
+        "resources": {
+            "css": [
+                {
+                    "uri": "css/style.css"
+                }
+            ]
+        },
+        "routing": {
+            "config": {
+                "routerClass": "sap.f.routing.Router",
+                "controlId": "fcl",
+                "controlAggregation": "beginColumnPages",
+                "viewType": "XML",
+                "viewPath": "cdc.vaccret.view",
+                "type": "View",
+                "path": "cdc.vaccret.view",
+                "async": true,
+                "bypassed": {
+                    "target": [
+                        "master"
+                    ]
+                }
+            },
+            "routes": [
+                {
+                    "name": "master",
+                    "pattern": "",
+                    "layout": "OneColumn",
+                    "target": "master"
+                },
+                {
+                    "name": "detail",
+                    "pattern": "detail/{returnId}",
+                    "layout": "MidColumnFullScreen",
+                    "target": [
+                        "master",
+                        "detail"
+                    ]
+                }
+            ],
+            "targets": {
+                "master": {
+                    "id": "master",
+                    "name": "Master",
+                    "level": 1,
+                    "controlAggregation": "beginColumnPages"
+                },
+                "detail": {
+                    "id": "detail",
+                    "name": "Detail",
+                    "level": 1,
+                    "controlAggregation": "midColumnPages"
+                }
+            }
+        }
+    }
+}

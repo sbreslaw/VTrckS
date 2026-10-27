@@ -242,7 +242,7 @@ sap.ui.define([
   // Category scopes Master search and Create; an order still displays per its own type.
   var ORDER_CATEGORIES = {
     _ORD: { titleKey: "orderCategoryOrd", orderTypes: ["ZKB", "ZREP"] },
-    _RET: { titleKey: "orderCategoryRet", orderTypes: ["ZISL", "ZCFR", "ZWST", "ZKR"] }
+    _RET: { titleKey: "orderCategoryRet", orderTypes: ["ZISL", "ZXFR", "ZWST", "ZKR"] }
   };
 
   function has(oMap, sKey) {
@@ -269,9 +269,21 @@ sap.ui.define([
     return has(ORDER_TYPES, sOrderType) ? sOrderType : DEFAULT_ORDER_TYPE;
   }
 
+  // ADR-001: returns are served by a separate app (cdc.vaccret). No redirect
+  // yet (no FLP target mapping) - just log once so this cockpit's own _RET
+  // launch path is visible in diagnostics until the tile split lands.
+  var _bLoggedRetHandoff = false;
+  function logRetHandoffOnce(sCategory) {
+    if (sCategory === "_RET" && !_bLoggedRetHandoff) {
+      _bLoggedRetHandoff = true;
+      Log.info("OrderModeConfig: _RET is served by Manage Returns (ADR-001) - cockpit _RET launch still resolves, no redirect yet");
+    }
+  }
+
   function resolveCategory(vValue) {
     var sValue = normalizeValue(vValue);
     if (has(ORDER_CATEGORIES, sValue)) {
+      logRetHandoffOnce(sValue);
       return sValue;
     }
     var sCategory = Object.keys(ORDER_CATEGORIES).filter(function (sKey) {
@@ -279,6 +291,7 @@ sap.ui.define([
     })[0];
     if (sCategory) {
       Log.warning("OrderModeConfig: legacy order-type startup parameter '" + sValue + "' mapped to category " + sCategory);
+      logRetHandoffOnce(sCategory);
       return sCategory;
     }
     return DEFAULT_CATEGORY;

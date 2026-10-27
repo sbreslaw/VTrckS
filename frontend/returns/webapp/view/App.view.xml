@@ -1,0 +1,10 @@
+<mvc:View
+	controllerName="cdc.vaccret.controller.App"
+	xmlns="sap.m"
+	xmlns:f="sap.f"
+	xmlns:mvc="sap.ui.core.mvc"
+	displayBlock="true">
+	<App busy="{appView>/busy}" busyIndicatorDelay="{appView>/delay}">
+		<f:FlexibleColumnLayout id="fcl" layout="{appView>/layout}" />
+	</App>
+</mvc:View>

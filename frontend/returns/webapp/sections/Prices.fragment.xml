@@ -1,0 +1,47 @@
+<core:FragmentDefinition
+	xmlns="sap.m"
+	xmlns:core="sap.ui.core"
+	xmlns:l="sap.ui.layout">
+	<VBox>
+		<Title text="{i18n>pricesHeaderTitle}" level="H3" titleStyle="H5" class="sapUiTinyMarginBottom" />
+		<Table
+			id="headerPricesTable"
+			items="{_PricingElement}"
+			noDataText="{i18n>pricesNoData}">
+			<columns>
+				<Column><Text text="{i18n>colConditionType}" /></Column>
+				<Column hAlign="End"><Text text="{i18n>colRate}" /></Column>
+				<Column hAlign="End"><Text text="{i18n>colAmount}" /></Column>
+				<Column><Text text="{i18n>colCurrency}" /></Column>
+				<Column hAlign="Center"><Text text="{i18n>colStatistics}" /></Column>
+			</columns>
+			<items>
+				<ColumnListItem>
+					<cells>
+						<Text text="{parts: [{path: 'ConditionType'}, {path: 'ConditionTypeName'}], formatter: '.formatter.codeText'}" />
+						<Text text="{parts: [{path: 'ConditionRateValueIsAmount'}, {path: 'ConditionRateValueIsRatio'}, {path: 'ConditionRateAmount'}, {path: 'ConditionRateRatio'}], formatter: '.formatter.conditionRate'}" />
+						<Text text="{path: 'ConditionAmount', formatter: '.formatter.orDash'}" />
+						<Text text="{ConditionCurrency}" />
+						<CheckBox selected="{ConditionIsForStatistics}" editable="false" />
+					</cells>
+				</ColumnListItem>
+			</items>
+		</Table>
+
+		<Title text="{i18n>pricesItemTitle}" level="H3" titleStyle="H5" class="sapUiMediumMarginTop sapUiTinyMarginBottom" />
+		<Select id="pricesItemSelect" items="{_Item}" change="onPricesItemSelect" class="sapUiTinyMarginBottom">
+			<core:Item key="{CustomerReturnItem}" text="{CustomerReturnItem} - {CustomerReturnItemText}" />
+		</Select>
+		<Table
+			id="itemPricesTable"
+			noDataText="{i18n>pricesNoData}">
+			<columns>
+				<Column><Text text="{i18n>colConditionType}" /></Column>
+				<Column hAlign="End"><Text text="{i18n>colRate}" /></Column>
+				<Column hAlign="End"><Text text="{i18n>colAmount}" /></Column>
+				<Column><Text text="{i18n>colCurrency}" /></Column>
+				<Column hAlign="Center"><Text text="{i18n>colStatistics}" /></Column>
+			</columns>
+		</Table>
+	</VBox>
+</core:FragmentDefinition>

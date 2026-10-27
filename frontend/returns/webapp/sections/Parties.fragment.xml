@@ -1,0 +1,72 @@
+<core:FragmentDefinition
+	xmlns="sap.m"
+	xmlns:core="sap.ui.core"
+	xmlns:f="sap.ui.layout.form"
+	xmlns:l="sap.ui.layout">
+	<VBox>
+		<!-- Ship-To (_ShipToParty, 1:1) — small read-only block above the
+			Partners table (prompt §4.3.3). -->
+		<f:Form width="auto" editable="false">
+			<f:layout>
+				<f:ResponsiveGridLayout
+					labelSpanXL="4" labelSpanL="4" labelSpanM="4" labelSpanS="12"
+					adjustLabelSpan="false"
+					emptySpanXL="0" emptySpanL="0" emptySpanM="0" emptySpanS="0"
+					columnsXL="2" columnsL="2" columnsM="1"
+					singleContainerFullSize="false" />
+			</f:layout>
+			<f:formContainers>
+				<f:FormContainer title="{i18n>fieldShipTo}">
+					<f:formElements>
+						<f:FormElement>
+							<f:label>
+								<Label text="{i18n>fieldPartner}">
+									<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+								</Label>
+							</f:label>
+							<f:fields>
+								<Text text="{parts: [{path: '_ShipToParty/Partner'}, {path: '_ShipToParty/FullName'}], formatter: '.formatter.soldToPartyText'}">
+									<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+								</Text>
+							</f:fields>
+						</f:FormElement>
+						<f:FormElement>
+							<f:label>
+								<Label text="{i18n>fieldAddress}">
+									<layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true" /></layoutData>
+								</Label>
+							</f:label>
+							<f:fields>
+								<Text text="{path: '_ShipToParty/FormattedPostalAddressDesc', formatter: '.formatter.orDash'}">
+									<layoutData><l:GridData span="XL8 L8 M8 S12" /></layoutData>
+								</Text>
+							</f:fields>
+						</f:FormElement>
+					</f:formElements>
+				</f:FormContainer>
+			</f:formContainers>
+		</f:Form>
+		<Table
+			id="partiesTable"
+			class="sapUiTinyMarginTop"
+			items="{_Partner}"
+			noDataText="{i18n>partiesNoData}">
+			<columns>
+				<Column><Text text="{i18n>colPartnerFunction}" /></Column>
+				<Column><Text text="{i18n>colPartner}" /></Column>
+				<Column><Text text="{i18n>colName}" /></Column>
+				<Column><Text text="{i18n>colAddress}" /></Column>
+			</columns>
+			<items>
+				<ColumnListItem>
+					<cells>
+						<Text text="{path: '_PartnerFunction/PartnerFunction_Text', formatter: '.formatter.orDash'}" />
+						<Text text="{Partner}" />
+						<Text text="{FullName}" />
+						<Text text="{path: 'FormattedPostalAddressDesc', formatter: '.formatter.orDash'}" />
+					</cells>
+				</ColumnListItem>
+			</items>
+		</Table>
+	</VBox>
+</core:FragmentDefinition>
