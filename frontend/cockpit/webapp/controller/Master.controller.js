@@ -97,8 +97,14 @@ sap.ui.define([
       this._applyFilterAvailability();
       this._populateStatusCodes();
       this._populateSalesOrderTypeItems();
-      this._populateValueHelp("filterDeliveryBlockReason", ServiceSchema.entitySets.deliveryBlockReason,
-        ServiceSchema.valueHelpProperties.deliveryBlockReasonCode, ServiceSchema.valueHelpProperties.deliveryBlockReasonText);
+      // ADR-002 PR1: deliveryBlockReason is absent (null) on ReturnsSchema -
+      // live-confirmed this control's items-binding would otherwise resolve
+      // to a literal "/null" path. _applyFilterAvailability() disables the
+      // control for that case instead of binding it.
+      if (ServiceSchema.entitySets.deliveryBlockReason && ServiceSchema.valueHelpProperties) {
+        this._populateValueHelp("filterDeliveryBlockReason", ServiceSchema.entitySets.deliveryBlockReason,
+          ServiceSchema.valueHelpProperties.deliveryBlockReasonCode, ServiceSchema.valueHelpProperties.deliveryBlockReasonText);
+      }
       this._configureFilterSuggestions();
       this._oFilterBarRenderDelegate = {
         onAfterRendering: function () {
@@ -160,6 +166,15 @@ sap.ui.define([
 
     _configureFilterSuggestions: function () {
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      // ADR-002 (Returns_Single_App_Service_Profile) PR1: customerSalesArea/
+      // customerSalesAreaProperties and product/productProperties are both
+      // null on ReturnsSchema (live-confirmed, FLP sandbox 2026-10-27, _RET
+      // crashed here before this fix - Cannot read properties of null) -
+      // Provider and NDC filter suggestions have no equivalent source on this
+      // service profile yet (PR2 concern), so these two configs are only
+      // built when the profile actually declares them. filterProvider/
+      // filterNdc keep their plain Input behavior (no suggestions wired) for
+      // _RET in the meantime - no crash, no dead/silent suggestion list.
       var aConfigs = [
         {
           controlId: "filterProviderPin",
@@ -181,24 +196,28 @@ sap.ui.define([
           description: ServiceSchema.headerProperties.providerName,
           keyLabel: "colRequestId",
           descriptionLabel: "colProvider"
-        },
-        {
+        }
+      ];
+      if (ServiceSchema.entitySets.customerSalesArea && ServiceSchema.customerSalesAreaProperties) {
+        aConfigs.push({
           controlId: "filterProvider",
           entitySet: ServiceSchema.entitySets.customerSalesArea,
           key: ServiceSchema.customerSalesAreaProperties.customer,
           description: ServiceSchema.customerSalesAreaProperties.customerName,
           keyLabel: "providerHelpId",
           descriptionLabel: "providerHelpName"
-        },
-        {
+        });
+      }
+      if (ServiceSchema.entitySets.product && ServiceSchema.productProperties) {
+        aConfigs.push({
           controlId: "filterNdc",
           entitySet: ServiceSchema.entitySets.product,
           key: ServiceSchema.productProperties.id,
           description: ServiceSchema.productProperties.text,
           keyLabel: "productHelpProductId",
           descriptionLabel: "productHelpProduct"
-        }
-      ];
+        });
+      }
 
       aConfigs.forEach(function (oConfig) {
         this._configureFilterSuggestion(oConfig, oBundle);
@@ -233,6 +252,17 @@ sap.ui.define([
     // ValueListReferences (c_salesdocumentuservh F4 service), resolved by the meta model.
     _requestCreatedByValueList: function () {
       if (!this._oCreatedByValueListPromise) {
+        // ADR-002 PR1: f4Services.salesDocumentUser is null on ReturnsSchema
+        // (no equivalent F4 service confirmed yet - live-confirmed this
+        // synchronous read used to throw before entering the promise chain,
+        // which the .catch() in _configureFilterSuggestions() could not
+        // catch). Reject instead so the existing .catch() there handles it
+        // exactly like any other "no value list" outcome.
+        if (!ServiceSchema.f4Services || !ServiceSchema.f4Services.salesDocumentUser) {
+          this._oCreatedByValueListPromise = Promise.reject(
+            new Error("No salesDocumentUser F4 service configured for this service profile"));
+          return this._oCreatedByValueListPromise;
+        }
         var oTerms = ServiceSchema.valueListTerms;
         var sCreatedBy = ServiceSchema.headerProperties.createdBy;
         var sModelName = ServiceSchema.f4Services.salesDocumentUser.modelName;
@@ -1649,6 +1679,12 @@ sap.ui.define([
       if (!ServiceSchema.showJurisdictionFilter) {
         this.byId("filterJurisdiction").setEnabled(false);
         this.byId("filterJurisdiction").setTooltip(sTooltip);
+      }
+
+      // ADR-002 PR1: deliveryBlockReason has no equivalent on ReturnsSchema.
+      if (!ServiceSchema.entitySets.deliveryBlockReason) {
+        this.byId("filterDeliveryBlockReason").setEnabled(false);
+        this.byId("filterDeliveryBlockReason").setTooltip(sTooltip);
       }
     },
 
