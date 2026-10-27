@@ -5,8 +5,9 @@ sap.ui.define([
   "sap/m/ToolbarSpacer",
   "sap/m/Title",
   "sap/m/Button",
-  "sap/m/MessageToast"
-], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast) {
+  "sap/m/MessageToast",
+  "cdc/vaccreq/model/ServiceSchema"
+], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast, ServiceSchema) {
   "use strict";
 
   // Item Details view session prompt, Step-0: "prefer parameterizing the
@@ -171,11 +172,7 @@ sap.ui.define([
     }
 
     var that = this;
-    Fragment.load({
-      id: sId,
-      name: sFragment,
-      controller: this._oView.getController()
-    }).then(function (oContent) {
+    this._loadFragment(sId, sFragment).then(function (oContent) {
       // Fragments with more than one root control (e.g. a form plus a sibling
       // MessageStrip) resolve with an array - addContent only accepts one
       // control at a time.
@@ -186,6 +183,30 @@ sap.ui.define([
         that._fnOnContentLoaded(that._oView.getLocalId(sId) || sId, oPanel);
       }
     });
+  };
+
+  // ADR-002 (Returns_Single_App_Service_Profile) decision 3: a handful of
+  // sections (today: "details", "items") contain a few literal OData property
+  // names that differ between service profiles (e.g. {SalesOrder} vs
+  // {CustomerReturn}) and cannot be fixed by an orderUi visible toggle alone
+  // (Form FormElement visibility, unlike sap.m.Table column visibility, does
+  // NOT exclude the bound property from autoExpandSelect's $select). For
+  // those, the profile declares its own <name>.<profileId>.fragment.xml
+  // variant; every other profile (today: "orders") has no variant file and
+  // keeps using the shared <name>.fragment.xml. Fragment.load's resource
+  // fetch fails (404) BEFORE any control is instantiated, so retrying with
+  // the base name after a rejected variant load is safe - no partial/
+  // colliding controls are left behind under the shared `id: sId` prefix.
+  SectionFactory.prototype._loadFragment = function (sId, sFragment) {
+    var oController = this._oView.getController();
+    var sProfileId = ServiceSchema.profileId;
+    if (!sProfileId || sProfileId === "orders") {
+      return Fragment.load({ id: sId, name: sFragment, controller: oController });
+    }
+    return Fragment.load({ id: sId, name: sFragment + "." + sProfileId, controller: oController })
+      .catch(function () {
+        return Fragment.load({ id: sId, name: sFragment, controller: oController });
+      });
   };
 
   SectionFactory.prototype.rebind = function () {
