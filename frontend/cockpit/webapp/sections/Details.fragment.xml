@@ -359,7 +359,7 @@
 					</f:FormElement>
 
 					<!-- Return Orders session prompt 1.1/1.2/1.4/1.5: visible for _RET order
-						types only (OrderModeConfig.js ORDER_TYPES.ZISL/ZCFR/ZWST/ZKR, the
+						types only (OrderModeConfig.js ORDER_TYPES.ZISL/ZXFR/ZWST/ZKR, the
 						default - hidden explicitly for ZKB/ZREP). Return Type and Shipping
 						Cond. are code+text fields like Order Reason/ExIS ID above; ExIS Date
 						and No. of Boxes are plain header properties with no FieldControl in

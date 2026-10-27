@@ -26,6 +26,7 @@ server:
         backend:
           - path: /sap
             url: https://sapapp2dh1.cdc.gov:44300
+            client: "300"
           - path: /resources
             url: https://sapapp2dh1.cdc.gov:44300/sap/public/bc/ui5_ui5
     - name: sap-fe-mockserver

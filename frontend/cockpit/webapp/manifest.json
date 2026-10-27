@@ -15,6 +15,13 @@
                     "localUri": "localService/metadata.xml"
                 }
             },
+            "returnsService": {
+                "uri": "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd/sap/ui_customerreturnmanage/0001/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
+            },
             "providerOrderService": {
                 "uri": "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
                 "type": "OData",
@@ -79,26 +86,6 @@
                 "type": "sap.ui.model.resource.ResourceModel",
                 "settings": {
                     "bundleName": "cdc.vaccreq.i18n.i18n"
-                }
-            },
-            "": {
-                "dataSource": "mainService",
-                "preload": true,
-                "settings": {
-                    "operationMode": "Server",
-                    "autoExpandSelect": true,
-                    "groupId": "$auto",
-                    "groupProperties": {
-                        "vrEdit": {
-                            "submit": "API"
-                        },
-                        "vrCreate": {
-                            "submit": "API"
-                        },
-                        "vrCreateReplay": {
-                            "submit": "API"
-                        }
-                    }
                 }
             },
             "po": {

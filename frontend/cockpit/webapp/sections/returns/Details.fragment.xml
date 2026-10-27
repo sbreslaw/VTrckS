@@ -1,0 +1,804 @@
+<core:FragmentDefinition 
+  xmlns="sap.m" 
+  xmlns:core="sap.ui.core" 
+  xmlns:f="sap.ui.layout.form" 
+  xmlns:l="sap.ui.layout">
+	<!-- ADR-002 (Returns_Single_App_Service_Profile) decision 3: profile-
+			selected sub-fragment variant - loaded instead of the plain
+			Details.fragment.xml by SectionFactory.js when ServiceSchema.profileId
+			is "returns". Keep this file IDENTICAL to Details.fragment.xml except
+			for the 2 literal OData-name hazards (header key, order reason) -
+			diff it against that file whenever Details.fragment.xml changes. -->
+	<!-- v5 Required Fix 4 (design/E008_CRUD1_v5_Sticky_Amendment.md): adding a
+			new editable createMode field to this fragment requires adding its
+			property name to ServiceSchema.updatableHeaderProperties -
+			createReplayHeaderProperties is auto-derived from that list
+			(ServiceSchema.js), so there is nothing else to keep in sync. -->
+	<f:Form width="auto" editable="{sectionFlags>/details/editing}">
+		<f:layout>
+			<f:ResponsiveGridLayout 
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2"
+				columnsL="2"
+				columnsM="1"
+				singleContainerFullSize="false"
+			/>
+		</f:layout>
+
+		<f:formContainers>
+			<f:FormContainer title="{i18n>detailsGeneral}">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{parts: [{path: 'i18n>detailRequestIdTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- ADR-002 hazard #1: header key is CustomerReturn on this
+								service (OrdersSchema/ReturnsSchema keys.orderId), not
+								SalesOrder. -->
+							<Text text="{CustomerReturn}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<!-- Live-test (exceptions.txt 2026-10-27): ZOrdDesc removed - confirmed
+						genuinely absent on CustomerReturnManageType (ReturnsSchema.js
+						headerProperties.description: null, "no free-text header description
+						field"), no Returns equivalent exists. This literal was copied
+						unchanged from the shared Orders fragment and crashed
+						autoExpandSelect on every Returns Detail navigation. -->
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>providerId}" required="{sectionFlags>/createMode}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- CRUD Task 1 v4: merges the old Provider ID/Provider Name
+								fields into one "Provider" field that always displays the
+								provider NAME. Create-only editable (SoldToParty is not in
+								updatableHeaderProperties - the backend rejects changing
+								the customer on an existing order). Value Help queries the
+								live CustomerSalesArea entity set, filtered to the fixed
+								salesArea triplet (design/prompts/E008_CRUD1_Fix_Sequencing
+								_Prompt.md); the picker sets the real SoldToParty code on
+								the transient context, createEnrich>/providerName+
+								/providerAddress are display-only mirrors of the picked
+								row (see Detail.controller.js#onProviderValueHelpRequest). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<!-- Live-test (exceptions.txt 2026-10-27): CustomerName is the Orders-only
+									 literal, copied unchanged from the shared fragment - confirmed absent
+									 on CustomerReturnManageType. Real Returns equivalent is SoldToPartyName
+									 (ServiceSchema.headerProperties.providerName). -->
+								<Text text="{SoldToPartyName}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input id="providerInput"
+									value="{path: 'createEnrich>/providerName', mode: 'sap.ui.model.BindingMode.OneWay'}"
+									showValueHelp="true"
+									showSuggestion="true"
+									filterSuggests="false"
+									startSuggestion="2"
+									editable="{= !%{createEnrich>/providerName} }"
+									visible="{sectionFlags>/createMode}"
+									tooltip="{i18n>providerLockedTooltip}"
+									valueHelpRequest=".onProviderValueHelpRequest"
+									suggest=".onProviderSuggest"
+									suggestionItemSelected=".onProviderSuggestionSelected"
+									change=".onProviderChange">
+									<!-- Live-test follow-up: suggestionItems is no longer declared
+										 here - a static nested aggregation with an absolute path
+										 polluted the header context's own autoExpandSelect with a
+										 bogus "Customer" property (confirmed live) - now bound
+										 lazily by Detail.controller.js#onProviderSuggest on first use. -->
+								</Input>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement  visible="{= ${orderUi>/fields/providerAddress/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>providerAddress}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- CRUD Task 1 v4: non-create-mode address sourced from
+								_ShipToParty (HeaderShipToPartyType) - the real per-order
+								ship-to snapshot, unrelated to the Provider picker (which
+								queries CustomerSalesArea, no FormattedPostalAddressDesc
+								field there) - read-only in every mode; in createMode the
+								order has no backend context yet, so the address mirrors
+								whatever the VH picker returned
+								(createEnrich>/providerAddress). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Text text="{createEnrich>/providerAddress}" visible="{sectionFlags>/createMode}"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/contact/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>contact}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Session Prompt (Detail View Adjustments) 3.5: rewired to a
+								real VH dialog against the new custom service's
+								po>/ProviderContact entity set (ServiceSchema.
+								providerOrderService), filtered server-side to the
+								selected Provider's BusinessPartnerCompany and
+								client-side to currently-valid rows (ValidityStartDate/
+								EndDate) - replaces the old free-text Input (the prior
+								StandardPartnerContactInfo VH source 501'd on any
+								standalone query). Locked until a Provider is picked;
+								prefilled from the current IsStandardRelationship contact
+								when the Provider changes and still overridable through the
+								value help. Contact
+								persistence back to the order is still pending (no
+								confirmed write path this session) - see
+								OPEN_QUESTIONS.md. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{detailContact>/name}" tooltip="{detailContact>/tooltip}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input id="contactInput"
+									value="{createEnrich>/contactName}"
+									showValueHelp="true"
+									editable="true"
+									enabled="{createState>/providerChosen}"
+									visible="{sectionFlags>/createMode}"
+									valueHelpRequest=".onContactValueHelpRequest"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/employeeResponsible/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>colEmployeeResponsible}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Stub Value Help based on SAP user name (USR02) - hardcoded
+								picker for now; defaults to the current user
+								(sap.ushell.Container UserInfo service) on entering
+								createMode, local-only until the enrichment action is live.
+								v5 UX phasing: locked until a Provider is picked. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<!-- Live-test (exceptions.txt 2026-10-27): _SoldToPartyContactInfo nav
+									 confirmed absent (ReturnsSchema.js navigation.headerToContactInfo:
+									 null) - no Employee Responsible display value exists for Returns.
+									 Field now also hidden via OrderModeConfig RETURNS_UI_HIDDEN.fields.
+									 employeeResponsible, but the binding itself must still be removed
+									 (visible=false does not exclude it from the header's own
+									 autoExpandSelect $select). -->
+								<Text text="" visible="{= !${sectionFlags>/createMode} }"/>
+								<Input
+									value="{createEnrich>/employeeResponsibleName}"
+									showValueHelp="true"
+									editable="false"
+									visible="{sectionFlags>/createMode}"
+									enabled="{createState>/providerChosen}"
+									valueHelpRequest=".onEmployeeResponsibleValueHelpRequest"
+									tooltip="{i18n>createEnrichmentUnavailable}"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/priority/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>filterPriority}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Live-test (exceptions.txt 2026-10-27): ShippingType/_ShippingType nav
+								 confirmed absent (ReturnsSchema.js headerProperties.priority: null,
+								 no Priority concept on CustomerReturnManageType). Field already hidden
+								 via RETURNS_UI_HIDDEN.fields.priority, but the literal bindings must
+								 still be removed (visible=false on this FormElement does not exclude
+								 them from the header's own autoExpandSelect $select). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="" visible="{= !${sectionFlags>/details/editing} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>category}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Read-only in every mode (user request 2026-10-16). Create still seeds and replays
+								ServiceSchema.defaultCategory; text resolves via orderUi>/category/options. -->
+							<Text
+								text="{parts: [{path: 'CustomerPurchaseOrderType'}, {path: 'orderUi>/category/options'}], formatter: '.formatter.categoryText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
+				</f:formElements>
+			</f:FormContainer>
+
+<!-- STATUS -->
+
+			<f:FormContainer title="">
+				<f:formElements>
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>colStatus}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- One Select for both modes, items from the live po>/OrderStatus
+								VH (filtered by order type, Detail.controller.js#_loadOrderStatusVH).
+								Change-Mode writes straight through to UserStatusDerived
+								(.onDetailStatusChange); createMode only buffers into
+								createEnrich>/status - status derivation on create is still part
+								of the not-yet-built enrichment action per ADDENDUM-001, so the
+								selection there stays local-only until that action exists. -->
+							<!-- Live-test (exceptions.txt 2026-10-27): UserStatusDerived confirmed
+								 absent on CustomerReturnManageType (ReturnsSchema.js headerProperties.
+								 userStatus: null) - Returns' own status concept is the direct
+								 OverallSDProcessStatus/_Text property (statusProperties), which has no
+								 user-settable Change-Mode equivalent and no onDetailStatusChange
+								 write-path for this profile, so the Select is read-only-only here
+								 (always shown, never in edit mode). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{OverallSDProcessStatus_Text}"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>filterExisId}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{PurchaseOrderByCustomer}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input value="{path: 'PurchaseOrderByCustomer', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="30" visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisId/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<!-- Return Orders session prompt 1.1/1.2/1.4/1.5: visible for _RET order
+						types only (OrderModeConfig.js ORDER_TYPES.ZISL/ZXFR/ZWST/ZKR, the
+						default - hidden explicitly for ZKB/ZREP). Return Type and Shipping
+						Cond. are code+text fields like Order Reason/ExIS ID above; ExIS Date
+						and No. of Boxes are plain header properties with no FieldControl in
+						the metadata (so.xml 2026-10-23). -->
+					<f:FormElement visible="{= ${orderUi>/fields/detailsReturnType/visible} !== false }">
+						<f:label>
+							<Label text="{parts: [{path: 'i18n>detailsReturnTypeTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<!-- VaccineReturnType is a po>-model, read-only-EntitySet fixed value
+									list (not per-order-type) - loaded once into the JSON
+									returnTypes>/list model (Detail.controller.js#_loadReturnTypeVH,
+									mirroring _loadRejectionReasonVH) rather than bound live, both to
+									avoid autoExpandSelect $select pollution risk on the header's own
+									default-model binding and to avoid a second live request per field. -->
+								<Text text="{parts: [{path: 'SpecialProcessingCode'}, {path: 'returnTypes>/list'}], formatter: '.formatter.categoryText'}"
+									visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{SpecialProcessingCode}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsReturnType/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{returnTypes>/list}">
+									<core:Item key="{returnTypes>key}" text="{returnTypes>text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/orderReason/visible} !== false }">
+						<f:label>
+							<!-- Return Orders session prompt 4.2: typed title ("Vaccine Return reason")
+								when an order type is known, falling back to the plain i18n>otherReason text
+								otherwise (formatter.formatText returns "" for a falsy pattern). -->
+							<Label text="{parts: [{path: 'i18n>detailsOrderReasonTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- ADR-002 hazard #2: order reason is ReturnsOrderReason /
+								_ReturnsOrderReason / entity set ReturnsOrderReason on this
+								service (ReturnsSchema.headerProperties.orderReasonCode/
+								orderReasonText, navigation.headerToOrderReason,
+								entitySets.orderReason), not SDDocumentReason. -->
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+								unaffected outside createMode (normal Change-Mode editing). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_ReturnsOrderReason/ReturnsOrderReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{ReturnsOrderReason}"
+									visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/ReturnsOrderReason'}">
+									<core:Item key="{ReturnsOrderReason}" text="{ReturnsOrderReason_Text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>colCreatedAt}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisDate/visible} !== false }">
+						<f:label>
+							<Label text="{parts: [{path: 'i18n>detailsExisDateTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<DatePicker
+									width="100%"
+									value="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisDate/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<!-- RESTORED (2026-10-27 metadata re-audit): CustomerPurchaseOrderSuplmnt
+						IS real on CustomerReturnManageType - a prior round this session wrongly
+						removed this FormElement assuming the property was absent (based on the
+						OLDER 2026-10-26 metadata, which omitted it). Same Edm.String(4)->StepInput
+						OneWay+formatter+explicit-change-handler pattern as the orders-side
+						Details.fragment.xml (Return Orders session prompt 1.3). -->
+					<f:FormElement visible="{= ${orderUi>/fields/detailsNoOfBoxes/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsNoOfBoxes}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL3 L3 M3 S12"/>
+								</layoutData>
+								<Text text="{CustomerPurchaseOrderSuplmnt}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<StepInput
+									width="100%"
+									value="{path: 'CustomerPurchaseOrderSuplmnt', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
+									min="1"
+									max="25"
+									step="1"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsNoOfBoxes/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									change=".onNoOfBoxesChange"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
+<!-- SPACER -->
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text=" " required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsShippingCondition/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsShippingCondition}" required="false">
+								<layoutData>
+									<l:GridData span="XL2 L2 M2 S12" linebreak="false"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Shown here for _RET order types only (Return Orders session
+								prompt 1.4.1); ZKB/ZREP still show this same field in
+								Shipping.fragment.xml instead (that FormElement's visibility is
+								the logical inverse of this flag - see its comment there). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL3 L3 M3 S12"/>
+								</layoutData>
+								<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{ShippingCondition}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/ShippingCondition'}">
+									<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsLabelAddress/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsLabelAddress}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- BLOCKED-BY-SERVICE (Return Orders session prompt 1.5): no backend
+								field/VH was supplied for this request - see OPEN_QUESTIONS.md.
+								Disabled placeholder only, same "editable=false + tooltip"
+								convention as the Employee Responsible createMode field above
+								(i18n>createEnrichmentUnavailable). -->
+							<Input value="" editable="false" tooltip="{i18n>availableWithE008Service}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/netValue/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>netValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<!-- Live-test (exceptions.txt 2026-10-27): ZZ_NET_VALUE_SDH is the
+								 Orders-only literal - confirmed absent on CustomerReturnManageType.
+								 Real Returns equivalent is TotalNetAmount (ReturnsSchema.js
+								 headerProperties.netValue). Field stays hidden for _RET regardless
+								 (RETURNS_UI_HIDDEN.fields.netValue). -->
+							<ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/taxAmount/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>taxAmount}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<!-- Session Prompt (Detail View Adjustments) 3.3: still no
+								header-level Tax field (TaxAmount only exists on
+								SalesOrderItemType, ServiceSchema.itemProperties.taxAmount) -
+								this is a client-side SUM of every item's TaxAmount, read-only,
+								never part of any create/edit payload
+								(Detail.controller.js#_computeHeaderTaxAmount). Recomputed on
+								load and whenever the Items table's data changes. -->
+							<ObjectNumber number="{headerCalc>/taxAmount}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/grossValue/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>grossValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<!-- Live-test (exceptions.txt 2026-10-27): ZZ_GROSS_VALUE_SDH confirmed
+								 absent on CustomerReturnManageType (ReturnsSchema.js headerProperties.
+								 grossAmount: null, no equivalent exists) - field stays hidden for
+								 _RET regardless (RETURNS_UI_HIDDEN.fields.grossValue). -->
+							<ObjectNumber number="" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+					</f:FormElement>
+
+
+				</f:formElements>
+			</f:FormContainer>
+
+<!-- DATES -->
+
+			<!-- <f:FormContainer title="{i18n>detailsDates}">
+				<f:formElements>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsCreatedAt/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>colCreatedAt}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: 'CreationDate', formatter: '.formatter.detailCreatedAt'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer> -->
+
+<!-- NOTES -->
+
+			<f:FormContainer title="{i18n>detailsNotes}" visible="{= ${orderUi>/fields/notes/visible} !== false }">
+				<!-- Full row; label/field spans halved so they align with the half-width containers above. -->
+				<f:layoutData>
+					<l:GridData span="XL12 L12 M12 S12" linebreak="true"/>
+				</f:layoutData>
+				<f:formElements>
+					<f:FormElement>
+						<!-- <f:label>
+							<Label text="{i18n>detailsNotes}" required="false">
+								<layoutData>
+									<l:GridData span="XL2 L2 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label> -->
+
+						<f:fields>
+						<!-- Header notes map to _Text/LongText for ZVRH. The local model
+							buffers the value until Create Save or Details section Save. -->
+						<TextArea rows="3" width="100%"
+							value="{createEnrich>/notes}"
+							editable="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }">
+							<layoutData>
+								<l:GridData span="XL12 L12 M12 S12"/>
+							</layoutData>
+						</TextArea>
+						</f:fields>
+					</f:FormElement>
+				</f:formElements>
+			</f:FormContainer>
+
+<!-- VALUES -->
+
+			<!-- <f:FormContainer title="{i18n>detailsValue}" visible="{= ${orderUi>/fieldGroups/detailsValue/visible} !== false }">
+				<f:formElements>
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>netValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{ZZ_NET_VALUE_SDH}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>taxAmount}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{headerCalc>/taxAmount}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>grossValue}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<ObjectNumber number="{ZZ_GROSS_VALUE_SDH}" unit="{TransactionCurrency}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ObjectNumber>
+						</f:fields>
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer> -->
+
+		</f:formContainers>
+	</f:Form>
+
+</core:FragmentDefinition>
+
+

@@ -395,20 +395,28 @@ sap.ui.define([
         });
       var aRows = aContexts.map(function (oCtx) {
         return {
-          optOut: oCtx.getProperty(ServiceSchema.itemProperties.optOutAncillary),
+          // ADR-002 PR1: optOutAncillary/brand/fundType/expirationDate/
+          // itemToDeliveryStatus+deliveryStatusText are all null on
+          // ReturnsSchema (columns already hidden via orderUi for _RET, but
+          // this export builds every row's data regardless of column
+          // visibility) - getProperty on a null/"null/null" path throws or
+          // 404s, so guard each one.
+          optOut: ServiceSchema.itemProperties.optOutAncillary ? oCtx.getProperty(ServiceSchema.itemProperties.optOutAncillary) : "",
           itemNumber: oCtx.getProperty(ServiceSchema.itemProperties.itemNumber),
           exisId: oCtx.getProperty(ServiceSchema.itemProperties.exisId),
-          brand: oCtx.getProperty(ServiceSchema.itemProperties.brand),
+          brand: ServiceSchema.itemProperties.brand ? oCtx.getProperty(ServiceSchema.itemProperties.brand) : "",
           ndcCode: oCtx.getProperty(ServiceSchema.itemProperties.material),
           ndcDescription: oCtx.getProperty(ServiceSchema.itemProperties.itemText),
           qty: oCtx.getProperty(ServiceSchema.itemProperties.quantity),
           uom: oCtx.getProperty(ServiceSchema.itemProperties.unit),
           orderIntention: "\u2014",
-          fundType: oCtx.getProperty(ServiceSchema.itemProperties.fundType),
+          fundType: ServiceSchema.itemProperties.fundType ? oCtx.getProperty(ServiceSchema.itemProperties.fundType) : "",
           poReference: "\u2014",
           lotNumber: oCtx.getProperty(ServiceSchema.itemProperties.batch),
-          expirationDate: oCtx.getProperty(ServiceSchema.itemProperties.expirationDate),
-          deliveryStatus: oCtx.getProperty(ServiceSchema.navigation.itemToDeliveryStatus + "/" + ServiceSchema.itemProperties.deliveryStatusText),
+          expirationDate: ServiceSchema.itemProperties.expirationDate ? oCtx.getProperty(ServiceSchema.itemProperties.expirationDate) : "",
+          deliveryStatus: (ServiceSchema.navigation.itemToDeliveryStatus && ServiceSchema.itemProperties.deliveryStatusText)
+            ? oCtx.getProperty(ServiceSchema.navigation.itemToDeliveryStatus + "/" + ServiceSchema.itemProperties.deliveryStatusText)
+            : "",
           netValue: oCtx.getProperty(ServiceSchema.itemProperties.netAmount),
           rejectionReason: mRejectionText[oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)] || ""
         };
@@ -564,10 +572,13 @@ sap.ui.define([
     _prepareShippingEdit: function (oContext) {
       var oShipTo = ServiceSchema.shipToPartyProperties;
       var oEditModel = this.getView().getModel("shippingEdit");
+      // ADR-002 PR1: shipToPartyProperties.addressId is null on ReturnsSchema
+      // ("no AddressID property documented") - requesting a property path
+      // built from a null segment 404s, so only request it when it exists.
       Promise.all([
         oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.id),
         oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.fullName),
-        oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.addressId),
+        oShipTo.addressId ? oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.addressId) : Promise.resolve(undefined),
         oContext.requestProperty(ServiceSchema.navigation.headerToShipToParty + "/" + oShipTo.address),
         oContext.requestProperty("PartnerDeterminationProcedure")
       ]).then(function (aValues) {
@@ -581,6 +592,17 @@ sap.ui.define([
 
     _loadShippingAddresses: function (sProviderId, sProcedure, oCurrentAddress) {
       var oSchema = ServiceSchema.shippingAddressValueHelp;
+      var oEditModel = this.getView().getModel("shippingEdit");
+      // ADR-002 PR1: "No C_SDCustomerAddressVH-equivalent confirmed on this
+      // service" (ReturnsSchema.js) - without it there's no alternate-address
+      // lookup to run; show just the order's own current address and stop,
+      // instead of dereferencing null oSchema.properties/entitySet.
+      if (!oSchema) {
+        var aCurrent = oCurrentAddress && oCurrentAddress.id ? [oCurrentAddress] : [];
+        oEditModel.setProperty("/addresses", aCurrent);
+        oEditModel.setProperty("/busy", false);
+        return Promise.resolve(aCurrent);
+      }
       var oProps = oSchema.properties;
       var oEditModel = this.getView().getModel("shippingEdit");
       var iRequest = (this._iShippingAddressRequest || 0) + 1;
@@ -633,7 +655,8 @@ sap.ui.define([
         oContext.requestProperty("PartnerDeterminationProcedure").then(function (sProcedure) {
           return that._loadShippingAddresses(oItem.id, sProcedure);
         }).then(function (aAddresses) {
-          if (aAddresses && aAddresses.length) {
+          // ADR-002 PR1: addressId is null on ReturnsSchema - nothing to write back.
+          if (aAddresses && aAddresses.length && ServiceSchema.shipToPartyProperties.addressId) {
             oContext.setProperty(ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.addressId, aAddresses[0].id);
           }
         });
@@ -781,7 +804,10 @@ sap.ui.define([
       var iRequest = (this._iContactRequest || 0) + 1;
       this._iContactRequest = iRequest;
       oContactModel.setData({ name: "", tooltip: "" });
-      if (!sOrderId) {
+      // ADR-002 PR1: same absent-AP-partner-contact concept as Master.controller.js's
+      // _loadVisibleMasterContacts - contactPartnerFunction/contactPerson/phone/email
+      // are all null on ReturnsSchema (Parties reads 500 on this service).
+      if (!sOrderId || !ServiceSchema.contactPartnerFunction) {
         return;
       }
       var oBinding = this.getOwnerComponent().getModel().bindList("/" + ServiceSchema.entitySets.headerPartner, undefined, undefined, [
@@ -1029,6 +1055,11 @@ sap.ui.define([
       var oRowContext = oInput.getBindingContext();
       var sKey = "ndc:" + (oRowContext ? oRowContext.getPath() : "");
       this._debounce(sKey, function () {
+        // ADR-002 PR1: productProperties/entitySets.product are null on
+        // ReturnsSchema - no NDC/Product lookup wired yet (PR2 concern).
+        if (!ServiceSchema.productProperties) {
+          return;
+        }
         var oProps = ServiceSchema.productProperties;
         var oBinding = oInput.getBinding("suggestionItems");
         if (!oBinding) {
@@ -1102,6 +1133,14 @@ sap.ui.define([
         return Promise.resolve(false);
       }
       oInput.setValue(sValue);
+      // ADR-002 PR1: productProperties/entitySets.product are null on
+      // ReturnsSchema - no NDC/Product lookup wired yet (PR2 concern). Revert
+      // the input rather than throwing building the lookup binding below.
+      if (!ServiceSchema.productProperties) {
+        oInput.setValue(sPreviousNdc);
+        this._setNdcValueState(oInput, true);
+        return Promise.resolve(false);
+      }
       var oLookupBinding = oRowContext.getModel().bindList(
         "/" + ServiceSchema.entitySets.product, undefined, undefined,
         [new Filter(oProps.id, FilterOperator.EQ, sValue)],
@@ -1209,8 +1248,10 @@ sap.ui.define([
       sNdc = sNdc === undefined
         ? oRowContext.getProperty(ServiceSchema.itemProperties.material)
         : sNdc;
+      // itemProperties.orderIntention is null on ReturnsSchema (absent field) - getProperty(null)
+      // resolves to the row's own entity path, not a primitive, and throws.
       sOrderIntention = sOrderIntention === undefined
-        ? oRowContext.getProperty(ServiceSchema.itemProperties.orderIntention)
+        ? (ServiceSchema.itemProperties.orderIntention ? oRowContext.getProperty(ServiceSchema.itemProperties.orderIntention) : undefined)
         : sOrderIntention;
       var sFilterKey = [oRowContext.getPath(), sNdc || "", sOrderIntention || ""].join("|");
       if (oSelect.data("fundTypeFilterKey") === sFilterKey) {
@@ -2334,6 +2375,12 @@ sap.ui.define([
       var that = this;
       var oModel = this.getView().getModel();
       function lookup(sEntitySet, sKeyProperty, sKeyValue) {
+        // ADR-002 PR1: deliveryStatus/deliveryBlockStatus entity sets+header
+        // properties+defaults are all null on ReturnsSchema (no equivalent
+        // confirmed on this service) - a null sEntitySet builds path "/null".
+        if (!sEntitySet || !sKeyProperty) {
+          return Promise.resolve("");
+        }
         var oBinding = oModel.bindList(
           "/" + sEntitySet, undefined, undefined,
           [new Filter(sKeyProperty, FilterOperator.EQ, sKeyValue)],
@@ -2471,6 +2518,14 @@ sap.ui.define([
     // the real CreateWithSalesOrderType params (see
     // Detail.controller.js#onProviderValueHelpRequest / CreateOrderService.js#save).
     _openShipToPartyValueHelpDialog: function (sTitle, fnApply) {
+      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
+      // customerSalesArea are all null on ReturnsSchema (no confirmed
+      // equivalent entity set on this service) - building this dialog would
+      // throw synchronously. No functional Returns equivalent yet (PR2).
+      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea || !ServiceSchema.entitySets.customerSalesArea) {
+        MessageToast.show(this.getResourceBundle().getText("valueHelpNotAvailable"));
+        return;
+      }
       var oProps = ServiceSchema.customerSalesAreaProperties;
       var oArea = ServiceSchema.salesArea;
       var aAreaFilters = [
@@ -2539,6 +2594,13 @@ sap.ui.define([
 
     _openProviderValueHelpDialog: function (fnApply) {
       var oBundle = this.getResourceBundle();
+      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
+      // customerSalesArea are all null on ReturnsSchema - no functional
+      // Returns equivalent yet (PR2). Fail gracefully instead of throwing.
+      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea || !ServiceSchema.entitySets.customerSalesArea) {
+        MessageToast.show(oBundle.getText("valueHelpNotAvailable"));
+        return;
+      }
       var oProps = ServiceSchema.customerSalesAreaProperties;
       var oArea = ServiceSchema.salesArea;
       var sSearchMode = ProviderSearchService.defaultMode;
@@ -2951,6 +3013,13 @@ sap.ui.define([
     // UOM can go back to being read-only.
     _openProductValueHelpDialog: function (sTitle, fnApply) {
       var oBundle = this.getResourceBundle();
+      // ADR-002 PR1: productProperties/entitySets.product are null on
+      // ReturnsSchema (no confirmed Product/NDC entity set on this service
+      // yet - PR2 concern). Fail gracefully instead of throwing.
+      if (!ServiceSchema.productProperties) {
+        MessageToast.show(oBundle.getText("valueHelpNotAvailable"));
+        return;
+      }
       var oProps = ServiceSchema.productProperties;
       var aFields = [
         { path: oProps.id, labelKey: "productHelpProductId" },
@@ -3157,9 +3226,12 @@ sap.ui.define([
       var oShippingEditModel = this.getView().getModel("shippingEdit");
       var sDefaultAddressKey = "__providerDefault:" + oItem.id;
       oShippingEditModel.setProperty("/createAddressKey", "");
+      // ADR-002 PR1: shippingAddressValueHelp is null on ReturnsSchema - the
+      // whole object, not just a leaf, so .createPartnerDeterminationProcedure
+      // would throw synchronously before _loadShippingAddresses even runs.
       this._loadShippingAddresses(
         oItem.id,
-        ServiceSchema.shippingAddressValueHelp.createPartnerDeterminationProcedure,
+        ServiceSchema.shippingAddressValueHelp ? ServiceSchema.shippingAddressValueHelp.createPartnerDeterminationProcedure : undefined,
         { id: sDefaultAddressKey, address: oItem.address }
       ).then(function (aAddresses) {
         if (aAddresses) {
@@ -3522,6 +3594,12 @@ sap.ui.define([
       var sValue = oEvent.getParameter("suggestValue");
       var oInput = oEvent.getSource();
       this._debounce("provider", function () {
+        // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
+        // customerSalesArea are all null on ReturnsSchema - no functional
+        // Returns equivalent yet (PR2).
+        if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea) {
+          return;
+        }
         var oProps = ServiceSchema.customerSalesAreaProperties;
         var oArea = ServiceSchema.salesArea;
         var oBinding = oInput.getBinding("suggestionItems");
@@ -3594,6 +3672,12 @@ sap.ui.define([
       var sConfirmed = this.getView().getModel("createEnrich").getProperty("/providerName");
       if (!sValue || sValue === sConfirmed) {
         this._setProviderValueState(true);
+        return;
+      }
+      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
+      // customerSalesArea are all null on ReturnsSchema - no functional
+      // Returns equivalent yet (PR2).
+      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea) {
         return;
       }
       var oProps = ServiceSchema.customerSalesAreaProperties;
@@ -3718,7 +3802,11 @@ sap.ui.define([
       // read) back into the row on every field edit - reduces how often the
       // allocation-cache reapply above is even needed, doesn't replace it
       // (the create POST itself still unavoidably returns a representation).
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.ZZ_FIELDS).join(",") });
+      // ADR-002 PR1: FundLogicService.ZZ_FIELDS (the six ZZ*QTY mirrors) are
+      // all null/undefined on ReturnsSchema (order-specific custom fields,
+      // no Returns equivalent) - filter before join, or a null entry becomes
+      // an empty $select segment (trailing/duplicate commas, parser error).
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.ZZ_FIELDS.filter(function (sField) { return !!sField; })).join(",") });
       oTable.bindItems(oBindingInfo);
       // bindItems() always creates a fresh binding instance - re-attach here
       // (see _onItemCreateActivate) rather than relying on one set up once.
@@ -3924,7 +4012,10 @@ sap.ui.define([
     _computeHeaderTaxAmount: function () {
       var oContext = this.getView().getBindingContext();
       var oCalcModel = this.getView().getModel("headerCalc");
-      if (!oContext || (oContext.isTransient && oContext.isTransient())) {
+      if (!oContext || (oContext.isTransient && oContext.isTransient()) || !ServiceSchema.itemProperties.taxAmount) {
+        // ADR-002 PR1: itemProperties.taxAmount is null on ReturnsSchema (no
+        // equivalent item-level tax field confirmed on this service) -
+        // $select with a null property name 400s/parse-errors.
         oCalcModel.setProperty("/taxAmount", 0);
         return;
       }
@@ -4352,7 +4443,7 @@ sap.ui.define([
       this._setCreateMode(false);
       var sHeaderSelect = ["SAP__Messages", ServiceSchema.headerProperties.salesOrderType].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
         return ServiceSchema.updatableHeaderProperties[sKey];
-      })).join(",");
+      })).filter(function (sProp) { return !!sProp; }).join(",");
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
@@ -4406,6 +4497,13 @@ sap.ui.define([
     // provider has no row for that exact sales area, fall back to its first row
     // (a provider may legitimately exist under a different sales area).
     _preselectProvider: async function (sProviderId) {
+      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
+      // customerSalesArea are all null on ReturnsSchema - skip the deep-link
+      // preselection lookup entirely rather than throwing (no functional
+      // Returns equivalent yet, PR2).
+      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea || !ServiceSchema.entitySets.customerSalesArea) {
+        return;
+      }
       const oView = this.getView();
       const oContext = oView.getBindingContext();
       const oBundle = this.getResourceBundle();
@@ -4632,6 +4730,21 @@ sap.ui.define([
         return;
       }
 
+      oOrderUiModel.setProperty("/category", {
+        limited: false,
+        options: []
+      });
+
+      // ADR-002 PR1: entitySets.customerPurchaseOrderType and its value-help
+      // properties are null on ReturnsSchema (no Category concept confirmed
+      // on this service) - concatenating null $select segments with "+"
+      // produced a literal "$select=null,null" that the OData V4 parser
+      // rejects (live-confirmed SyntaxError on every Detail navigation).
+      // Leave /category/options empty for this profile instead of querying.
+      if (!ServiceSchema.entitySets.customerPurchaseOrderType) {
+        return;
+      }
+
       // Component model: _applyOrderUi also runs from onInit, before view model propagation.
       var oListBinding = this.getOwnerComponent().getModel().bindList(
         "/" + ServiceSchema.entitySets.customerPurchaseOrderType,
@@ -4640,11 +4753,6 @@ sap.ui.define([
         undefined,
         { $select: ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode + "," + ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText }
       );
-
-      oOrderUiModel.setProperty("/category", {
-        limited: false,
-        options: []
-      });
 
       oListBinding.requestContexts(0, 100).then(function (aContexts) {
         var aServiceOptions = aContexts.map(function (oContext) {
@@ -4748,22 +4856,34 @@ sap.ui.define([
       oView.byId("detailTitle").bindProperty("text", {
         parts: [
           { path: ServiceSchema.keys.orderId },
-          { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName },
+          // ADR-002 PR1: navigation.headerToContactInfo/contactProperties.fullName
+          // are both null on ReturnsSchema - a literal "null/null" path 404s
+          // ("Resource not found for segment 'null'"). Fall back to a JSON
+          // model path that always resolves to undefined (no OData request).
+          (ServiceSchema.navigation.headerToContactInfo && ServiceSchema.contactProperties.fullName)
+            ? { path: ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.fullName }
+            : { path: "orderUi>/noContact" },
           { path: "orderUi>/title" },
           { path: "orderUi>/title" }
         ],
         formatter: formatter.detailTitle.bind(formatter)
       });
 
+      // ADR-002 PR1: headerProperties.userStatus is null on ReturnsSchema (no
+      // user-settable status concept on CustomerReturnManageType) - passing a
+      // null path straight to bindProperty throws synchronously inside UI5's
+      // BindingInfo.extractModelName ("Cannot read properties of null
+      // (reading 'indexOf')"), live-confirmed on every Returns Detail
+      // navigation (exceptions.txt 2026-10-27). Same fallback pattern as the
+      // detailTitle contact-info binding above: a JSON model path that always
+      // resolves to undefined when there's nothing real to bind.
       oView.byId("detailStatus")
-        .bindProperty("text", {
-          path: ServiceSchema.headerProperties.userStatus,
-          formatter: formatter.detailStatusText.bind(formatter)
-        })
-        .bindProperty("status", {
-          path: ServiceSchema.headerProperties.userStatus,
-          formatter: formatter.detailStatusState.bind(formatter)
-        });
+        .bindProperty("text", ServiceSchema.headerProperties.userStatus
+          ? { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.detailStatusText.bind(formatter) }
+          : { path: "orderUi>/noContact" })
+        .bindProperty("status", ServiceSchema.headerProperties.userStatus
+          ? { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.detailStatusState.bind(formatter) }
+          : { path: "orderUi>/noContact" });
 
       oView.byId("detailCreatedOnBy").bindProperty("text", {
         parts: [
