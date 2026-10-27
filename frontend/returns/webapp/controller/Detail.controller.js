@@ -13,21 +13,32 @@ sap.ui.define([
   "sap/ui/core/mvc/Controller",
   "sap/ui/core/Messaging",
   "sap/ui/core/Fragment",
+  "sap/ui/core/Item",
+  "sap/ui/core/ListItem",
   "sap/ui/model/json/JSONModel",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator",
   "sap/m/MessagePopover",
   "sap/m/MessageItem",
+  "sap/m/MessageToast",
+  "sap/m/MessageBox",
   "sap/m/ColumnListItem",
   "sap/m/Text",
   "sap/m/CheckBox",
+  "sap/m/SelectDialog",
+  "sap/m/StandardListItem",
   "cdc/vaccret/sections/SectionFactory",
   "cdc/vaccret/sections/SectionConfig",
   "cdc/vaccret/model/formatter",
   "cdc/vaccret/model/ServiceSchema",
   "cdc/vaccret/model/ReturnTypeConfig",
-  "cdc/vaccret/util/MessageExtractor"
+  "cdc/vaccret/service/CreateReturnService",
+  "cdc/vaccret/util/MessageExtractor",
+  "cdc/vaccret/util/FilterValue"
 ], function (
-  Controller, Messaging, Fragment, JSONModel, MessagePopover, MessageItem, ColumnListItem, Text, CheckBox,
-  SectionFactory, SectionConfig, formatter, ServiceSchema, ReturnTypeConfig, MessageExtractor
+  Controller, Messaging, Fragment, Item, ListItem, JSONModel, Filter, FilterOperator,
+  MessagePopover, MessageItem, MessageToast, MessageBox, ColumnListItem, Text, CheckBox, SelectDialog, StandardListItem,
+  SectionFactory, SectionConfig, formatter, ServiceSchema, ReturnTypeConfig, CreateReturnService, MessageExtractor, FilterValue
 ) {
   "use strict";
 
@@ -37,6 +48,7 @@ sap.ui.define([
     onInit: function () {
       this._oRouter = this.getOwnerComponent().getRouter();
       this._oRouter.getRoute("detail").attachPatternMatched(this._onObjectMatched, this);
+      this._oRouter.getRoute("create").attachPatternMatched(this._onCreateMatched, this);
       this._aSectionMeta = SectionConfig;
       // 4th/5th args left at their defaults ("sectionFlags"/"sectionsContainer")
       // — no SectionConfig.js entry here is editable, so sectionFlags is never
@@ -46,6 +58,7 @@ sap.ui.define([
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this), undefined, undefined, "returnUi");
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
       this.getView().setModel(new JSONModel({}), "returnUi");
+      this.getView().setModel(new JSONModel({ active: false }), "createState");
       this.getView().setModel(Messaging.getMessageModel(), "message");
     },
 
@@ -259,6 +272,387 @@ sap.ui.define([
       // (the full prefixed id) — Fragment.byId must use that same id, not the
       // local section id.
       return oPanel ? Fragment.byId(oPanel.getId(), sControlId) : undefined;
+    },
+
+    // ---------------------------------------------------------------------
+    // MVP-2 Create (prompt §4A). "createState" (JSONModel) drives the
+    // provider-first phasing; "createItems" (JSONModel) is the scratch-row
+    // buffer described in CreateReturnService.js's doc comment. The view's
+    // own binding context becomes the session's transient header context
+    // once Sold-To is picked (_onCreateSoldToConfirmed) — per the
+    // bindElement-vs-setBindingContext precedence gotcha, unbindElement()
+    // is always called first so the display route's stale element binding
+    // can never win on a reused view instance.
+    // ---------------------------------------------------------------------
+
+    _onCreateMatched: function (oEvent) {
+      var oArgs = oEvent.getParameter("arguments") || {};
+      var sReturnType = decodeURIComponent(oArgs.returnType || "").toUpperCase();
+      if (ReturnTypeConfig.getScopeReturnTypes().indexOf(sReturnType) === -1) {
+        MessageToast.show(this.getResourceBundle().getText("createUnknownReturnType"));
+        this._oRouter.navTo("master", {}, true);
+        return;
+      }
+      this._enterCreateMode(sReturnType);
+    },
+
+    _enterCreateMode: function (sReturnType) {
+      Messaging.removeAllMessages();
+      this.getView().unbindElement();
+      this.getView().setBindingContext(null);
+      this._oCreateService = new CreateReturnService(this.getView().getModel());
+      this._oItemsBinding = null;
+      var oBundle = this.getResourceBundle();
+      var oMode = ReturnTypeConfig.resolveType(sReturnType);
+      this.getView().setModel(new JSONModel({
+        active: true,
+        returnType: sReturnType,
+        returnTypeText: oBundle.getText(oMode.titleKey),
+        soldToChosen: false,
+        soldToDisplay: "",
+        soldToParty: "",
+        salesOrganization: "",
+        distributionChannel: "",
+        busy: false
+      }), "createState");
+      this.getView().setModel(new JSONModel({ rows: [], refundTypeItems: [] }), "createItems");
+      this._populateCreateValueHelp("createReasonSelect", ServiceSchema.sets.returnsOrderReason,
+        ServiceSchema.returnsOrderReasonProperties.code, ServiceSchema.returnsOrderReasonProperties.text);
+      this._populateCreateValueHelp("createShippingConditionSelect", ServiceSchema.sets.shippingCondition,
+        ServiceSchema.shippingConditionProperties.code, ServiceSchema.shippingConditionProperties.text);
+      this._populateCreateRefundTypeItems();
+    },
+
+    // Same convention as Master.controller.js#_populateValueHelp (filter
+    // Selects) — a JS-driven aggregation binding on the control itself,
+    // not inline XML, so it stays consistent across both controllers.
+    _populateCreateValueHelp: function (sControlId, sEntitySet, sKeyProperty, sTextProperty) {
+      var oControl = this.byId(sControlId);
+      if (!oControl) {
+        return;
+      }
+      oControl.removeAllItems();
+      oControl.addItem(new Item({ key: "", text: "" }));
+      oControl.bindItems({
+        path: "/" + sEntitySet,
+        template: new Item({ key: "{" + sKeyProperty + "}", text: "{" + sTextProperty + "}" })
+      });
+    },
+
+    // ReturnsRefundType feeds a per-row Select templated off the
+    // "createItems" JSON model (ItemsCreate.fragment.xml), so it is read
+    // once into that model's own array rather than bound live to OData.
+    _populateCreateRefundTypeItems: function () {
+      var oProps = ServiceSchema.returnsRefundTypeProperties;
+      var oItemsModel = this.getView().getModel("createItems");
+      this.getView().getModel().bindList("/" + ServiceSchema.sets.returnsRefundType).requestContexts(0, 20)
+        .then(function (aContexts) {
+          var aItems = [{ key: "", text: "" }].concat(aContexts.map(function (oContext) {
+            return { key: oContext.getProperty(oProps.code), text: oContext.getProperty(oProps.text) };
+          }));
+          oItemsModel.setProperty("/refundTypeItems", aItems);
+        });
+    },
+
+    onCreateSoldToValueHelpRequest: function () {
+      if (!this._oCreateSoldToDialog) {
+        var oProps = ServiceSchema.po.soldToDetailsProperties;
+        this._oCreateSoldToDialog = new SelectDialog({
+          title: this.getResourceBundle().getText("filterProviderPin"),
+          items: {
+            path: "po>/" + ServiceSchema.po.entitySets.soldToDetails,
+            template: new StandardListItem({
+              title: "{po>" + oProps.identificationNumber + "}",
+              description: "{po>" + oProps.soldToParty + "}"
+            })
+          },
+          search: this._onCreateSoldToDialogSearch.bind(this),
+          confirm: this._onCreateSoldToDialogConfirm.bind(this)
+        });
+        this.getView().addDependent(this._oCreateSoldToDialog);
+      }
+      this._oCreateSoldToDialog.open();
+    },
+
+    _onCreateSoldToDialogSearch: function (oEvent) {
+      var oProps = ServiceSchema.po.soldToDetailsProperties;
+      var sValue = FilterValue.forFunction(oEvent.getParameter("value") || "");
+      var oBinding = oEvent.getSource().getBinding("items");
+      oBinding.filter(sValue ? new Filter({
+        filters: [
+          new Filter(oProps.identificationNumber, FilterOperator.Contains, sValue),
+          new Filter(oProps.soldToParty, FilterOperator.Contains, sValue)
+        ],
+        and: false
+      }) : []);
+    },
+
+    _onCreateSoldToDialogConfirm: function (oEvent) {
+      var oProps = ServiceSchema.po.soldToDetailsProperties;
+      var oItem = oEvent.getParameter("selectedItem");
+      if (!oItem) {
+        return;
+      }
+      var oContext = oItem.getBindingContext("po");
+      this._onCreateSoldToConfirmed(oContext.getProperty(oProps.soldToParty), oContext.getProperty(oProps.identificationNumber));
+    },
+
+    _onCreateSoldToConfirmed: function (sSoldToParty, sIdentification) {
+      var that = this;
+      var oCreateState = this.getView().getModel("createState");
+      var oBundle = this.getResourceBundle();
+      oCreateState.setProperty("/busy", true);
+      this._readCustomerSalesArea(sSoldToParty).then(function (mTriad) {
+        if (!mTriad) {
+          oCreateState.setProperty("/busy", false);
+          MessageToast.show(oBundle.getText("createSoldToRequired"));
+          return;
+        }
+        return that._oCreateService.enter(oCreateState.getProperty("/returnType"), mTriad).then(function (oHeaderContext) {
+          that.getView().setBindingContext(oHeaderContext);
+          return oHeaderContext.setProperty(ServiceSchema.headerProperties.soldToParty, sSoldToParty);
+        }).then(function () {
+          oCreateState.setProperty("/soldToChosen", true);
+          oCreateState.setProperty("/soldToDisplay", sIdentification + " (" + sSoldToParty + ")");
+          oCreateState.setProperty("/soldToParty", sSoldToParty);
+          oCreateState.setProperty("/salesOrganization", mTriad.salesOrganization);
+          oCreateState.setProperty("/distributionChannel", mTriad.distributionChannel);
+          oCreateState.setProperty("/busy", false);
+          that._addCreateItemScratchRows(5);
+        });
+      }).catch(function (oError) {
+        oCreateState.setProperty("/busy", false);
+        MessageExtractor.extract(oError, undefined, oBundle);
+      });
+    },
+
+    // po>/CustomerSalesArea — Step-0 §6: the sales-area triad
+    // CreateWithCustomerReturnType needs, NOT carried by the
+    // c_soldtosalesareavh F4 service.
+    _readCustomerSalesArea: function (sSoldToParty) {
+      var oProps = ServiceSchema.po.customerSalesAreaProperties;
+      var oBinding = this.getView().getModel("po").bindList("/" + ServiceSchema.po.entitySets.customerSalesArea,
+        undefined, undefined, new Filter(oProps.customer, FilterOperator.EQ, sSoldToParty));
+      return oBinding.requestContexts(0, 1).then(function (aContexts) {
+        if (!aContexts.length) {
+          return null;
+        }
+        var oContext = aContexts[0];
+        return {
+          salesOrganization: oContext.getProperty(oProps.salesOrganization),
+          distributionChannel: oContext.getProperty(oProps.distributionChannel),
+          organizationDivision: oContext.getProperty(oProps.division)
+        };
+      });
+    },
+
+    _addCreateItemScratchRows: function (iCount) {
+      var oModel = this.getView().getModel("createItems");
+      var aRows = oModel.getProperty("/rows") || [];
+      for (var i = 0; i < iCount; i++) {
+        aRows.push(this._newCreateItemRow());
+      }
+      oModel.setProperty("/rows", aRows);
+    },
+
+    _newCreateItemRow: function () {
+      return {
+        itemId: "",
+        product: "",
+        productName: "",
+        batch: "",
+        quantity: "",
+        quantityUnit: "",
+        exisId: "",
+        refundType: "",
+        posted: false
+      };
+    },
+
+    onCreateItemAddRow: function () {
+      this._addCreateItemScratchRows(1);
+    },
+
+    onCreateItemRemoveRow: function (oEvent) {
+      var oRowContext = oEvent.getSource().getBindingContext("createItems");
+      if (!oRowContext) {
+        return;
+      }
+      var oModel = this.getView().getModel("createItems");
+      var aRows = oModel.getProperty("/rows");
+      var iIndex = aRows.indexOf(oRowContext.getObject());
+      if (iIndex !== -1) {
+        aRows.splice(iIndex, 1);
+        oModel.setProperty("/rows", aRows);
+      }
+    },
+
+    // Lazily-bound suggestionItems (never static XML) — the nested-template
+    // autoExpandSelect gotcha (persistent memory: ui5-expression-bindings.md)
+    // is about OData absolute-path aggregations nested inside another bound
+    // template; this Input sits inside the createItems-bound row template,
+    // so the same fix applies even though the outer model here is a plain
+    // JSONModel, not OData.
+    onCreateItemProductSuggest: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var sValue = FilterValue.forFunction(oEvent.getParameter("suggestValue") || "");
+      if (!sValue) {
+        return;
+      }
+      var oProps = ServiceSchema.f4Product.properties;
+      var oCreateState = this.getView().getModel("createState");
+      if (!oInput.getBinding("suggestionItems")) {
+        oInput.bindAggregation("suggestionItems", {
+          path: "f4Product>/" + ServiceSchema.f4Product.entitySet,
+          template: new ListItem({
+            text: "{f4Product>" + oProps.product + "}",
+            additionalText: "{f4Product>" + oProps.productName + "}"
+          })
+        });
+      }
+      oInput.getBinding("suggestionItems").filter(new Filter({
+        filters: [
+          new Filter(oProps.salesOrganization, FilterOperator.EQ, oCreateState.getProperty("/salesOrganization")),
+          new Filter(oProps.distributionChannel, FilterOperator.EQ, oCreateState.getProperty("/distributionChannel")),
+          new Filter(oProps.product, FilterOperator.Contains, sValue)
+        ],
+        and: true
+      }));
+    },
+
+    onCreateItemProductSuggestionSelected: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var oItem = oEvent.getParameter("selectedItem");
+      var oRowContext = oInput.getBindingContext("createItems");
+      if (!oItem || !oRowContext) {
+        return;
+      }
+      var oProductContext = oItem.getBindingContext("f4Product");
+      var oProps = ServiceSchema.f4Product.properties;
+      var oModel = this.getView().getModel("createItems");
+      var sPath = oRowContext.getPath();
+      oModel.setProperty(sPath + "/product", oProductContext.getProperty(oProps.product));
+      oModel.setProperty(sPath + "/productName", oProductContext.getProperty(oProps.productName));
+      var sUnit = oProductContext.getProperty(oProps.requestedQuantityUnit);
+      if (sUnit) {
+        oModel.setProperty(sPath + "/quantityUnit", sUnit);
+      }
+      this._checkCreateItemRowComplete(oRowContext);
+    },
+
+    onCreateItemProductChange: function (oEvent) {
+      this._checkCreateItemRowComplete(oEvent.getSource().getBindingContext("createItems"));
+    },
+
+    onCreateItemQuantityChange: function (oEvent) {
+      this._checkCreateItemRowComplete(oEvent.getSource().getBindingContext("createItems"));
+    },
+
+    // A row posts itself the moment Product + Quantity are both filled
+    // (Step-0: no post-POST PATCH is possible, so there is no "edit it
+    // later" option — every other field on the row should be filled in
+    // BEFORE Product/Quantity to be captured, same tradeoff the prompt's
+    // scope-reality note accepted for 4A's core mechanics).
+    _checkCreateItemRowComplete: function (oRowContext) {
+      if (!oRowContext) {
+        return;
+      }
+      var oRow = oRowContext.getObject();
+      if (oRow.posted || !oRow.product || !oRow.quantity) {
+        return;
+      }
+      this._postCreateItemRow(oRowContext);
+    },
+
+    _postCreateItemRow: function (oRowContext) {
+      var oRow = oRowContext.getObject();
+      var oItemProps = ServiceSchema.itemProperties;
+      var oPayload = {};
+      oPayload[oItemProps.product] = oRow.product;
+      // Step-0 §1: RequestedQuantity MUST be a raw number, never a string.
+      oPayload[oItemProps.quantity] = Number(oRow.quantity);
+      oPayload[oItemProps.quantityUnit] = oRow.quantityUnit || "";
+      if (oRow.batch) {
+        oPayload[oItemProps.batch] = oRow.batch;
+      }
+      if (oRow.exisId) {
+        oPayload[oItemProps.exisId] = oRow.exisId;
+      }
+      if (oRow.refundType) {
+        oPayload[oItemProps.refundType] = oRow.refundType;
+      }
+      if (!this._oItemsBinding) {
+        this._oItemsBinding = this._oCreateService.bindItems();
+      }
+      var oModel = this.getView().getModel("createItems");
+      var sPath = oRowContext.getPath();
+      var oBundle = this.getResourceBundle();
+      return this._oCreateService.postItem(this._oItemsBinding, oPayload).then(function (oContext) {
+        oModel.setProperty(sPath + "/posted", true);
+        oModel.setProperty(sPath + "/itemId", oContext.getProperty(oItemProps.itemId));
+      }).catch(function (oError) {
+        MessageExtractor.extract(oError, undefined, oBundle);
+      });
+    },
+
+    onCreateSavePress: function () {
+      var that = this;
+      var oCreateState = this.getView().getModel("createState");
+      var oBundle = this.getResourceBundle();
+      if (!oCreateState.getProperty("/soldToChosen")) {
+        MessageToast.show(oBundle.getText("createSoldToRequired"));
+        return;
+      }
+      oCreateState.setProperty("/busy", true);
+      this._oCreateService.save().then(function (sReturnId) {
+        oCreateState.setProperty("/busy", false);
+        MessageToast.show(oBundle.getText("createToastCreated", [oCreateState.getProperty("/returnTypeText"), sReturnId]));
+        that._exitCreateMode();
+        that._oRouter.navTo("detail", { returnId: sReturnId }, true);
+      }).catch(function (oError) {
+        oCreateState.setProperty("/busy", false);
+        MessageExtractor.extract(oError, undefined, oBundle);
+      });
+    },
+
+    onCreateCancelPress: function () {
+      var that = this;
+      var oCreateState = this.getView().getModel("createState");
+      if (!oCreateState.getProperty("/soldToChosen")) {
+        this._discardCreateAndLeave();
+        return;
+      }
+      var oBundle = this.getResourceBundle();
+      var sConfirm = oBundle.getText("createConfirmDiscardConfirm");
+      MessageBox.confirm(oBundle.getText("createConfirmDiscardText"), {
+        title: oBundle.getText("createConfirmDiscardTitle"),
+        actions: [sConfirm, oBundle.getText("createConfirmDiscardCancel")],
+        emphasizedAction: sConfirm,
+        onClose: function (sAction) {
+          if (sAction === sConfirm) {
+            that._discardCreateAndLeave();
+          }
+        }
+      });
+    },
+
+    _discardCreateAndLeave: function () {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oService = this._oCreateService;
+      var pDiscard = oService ? oService.discard() : Promise.resolve();
+      pDiscard.then(function () {
+        MessageToast.show(oBundle.getText("createToastDiscarded"));
+        that._exitCreateMode();
+        that._oRouter.navTo("master", {}, true);
+      });
+    },
+
+    _exitCreateMode: function () {
+      this.getView().setModel(new JSONModel({ active: false }), "createState");
+      this.getView().setModel(new JSONModel({ rows: [], refundTypeItems: [] }), "createItems");
+      this._oItemsBinding = null;
+      this._oCreateService = null;
     },
 
     getResourceBundle: function () {
