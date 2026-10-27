@@ -4,10 +4,12 @@
 // facade (ServiceSchema.use(ReturnsSchema) in Component.init when the launch
 // category is "_RET").
 //
-// SOURCE OF TRUTH: frontend/returns/webapp/model/ServiceSchema.js (the
-// now-superseded separate-app prototype) - its own header comment states its
-// names were "verified directly against
-// design/metadata/ui_customerreturnmanage_2026-10-26.xml" (VTrckS-design).
+// SOURCE OF TRUTH: originally cross-checked against the standalone
+// cdc.vaccret prototype's own model/ServiceSchema.js (frontend/returns/,
+// removed once this profile superseded it - see VTrckS-design NOTES.md for
+// history), whose own header comment stated its names were "verified
+// directly against design/metadata/ui_customerreturnmanage_2026-10-26.xml"
+// (VTrckS-design).
 // Every value below is either copied from that file or set to null with a
 // comment when the orders-side concept has no confirmed returns equivalent -
 // never guessed/invented (Onboarding non-negotiable).
@@ -428,8 +430,7 @@ sap.ui.define([
 
     // Shared custom service (zui_providerorder_srv) - identical for both
     // profiles, copied verbatim from OrdersSchema.js (keep in sync until a
-    // future library extraction; frontend/returns ServiceSchema.js's own `po`
-    // block already independently mirrors a subset of this same source).
+    // future library extraction).
     providerOrderService: {
       serviceRoot: "/sap/opu/odata4/sap/zui_providerorder_srv/srvd/sap/zui_providerorder_srv/0001/",
       entitySets: {
@@ -571,8 +572,7 @@ sap.ui.define([
     statusSource: "e008",
 
     // Returns-only extension (no orders analog): NDC Code Value Help, a
-    // SEPARATE F4 service (srvd_f4), confirmed live
-    // (frontend/returns/webapp/model/ServiceSchema.js) - PR2 concern.
+    // SEPARATE F4 service (srvd_f4), confirmed live - PR2 concern.
     f4Product: {
       serviceRoot: "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001/",
       entitySet: "C_CustRetProdBySlsOrgDistrChnl",
