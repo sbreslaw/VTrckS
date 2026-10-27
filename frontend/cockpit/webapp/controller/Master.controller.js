@@ -1347,6 +1347,17 @@ sap.ui.define([
       if (!this._oViewModel.getProperty("/masterHasSearch")) {
         return;
       }
+      // ADR-002 PR1: the whole AP-partner-contact concept (contactPartnerFunction
+      // plus headerPartnerProperties.contactPerson/phone/email) is null on
+      // ReturnsSchema - no equivalent confirmed on this service yet (Parties
+      // reads 500 there, see ReturnsSchema.js). Building the $select below with
+      // those as empty strings produced a malformed query
+      // ("$select=CustomerReturn,PartnerFunction,FullName,,,", live-confirmed
+      // OData parser SyntaxError) and a Filter on a null partner function value.
+      // Leave the "Contact" column blank for this profile instead of querying.
+      if (!ServiceSchema.contactPartnerFunction) {
+        return;
+      }
       var oTable = this.byId("requestsTable");
       var oContactModel = this.getView().getModel("masterContacts");
       var oODataModel = this.getView().getModel();
@@ -1746,6 +1757,15 @@ sap.ui.define([
         {
           key: "description", i18nKey: "colDescription", hAlign: "Begin", width: "14rem",
           createCell: function () {
+            // ADR-002 PR1: headerProperties.description is null on ReturnsSchema
+            // (no free-text header description field confirmed on
+            // CustomerReturnManageType) - a {path: null, ...} bindingInfo isn't
+            // recognized as a binding at all and gets set as a literal object,
+            // rendering "[object Object]" (live-confirmed). Static fallback,
+            // same RUNTIME-BLOCKED-BY-SERVICE pattern as employeeResponsible below.
+            if (!ServiceSchema.headerProperties.description) {
+              return new Text({ text: formatter.masterDescription(), wrapping: false });
+            }
             return new Text({
               wrapping: false,
               text: { path: ServiceSchema.headerProperties.description, formatter: formatter.masterDescription.bind(formatter) }
@@ -1796,6 +1816,19 @@ sap.ui.define([
         {
           key: "status", i18nKey: "colStatus", hAlign: "Begin", width: "10rem",
           createCell: function () {
+            // ADR-002 PR1: headerProperties.userStatus (UserStatusDerived, a
+            // combined "code description" string parsed by masterStatusText) is
+            // null on ReturnsSchema - same {path: null} "[object Object]" bug as
+            // the description column above. Returns has no UserStatusDerived
+            // equivalent, but DOES have a real human-readable text field for its
+            // own overall status (statusProperties.text = OverallSDProcessStatus_Text) -
+            // bind that directly, no formatter needed.
+            if (!ServiceSchema.headerProperties.userStatus) {
+              return new Text({
+                wrapping: false,
+                text: { path: ServiceSchema.statusProperties.text }
+              });
+            }
             return new Text({
               wrapping: false,
               text: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusText.bind(formatter) }
