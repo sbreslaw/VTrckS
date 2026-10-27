@@ -4869,15 +4869,21 @@ sap.ui.define([
         formatter: formatter.detailTitle.bind(formatter)
       });
 
+      // ADR-002 PR1: headerProperties.userStatus is null on ReturnsSchema (no
+      // user-settable status concept on CustomerReturnManageType) - passing a
+      // null path straight to bindProperty throws synchronously inside UI5's
+      // BindingInfo.extractModelName ("Cannot read properties of null
+      // (reading 'indexOf')"), live-confirmed on every Returns Detail
+      // navigation (exceptions.txt 2026-10-27). Same fallback pattern as the
+      // detailTitle contact-info binding above: a JSON model path that always
+      // resolves to undefined when there's nothing real to bind.
       oView.byId("detailStatus")
-        .bindProperty("text", {
-          path: ServiceSchema.headerProperties.userStatus,
-          formatter: formatter.detailStatusText.bind(formatter)
-        })
-        .bindProperty("status", {
-          path: ServiceSchema.headerProperties.userStatus,
-          formatter: formatter.detailStatusState.bind(formatter)
-        });
+        .bindProperty("text", ServiceSchema.headerProperties.userStatus
+          ? { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.detailStatusText.bind(formatter) }
+          : { path: "orderUi>/noContact" })
+        .bindProperty("status", ServiceSchema.headerProperties.userStatus
+          ? { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.detailStatusState.bind(formatter) }
+          : { path: "orderUi>/noContact" });
 
       oView.byId("detailCreatedOnBy").bindProperty("text", {
         parts: [

@@ -57,27 +57,12 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>colDescription}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<Input id="headerDescInput" value="{path: 'ZOrdDesc', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
-									maxLength="40" visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
+					<!-- Live-test (exceptions.txt 2026-10-27): ZOrdDesc removed - confirmed
+						genuinely absent on CustomerReturnManageType (ReturnsSchema.js
+						headerProperties.description: null, "no free-text header description
+						field"), no Returns equivalent exists. This literal was copied
+						unchanged from the shared Orders fragment and crashed
+						autoExpandSelect on every Returns Detail navigation. -->
 
 					<f:FormElement>
 						<f:label>
@@ -104,7 +89,11 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{CustomerName}" visible="{= !${sectionFlags>/createMode} }"/>
+								<!-- Live-test (exceptions.txt 2026-10-27): CustomerName is the Orders-only
+									 literal, copied unchanged from the shared fragment - confirmed absent
+									 on CustomerReturnManageType. Real Returns equivalent is SoldToPartyName
+									 (ServiceSchema.headerProperties.providerName). -->
+								<Text text="{SoldToPartyName}" visible="{= !${sectionFlags>/createMode} }"/>
 								<Input id="providerInput"
 									value="{path: 'createEnrich>/providerName', mode: 'sap.ui.model.BindingMode.OneWay'}"
 									showValueHelp="true"
@@ -216,7 +205,14 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_SoldToPartyContactInfo/ResponsibleEmployee}" visible="{= !${sectionFlags>/createMode} }"/>
+								<!-- Live-test (exceptions.txt 2026-10-27): _SoldToPartyContactInfo nav
+									 confirmed absent (ReturnsSchema.js navigation.headerToContactInfo:
+									 null) - no Employee Responsible display value exists for Returns.
+									 Field now also hidden via OrderModeConfig RETURNS_UI_HIDDEN.fields.
+									 employeeResponsible, but the binding itself must still be removed
+									 (visible=false does not exclude it from the header's own
+									 autoExpandSelect $select). -->
+								<Text text="" visible="{= !${sectionFlags>/createMode} }"/>
 								<Input
 									value="{createEnrich>/employeeResponsibleName}"
 									showValueHelp="true"
@@ -239,21 +235,17 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Priority = header ShippingType (ServiceSchema.headerProperties.priority); values from po>/PriorityType. -->
+							<!-- Live-test (exceptions.txt 2026-10-27): ShippingType/_ShippingType nav
+								 confirmed absent (ReturnsSchema.js headerProperties.priority: null,
+								 no Priority concept on CustomerReturnManageType). Field already hidden
+								 via RETURNS_UI_HIDDEN.fields.priority, but the literal bindings must
+								 still be removed (visible=false on this FormElement does not exclude
+								 them from the header's own autoExpandSelect $select). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_ShippingType/ShippingType_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<Select
-									selectedKey="{ShippingType}"
-									visible="{sectionFlags>/details/editing}"
-									width="100%"
-									forceSelection="false"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: 'po>/PriorityType', templateShareable: false}">
-									<core:Item key="{po>ShippingType}" text="{po>ShippingTypeText}" />
-								</Select>
+								<Text text="" visible="{= !${sectionFlags>/details/editing} }"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
@@ -324,22 +316,18 @@
 								createEnrich>/status - status derivation on create is still part
 								of the not-yet-built enrichment action per ADDENDUM-001, so the
 								selection there stays local-only until that action exists. -->
+							<!-- Live-test (exceptions.txt 2026-10-27): UserStatusDerived confirmed
+								 absent on CustomerReturnManageType (ReturnsSchema.js headerProperties.
+								 userStatus: null) - Returns' own status concept is the direct
+								 OverallSDProcessStatus/_Text property (statusProperties), which has no
+								 user-settable Change-Mode equivalent and no onDetailStatusChange
+								 write-path for this profile, so the Select is read-only-only here
+								 (always shown, never in edit mode). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
-									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
-								<Select
-									selectedKey="{createEnrich>/status}"
-									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
-									width="100%"
-									forceSelection="false"
-									tooltip="{= ${sectionFlags>/createMode} ? ${i18n>createEnrichmentUnavailable} : '' }"
-									change=".onDetailStatusChange"
-									items="{enums>/EDIT_STATUS}">
-									<core:Item key="{enums>key}" text="{enums>text}" />
-								</Select>
+								<Text text="{OverallSDProcessStatus_Text}"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
@@ -627,7 +615,12 @@
 							</Label>
 						</f:label>
 						<f:fields>
-							<ObjectNumber number="{ZZ_NET_VALUE_SDH}" unit="{TransactionCurrency}">
+							<!-- Live-test (exceptions.txt 2026-10-27): ZZ_NET_VALUE_SDH is the
+								 Orders-only literal - confirmed absent on CustomerReturnManageType.
+								 Real Returns equivalent is TotalNetAmount (ReturnsSchema.js
+								 headerProperties.netValue). Field stays hidden for _RET regardless
+								 (RETURNS_UI_HIDDEN.fields.netValue). -->
+							<ObjectNumber number="{TotalNetAmount}" unit="{TransactionCurrency}">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
@@ -670,8 +663,11 @@
 							</Label>
 						</f:label>
 						<f:fields>
-							<!-- Client requirement (2026-09-01): real field (ZZ_GROSS_VALUE_SDH). -->
-							<ObjectNumber number="{ZZ_GROSS_VALUE_SDH}" unit="{TransactionCurrency}">
+							<!-- Live-test (exceptions.txt 2026-10-27): ZZ_GROSS_VALUE_SDH confirmed
+								 absent on CustomerReturnManageType (ReturnsSchema.js headerProperties.
+								 grossAmount: null, no equivalent exists) - field stays hidden for
+								 _RET regardless (RETURNS_UI_HIDDEN.fields.grossValue). -->
+							<ObjectNumber number="" unit="{TransactionCurrency}">
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>

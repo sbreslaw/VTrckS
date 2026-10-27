@@ -111,7 +111,12 @@ sap.ui.define([
       // Already a non-functional BLOCKED-BY-SERVICE disabled placeholder in
       // every mode (no backend field/VH for ANY order type) - hidden for
       // consistency rather than showing a dead placeholder.
-      detailsLabelAddress: { visible: false }
+      detailsLabelAddress: { visible: false },
+      // Live-test (exceptions.txt 2026-10-27): _SoldToPartyContactInfo/
+      // ResponsibleEmployee confirmed absent (ReturnsSchema.js navigation.
+      // headerToContactInfo: null) - no Employee Responsible display value
+      // exists for Returns at all.
+      employeeResponsible: { visible: false }
       // detailsShippingCondition intentionally NOT in this hide list -
       // ShippingCondition IS a real, PATCHable CustomerReturnManage property
       // (NOTES.md "Returns MVP-2 Step-0") and Details.fragment.xml's own
