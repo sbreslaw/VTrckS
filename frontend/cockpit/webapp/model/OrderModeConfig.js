@@ -34,7 +34,7 @@ sap.ui.define([
   //
   // Return Orders session prompt (prompts/E008_ReturnOrders_Fields_Session_
   // Prompt.md): the 5 new/moved header fields and 2 new item columns are
-  // visible for _RET order types only (ZISL/ZCFR/ZWST/ZKR, the default -
+  // visible for _RET order types only (ZISL/ZXFR/ZWST/ZKR, the default -
   // uiFlag()'s bDefault !== false) and explicitly hidden on ZKB/ZREP below.
   var RETURN_ORDER_UI_HIDDEN = {
     fields: {
@@ -70,7 +70,22 @@ sap.ui.define([
       brand: { visible: false },
       orderIntention: { visible: false },
       fundType: { visible: false },
-      poReference: { visible: false }
+      poReference: { visible: false },
+      // ADR-002 Step-0 shared-binding audit: ZZ1_SKIPADDANC_SDI (optOut) and
+      // the _DeliveryStatus nav (deliveryStatus) are both absent on
+      // CustomerReturnItemManageType - hiding the Column itself (not just the
+      // cell) excludes the bound property from autoExpandSelect's $select for
+      // sap.m.Table (documented UI5 behavior), same mechanism as brand/
+      // orderIntention/fundType/poReference above.
+      optOut: { visible: false },
+      deliveryStatus: { visible: false },
+      // 5th literal-binding hazard found beyond ADR-002's original audit:
+      // item exisId column binds literal ExisItemNumber (absent on
+      // CustomerReturnItemManageType - returns' own equivalent is
+      // PurchaseOrderByCustomer). Hidden for _RET rather than a 5th
+      // sub-fragment pair (PR1 is read-only, minor column) - flagged in
+      // OPEN_QUESTIONS.md as a PR2 follow-up candidate.
+      exisId: { visible: false }
     },
     sections: {
       inventory: { visible: false },
@@ -85,6 +100,37 @@ sap.ui.define([
       partiesInvolved: { visible: false },
       attachments: { visible: false }
     }
+  };
+
+  // ADR-002 (Returns_Single_App_Service_Profile) PR1: ONE consistent hide set
+  // shared by every _RET order type (ZISL/ZXFR/ZWST/ZKR) - replaces the
+  // previous per-type ad-hoc duplication (which had drifted inconsistent:
+  // detailsShippingCondition was wrongly hidden on 3 of 4 types despite being
+  // a real, PATCHable CustomerReturnManage property; detailsReturnType/
+  // detailsExisDate/detailsNoOfBoxes were inconsistently hidden across types
+  // despite ALL being absent on this service for every _RET type alike).
+  var RETURNS_UI_HIDDEN = {
+    fields: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.fields, {
+      // SpecialProcessingCode absent on CustomerReturnManageType - the "return
+      // type" concept IS the header's own CustomerReturnType (salesOrderType),
+      // already shown via the Order Type picker/Master. Confirmed against the
+      // live-verified frontend/returns ServiceSchema.js headerProperties list.
+      detailsReturnType: { visible: false },
+      // CustomerPurchaseOrderDate absent.
+      detailsExisDate: { visible: false },
+      // CustomerPurchaseOrderSuplmnt absent.
+      detailsNoOfBoxes: { visible: false },
+      // Already a non-functional BLOCKED-BY-SERVICE disabled placeholder in
+      // every mode (no backend field/VH for ANY order type) - hidden for
+      // consistency rather than showing a dead placeholder.
+      detailsLabelAddress: { visible: false }
+      // detailsShippingCondition intentionally NOT in this hide list -
+      // ShippingCondition IS a real, PATCHable CustomerReturnManage property
+      // (NOTES.md "Returns MVP-2 Step-0") and Details.fragment.xml's own
+      // comment says this field is "Shown here for _RET order types only".
+    }),
+    columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
+    sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
   };
 
   function baselineType(sOrderType, sTitleKey) {
@@ -141,55 +187,47 @@ sap.ui.define([
         sections: Object.assign({}, RETURN_ORDER_UI_HIDDEN.sections)
       }
     },
-    // Returns (_RET): UI differences TBD by functional, add here.
+    // Returns (_RET): ADR-002 (Returns_Single_App_Service_Profile) PR1 - all
+    // 4 types share ONE consistent RETURNS_UI_HIDDEN hide set (see above).
     ZISL: {
       orderType: "ZISL",
       titleKey: "orderTypeZisl",
       defaults: {},
       createStatusDefault: "2A",
-      // createStatusOptions: ZREP_STATUS_OPTIONS,
-      // editStatusOptions: ZREP_STATUS_OPTIONS,
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
       createCategoryDefaultKey: "",
       ui: {
-        fields: Object.assign({
-          detailsNoOfBoxes: { visible: false },
-          detailsShippingCondition: { visible: false },
-          detailsLabelAddress: { visible: false }
-        }, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fields: Object.assign({}, RETURNS_UI_HIDDEN.fields),
         fieldGroups: {
           detailsValue: { visible: false }
         },
-        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
+        columns: Object.assign({}, RETURNS_UI_HIDDEN.columns),
+        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections)
       }
     },
-    ZCFR: {
-      orderType: "ZCFR",
-      titleKey: "orderTypeZcfr",
+    // Renamed from ZCFR (CONFIRMED BUG fixed this session): ORDER_CATEGORIES.
+    // _RET.orderTypes below references "ZXFR" (matches i18n.properties'
+    // orderTypeZxfr=Transfer); the stale "ZCFR" key here had no i18n entry at
+    // all and made the module-load-time validation loop throw on EVERY app
+    // launch (both _ORD and _RET) - see NOTES.md.
+    ZXFR: {
+      orderType: "ZXFR",
+      titleKey: "orderTypeZxfr",
       defaults: {},
       createStatusDefault: "2A",
-      // createStatusOptions: ZREP_STATUS_OPTIONS,
-      // editStatusOptions: ZREP_STATUS_OPTIONS,
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
       createCategoryDefaultKey: "",
       ui: {
-        fields: Object.assign({
-          detailsNoOfBoxes: { visible: false },
-          detailsShippingCondition: { visible: false },
-          detailsLabelAddress: { visible: false },
-          detailsExisDate: { visible: false },
-          detailsReturnType: { visible: false }
-        }, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fields: Object.assign({}, RETURNS_UI_HIDDEN.fields),
         fieldGroups: {
           detailsValue: { visible: false }
         },
-        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
+        columns: Object.assign({}, RETURNS_UI_HIDDEN.columns),
+        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections)
       }
     },
     ZWST: {
@@ -197,24 +235,17 @@ sap.ui.define([
       titleKey: "orderTypeZwst",
       defaults: {},
       createStatusDefault: "2A",
-      // createStatusOptions: ZREP_STATUS_OPTIONS,
-      // editStatusOptions: ZREP_STATUS_OPTIONS,
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
       createCategoryDefaultKey: "",
       ui: {
-        fields: Object.assign({
-          detailsNoOfBoxes: { visible: false },
-          detailsShippingCondition: { visible: false },
-          detailsLabelAddress: { visible: false },
-          detailsReturnType: { visible: false }
-        }, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fields: Object.assign({}, RETURNS_UI_HIDDEN.fields),
         fieldGroups: {
           detailsValue: { visible: false }
         },
-        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
+        columns: Object.assign({}, RETURNS_UI_HIDDEN.columns),
+        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections)
       }
     },
     ZKR: {
@@ -222,19 +253,17 @@ sap.ui.define([
       titleKey: "orderTypeZkr",
       defaults: {},
       createStatusDefault: "2A",
-      // createStatusOptions: ZREP_STATUS_OPTIONS,
-      // editStatusOptions: ZREP_STATUS_OPTIONS,
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
       createCategoryDefaultKey: "",
       ui: {
-        fields: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.fields),
+        fields: Object.assign({}, RETURNS_UI_HIDDEN.fields),
         fieldGroups: {
           detailsValue: { visible: false }
         },
-        columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-        sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
+        columns: Object.assign({}, RETURNS_UI_HIDDEN.columns),
+        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections)
       }
     }
   };
@@ -269,21 +298,9 @@ sap.ui.define([
     return has(ORDER_TYPES, sOrderType) ? sOrderType : DEFAULT_ORDER_TYPE;
   }
 
-  // ADR-001: returns are served by a separate app (cdc.vaccret). No redirect
-  // yet (no FLP target mapping) - just log once so this cockpit's own _RET
-  // launch path is visible in diagnostics until the tile split lands.
-  var _bLoggedRetHandoff = false;
-  function logRetHandoffOnce(sCategory) {
-    if (sCategory === "_RET" && !_bLoggedRetHandoff) {
-      _bLoggedRetHandoff = true;
-      Log.info("OrderModeConfig: _RET is served by Manage Returns (ADR-001) - cockpit _RET launch still resolves, no redirect yet");
-    }
-  }
-
   function resolveCategory(vValue) {
     var sValue = normalizeValue(vValue);
     if (has(ORDER_CATEGORIES, sValue)) {
-      logRetHandoffOnce(sValue);
       return sValue;
     }
     var sCategory = Object.keys(ORDER_CATEGORIES).filter(function (sKey) {
@@ -291,7 +308,6 @@ sap.ui.define([
     })[0];
     if (sCategory) {
       Log.warning("OrderModeConfig: legacy order-type startup parameter '" + sValue + "' mapped to category " + sCategory);
-      logRetHandoffOnce(sCategory);
       return sCategory;
     }
     return DEFAULT_CATEGORY;
