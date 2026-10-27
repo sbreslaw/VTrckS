@@ -32,7 +32,7 @@
 				<f:formElements>
 					<f:FormElement>
 						<f:label>
-							<Label text="{i18n>detailRequestId}" required="false">
+							<Label text="{parts: [{path: 'i18n>detailRequestIdTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
@@ -119,7 +119,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement  visible="{= ${orderUi>/fields/providerAddress/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>providerAddress}" required="false">
 								<layoutData>
@@ -147,7 +147,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/contact/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>contact}" required="false">
 								<layoutData>
@@ -188,7 +188,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/employeeResponsible/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>colEmployeeResponsible}" required="false">
 								<layoutData>
@@ -220,7 +220,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/priority/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>filterPriority}" required="false">
 								<layoutData>
@@ -249,34 +249,6 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement>
-						<f:label>
-							<Label text="{i18n>otherReason}" required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label>
-
-						<f:fields>
-							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
-								unaffected outside createMode (normal Change-Mode editing). -->
-							<VBox>
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<ComboBox
-									width="100%"
-									selectedKey="{SDDocumentReason}"
-									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: '/SDDocumentReason'}">
-									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-								</ComboBox>
-							</VBox>
-						</f:fields>
-					</f:FormElement>
 
 					<f:FormElement>
 						<f:label>
@@ -336,10 +308,13 @@
 						</f:label>
 
 						<f:fields>
-							<!-- Status derivation on create is also part of the still-
-								unbuilt enrichment action per ADDENDUM-001 - must stay
-								user-selectable per the create-order design, hardcoded
-								Select in createMode, local-only until then. -->
+							<!-- One Select for both modes, items from the live po>/OrderStatus
+								VH (filtered by order type, Detail.controller.js#_loadOrderStatusVH).
+								Change-Mode writes straight through to UserStatusDerived
+								(.onDetailStatusChange); createMode only buffers into
+								createEnrich>/status - status derivation on create is still part
+								of the not-yet-built enrichment action per ADDENDUM-001, so the
+								selection there stays local-only until that action exists. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
@@ -347,20 +322,13 @@
 								<Text text="{path: 'UserStatusDerived', formatter: '.formatter.detailStatusText'}"
 									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
 								<Select
-									selectedKey="{path: 'UserStatusDerived', formatter: '.formatter.masterStatusCode'}"
-									visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/details/editing} }"
+									selectedKey="{createEnrich>/status}"
+									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
 									width="100%"
 									forceSelection="false"
+									tooltip="{= ${sectionFlags>/createMode} ? ${i18n>createEnrichmentUnavailable} : '' }"
 									change=".onDetailStatusChange"
 									items="{enums>/EDIT_STATUS}">
-									<core:Item key="{enums>key}" text="{enums>text}" />
-								</Select>
-								<Select
-									selectedKey="{createEnrich>/status}"
-									visible="{sectionFlags>/createMode}"
-									width="100%"
-									tooltip="{i18n>createEnrichmentUnavailable}"
-									items="{enums>/STATUS}">
 									<core:Item key="{enums>key}" text="{enums>text}" />
 								</Select>
 							</VBox>
@@ -389,6 +357,80 @@
 							</VBox>
 						</f:fields>
 					</f:FormElement>
+
+					<!-- Return Orders session prompt 1.1/1.2/1.4/1.5: visible for _RET order
+						types only (OrderModeConfig.js ORDER_TYPES.ZISL/ZCFR/ZWST/ZKR, the
+						default - hidden explicitly for ZKB/ZREP). Return Type and Shipping
+						Cond. are code+text fields like Order Reason/ExIS ID above; ExIS Date
+						and No. of Boxes are plain header properties with no FieldControl in
+						the metadata (so.xml 2026-10-23). -->
+					<f:FormElement visible="{= ${orderUi>/fields/detailsReturnType/visible} !== false }">
+						<f:label>
+							<Label text="{parts: [{path: 'i18n>detailsReturnTypeTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<!-- VaccineReturnType is a po>-model, read-only-EntitySet fixed value
+									list (not per-order-type) - loaded once into the JSON
+									returnTypes>/list model (Detail.controller.js#_loadReturnTypeVH,
+									mirroring _loadRejectionReasonVH) rather than bound live, both to
+									avoid autoExpandSelect $select pollution risk on the header's own
+									default-model binding and to avoid a second live request per field. -->
+								<Text text="{parts: [{path: 'SpecialProcessingCode'}, {path: 'returnTypes>/list'}], formatter: '.formatter.categoryText'}"
+									visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{SpecialProcessingCode}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsReturnType/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{returnTypes>/list}">
+									<core:Item key="{returnTypes>key}" text="{returnTypes>text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/orderReason/visible} !== false }">
+						<f:label>
+							<!-- Return Orders session prompt 4.2: typed title ("Vaccine Return reason")
+								when an order type is known, falling back to the plain i18n>otherReason text
+								otherwise (formatter.formatText returns "" for a falsy pattern). -->
+							<Label text="{parts: [{path: 'i18n>detailsOrderReasonTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+								unaffected outside createMode (normal Change-Mode editing). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{SDDocumentReason}"
+									visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/SDDocumentReason'}">
+									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
 
 <!-- SPACER -->
 					<f:FormElement>
@@ -427,6 +469,32 @@
 
 					</f:FormElement>
 
+					<f:FormElement visible="{= ${orderUi>/fields/detailsExisDate/visible} !== false }">
+						<f:label>
+							<Label text="{parts: [{path: 'i18n>detailsExisDateTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<Text text="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<DatePicker
+									width="100%"
+									value="{path: 'CustomerPurchaseOrderDate', type: 'sap.ui.model.odata.type.Date'}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsExisDate/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+
 <!-- SPACER -->
 					<f:FormElement>
 						<!-- <f:label>
@@ -446,7 +514,97 @@
 					</f:FormElement>
 
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/detailsNoOfBoxes/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsNoOfBoxes}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Return Orders session prompt 1.3: CustomerPurchaseOrderSuplmnt is
+								Edm.String(4), but the request wants a StepInput (numeric control,
+								min 1/max 25) - following the project's established OneWay-display +
+								explicit-change-handler convention for type-mismatched fields (e.g.
+								the Qty Input in Items.fragment.xml) rather than a two-way OData
+								String type bound straight to a numeric control property. -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL3 L3 M3 S12"/>
+								</layoutData>
+								<Text text="{CustomerPurchaseOrderSuplmnt}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<StepInput
+									width="100%"
+									value="{path: 'CustomerPurchaseOrderSuplmnt', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
+									min="1"
+									max="25"
+									step="1"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsNoOfBoxes/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									change=".onNoOfBoxesChange"/>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsShippingCondition/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsShippingCondition}" required="false">
+								<layoutData>
+									<l:GridData span="XL2 L2 M2 S12" linebreak="false"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- Shown here for _RET order types only (Return Orders session
+								prompt 1.4.1); ZKB/ZREP still show this same field in
+								Shipping.fragment.xml instead (that FormElement's visibility is
+								the logical inverse of this flag - see its comment there). -->
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL3 L3 M3 S12"/>
+								</layoutData>
+								<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<ComboBox
+									width="100%"
+									selectedKey="{ShippingCondition}"
+									visible="{sectionFlags>/details/editing}"
+									editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									items="{path: '/ShippingCondition'}">
+									<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
+								</ComboBox>
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/detailsLabelAddress/visible} !== false }">
+						<f:label>
+							<Label text="{i18n>detailsLabelAddress}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<!-- BLOCKED-BY-SERVICE (Return Orders session prompt 1.5): no backend
+								field/VH was supplied for this request - see OPEN_QUESTIONS.md.
+								Disabled placeholder only, same "editable=false + tooltip"
+								convention as the Employee Responsible createMode field above
+								(i18n>createEnrichmentUnavailable). -->
+							<Input value="" editable="false" tooltip="{i18n>availableWithE008Service}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{= ${orderUi>/fields/netValue/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>netValue}" required="false">
 								<layoutData>
@@ -464,7 +622,7 @@
 
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/taxAmount/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>taxAmount}" required="false">
 								<layoutData>
@@ -489,7 +647,7 @@
 
 					</f:FormElement>
 
-					<f:FormElement>
+					<f:FormElement visible="{= ${orderUi>/fields/grossValue/visible} !== false }">
 						<f:label>
 							<Label text="{i18n>grossValue}" required="false">
 								<layoutData>
@@ -538,7 +696,7 @@
 
 <!-- NOTES -->
 
-			<f:FormContainer title="{i18n>detailsNotes}">
+			<f:FormContainer title="{i18n>detailsNotes}" visible="{= ${orderUi>/fields/notes/visible} !== false }">
 				<!-- Full row; label/field spans halved so they align with the half-width containers above. -->
 				<f:layoutData>
 					<l:GridData span="XL12 L12 M12 S12" linebreak="true"/>
