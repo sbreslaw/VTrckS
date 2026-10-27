@@ -32,6 +32,10 @@
       <Column width="6%" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisId}" wrapping="true" /></Column>
       <Column width="6%" visible="{itemsColumns>/brand}"><Text text="{i18n>colBrand}" wrapping="true" /></Column>
       <Column width="13%" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" wrapping="true" /></Column>
+      <!-- Return Orders session prompt 3.1/3.2: _RET order types only (same itemsColumns>/<id>
+           visibility wiring as every other column - OrderModeConfig.js ui.columns). -->
+      <Column width="6%" visible="{itemsColumns>/lotNumber}"><Text text="{i18n>colLotNumber}" wrapping="true" /></Column>
+      <Column width="6%" visible="{itemsColumns>/expirationDate}"><Text text="{i18n>colExpirationDate}" wrapping="true" /></Column>
       <Column width="12%" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescription}" wrapping="true" /></Column>
       <Column width="5%" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>itemQty}" wrapping="true" /></Column>
       <Column width="4%" visible="{itemsColumns>/uom}"><Text text="{i18n>itemUom}" wrapping="true" /></Column>
@@ -112,6 +116,23 @@
                  live 404 on "Product_Text") - now bound lazily by
                  Detail.controller.js#onItemNdcSuggest on first use. -->
           </Input>
+          <!-- Return Orders session prompt 3.1: po>/BatchValueHelp (Matnr/Batch, no separate
+               description - see ServiceSchema.providerOrderService.batchValueHelpProperties),
+               bound lazily per row and filtered by the row's Product, same pattern as Order
+               Intention/Fund Type above (Detail.controller.js#_bindBatchValueHelp). -->
+          <Select
+            selectedKey="{path: 'Batch', mode: 'sap.ui.model.BindingMode.OneWay'}"
+            forceSelection="false"
+            visible="{itemsColumns>/lotNumber}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/lotNumber/editable} !== false }"
+            change=".onBatchChange"
+            modelContextChange=".onBatchModelContextChange" />
+          <!-- Return Orders session prompt 3.2: ExpirationDate, Edm.Date, no FieldControl
+               annotation - a plain two-way binding like the new ExIS Date header field. -->
+          <DatePicker
+            value="{path: 'ExpirationDate', type: 'sap.ui.model.odata.type.Date'}"
+            visible="{itemsColumns>/expirationDate}"
+            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/expirationDate/editable} !== false }" />
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
           <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
                gets a promise to await before refreshing the list for recalculated
