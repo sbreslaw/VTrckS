@@ -4632,6 +4632,21 @@ sap.ui.define([
         return;
       }
 
+      oOrderUiModel.setProperty("/category", {
+        limited: false,
+        options: []
+      });
+
+      // ADR-002 PR1: entitySets.customerPurchaseOrderType and its value-help
+      // properties are null on ReturnsSchema (no Category concept confirmed
+      // on this service) - concatenating null $select segments with "+"
+      // produced a literal "$select=null,null" that the OData V4 parser
+      // rejects (live-confirmed SyntaxError on every Detail navigation).
+      // Leave /category/options empty for this profile instead of querying.
+      if (!ServiceSchema.entitySets.customerPurchaseOrderType) {
+        return;
+      }
+
       // Component model: _applyOrderUi also runs from onInit, before view model propagation.
       var oListBinding = this.getOwnerComponent().getModel().bindList(
         "/" + ServiceSchema.entitySets.customerPurchaseOrderType,
@@ -4640,11 +4655,6 @@ sap.ui.define([
         undefined,
         { $select: ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode + "," + ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText }
       );
-
-      oOrderUiModel.setProperty("/category", {
-        limited: false,
-        options: []
-      });
 
       oListBinding.requestContexts(0, 100).then(function (aContexts) {
         var aServiceOptions = aContexts.map(function (oContext) {
