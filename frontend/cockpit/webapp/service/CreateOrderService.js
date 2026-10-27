@@ -124,11 +124,16 @@ sap.ui.define([
     if (ServiceSchema.fixedOrderTypes.indexOf(sOrderType) === -1) {
       sOrderType = ServiceSchema.defaultOrderType;
     }
+    // ReturnsSchema.salesArea is null (no hardcoded fallback triad, PR2
+    // concern) - fall back to an empty object so a scratch row that already
+    // harvested the real triad from the Provider VH pick still works, and a
+    // row that somehow hasn't yet just sends undefined rather than throwing.
+    var oFallbackArea = ServiceSchema.salesArea || {};
     return {
       SalesOrderType: sOrderType,
-      SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || ServiceSchema.salesArea.salesOrganization,
-      DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || ServiceSchema.salesArea.distributionChannel,
-      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || ServiceSchema.salesArea.organizationDivision,
+      SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || oFallbackArea.salesOrganization,
+      DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || oFallbackArea.distributionChannel,
+      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || oFallbackArea.organizationDivision,
       SoldToPartyForCreate: oScratchData[ServiceSchema.headerProperties.providerId] || ""
     };
   }
@@ -240,9 +245,15 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.salesOrderType] = ServiceSchema.fixedOrderTypes.indexOf(sOrderType) !== -1
         ? sOrderType
         : ServiceSchema.defaultOrderType;
-      oInitialData[ServiceSchema.headerProperties.salesOrganization] = ServiceSchema.salesArea.salesOrganization;
-      oInitialData[ServiceSchema.headerProperties.distributionChannel] = ServiceSchema.salesArea.distributionChannel;
-      oInitialData[ServiceSchema.headerProperties.division] = ServiceSchema.salesArea.organizationDivision;
+      // ReturnsSchema.salesArea is null (no hardcoded fallback triad, PR2
+      // concern - see ReturnsSchema.js) - skip seeding these display defaults
+      // rather than throwing; the real triad is harvested from the Provider
+      // VH pick the same way it is for Orders.
+      if (ServiceSchema.salesArea) {
+        oInitialData[ServiceSchema.headerProperties.salesOrganization] = ServiceSchema.salesArea.salesOrganization;
+        oInitialData[ServiceSchema.headerProperties.distributionChannel] = ServiceSchema.salesArea.distributionChannel;
+        oInitialData[ServiceSchema.headerProperties.division] = ServiceSchema.salesArea.organizationDivision;
+      }
       oInitialData[ServiceSchema.headerProperties.category] = ServiceSchema.defaultCategory;
       oInitialData[ServiceSchema.headerProperties.shippingCondition] = ServiceSchema.defaultShippingCondition;
       oInitialData[ServiceSchema.headerProperties.deliveryStatus] = ServiceSchema.defaultDeliveryStatus;
