@@ -1248,8 +1248,10 @@ sap.ui.define([
       sNdc = sNdc === undefined
         ? oRowContext.getProperty(ServiceSchema.itemProperties.material)
         : sNdc;
+      // itemProperties.orderIntention is null on ReturnsSchema (absent field) - getProperty(null)
+      // resolves to the row's own entity path, not a primitive, and throws.
       sOrderIntention = sOrderIntention === undefined
-        ? oRowContext.getProperty(ServiceSchema.itemProperties.orderIntention)
+        ? (ServiceSchema.itemProperties.orderIntention ? oRowContext.getProperty(ServiceSchema.itemProperties.orderIntention) : undefined)
         : sOrderIntention;
       var sFilterKey = [oRowContext.getPath(), sNdc || "", sOrderIntention || ""].join("|");
       if (oSelect.data("fundTypeFilterKey") === sFilterKey) {
