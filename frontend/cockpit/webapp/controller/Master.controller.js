@@ -1819,14 +1819,20 @@ sap.ui.define([
             // ADR-002 PR1: headerProperties.userStatus (UserStatusDerived, a
             // combined "code description" string parsed by masterStatusText) is
             // null on ReturnsSchema - same {path: null} "[object Object]" bug as
-            // the description column above. Returns has no UserStatusDerived
-            // equivalent, but DOES have a real human-readable text field for its
-            // own overall status (statusProperties.text = OverallSDProcessStatus_Text) -
-            // bind that directly, no formatter needed.
+            // the description column above. statusProperties.text
+            // (OverallSDProcessStatus_Text) is NOT a header-entity property -
+            // it only exists on the separate status value-help entity set
+            // (see _populateStatusCodes below), expanding it off the header
+            // 404s ("does not point to a property"). Returns has no inline
+            // status-text field at all, so show the real header-level status
+            // CODE (headerProperties.status) as-is - PR2 follow-up could map
+            // it through the already-loaded filterStatus value list for a
+            // friendlier label. targetType "any" avoids a Raw-type
+            // FormatException on an unformatted raw string bind.
             if (!ServiceSchema.headerProperties.userStatus) {
               return new Text({
                 wrapping: false,
-                text: { path: ServiceSchema.statusProperties.text }
+                text: { path: ServiceSchema.headerProperties.status, targetType: "any" }
               });
             }
             return new Text({
