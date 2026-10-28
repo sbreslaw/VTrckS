@@ -1297,6 +1297,16 @@ sap.ui.define([
     // pattern as Order Intention above. BatchValueHelpType has no separate description
     // property (ServiceSchema.providerOrderService.batchValueHelpProperties) - key and text
     // are both the batch number itself.
+    //
+    // ret-10-28 #8: a declarative bindAggregation only ever shows this row's
+    // own already-saved Batch value when that exact code happens to be
+    // among the FIRST 100 rows the (unsorted) BatchValueHelp query returns
+    // for this product - live-confirmed blank Lot Number for a real,
+    // non-empty Batch ("1542X") simply not present in that page.
+    // sap.m.Select only renders selectedKey's text when a matching Item
+    // exists in its own items aggregation, so build the list imperatively
+    // (same requestContexts idiom as _loadCategoryOptions) and guarantee the
+    // current value is always included, regardless of paging luck.
     _bindBatchValueHelp: function (oSelect) {
       var oRowContext = oSelect && oSelect.getBindingContext();
       var oSchema = ServiceSchema.providerOrderService;
@@ -1310,18 +1320,33 @@ sap.ui.define([
         return;
       }
       oSelect.data("batchFilterKey", sFilterKey);
-      oSelect.unbindAggregation("items");
+      oSelect.destroyItems();
       if (!sNdc) {
         return;
       }
-      oSelect.bindAggregation("items", {
-        path: "po>/" + oSchema.entitySets.batchValueHelp,
-        parameters: { $select: [oProps.material, oProps.batch].join(",") },
-        filters: [new Filter(oProps.material, FilterOperator.EQ, sNdc)],
-        template: new CoreItem({
-          key: "{po>" + oProps.batch + "}",
-          text: "{po>" + oProps.batch + "}"
-        })
+      var sCurrentBatch = oRowContext.getProperty(ServiceSchema.itemProperties.batch);
+      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
+        "/" + oSchema.entitySets.batchValueHelp,
+        undefined, undefined,
+        [new Filter(oProps.material, FilterOperator.EQ, sNdc)],
+        { $select: [oProps.material, oProps.batch].join(",") }
+      );
+      oListBinding.requestContexts(0, 100).then(function (aContexts) {
+        var aKeys = aContexts.map(function (oContext) {
+          return oContext.getProperty(oProps.batch);
+        });
+        oListBinding.destroy();
+        if (oSelect.data("batchFilterKey") !== sFilterKey) {
+          return;
+        }
+        if (sCurrentBatch && aKeys.indexOf(sCurrentBatch) === -1) {
+          aKeys.unshift(sCurrentBatch);
+        }
+        aKeys.forEach(function (sKey) {
+          oSelect.addItem(new CoreItem({ key: sKey, text: sKey }));
+        });
+      }, function () {
+        oListBinding.destroy();
       });
     },
 
