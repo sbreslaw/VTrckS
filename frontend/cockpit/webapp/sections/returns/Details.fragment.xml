@@ -327,7 +327,9 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{OverallSDProcessStatus_Text}"/>
+								<!-- OverallSDProcessStatus_Text lives on the separate OverallSDProcessStatusType,
+									 reached only via _OverallSDProcessStatus (not a direct header property). -->
+								<Text text="{_OverallSDProcessStatus/OverallSDProcessStatus_Text}"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
