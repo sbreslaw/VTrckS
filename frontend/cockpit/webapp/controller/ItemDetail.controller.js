@@ -9,8 +9,9 @@ sap.ui.define([
   "cdc/vaccreq/sections/ItemSectionConfig",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/PricingColumns"
-], function (Controller, MessagePopover, MessageItem, Fragment, Messaging, JSONModel, SectionFactory, ItemSectionConfig, formatter, ServiceSchema, PricingColumns) {
+  "cdc/vaccreq/model/PricingColumns",
+  "cdc/vaccreq/model/OrderModeConfig"
+], function (Controller, MessagePopover, MessageItem, Fragment, Messaging, JSONModel, SectionFactory, ItemSectionConfig, formatter, ServiceSchema, PricingColumns, OrderModeConfig) {
   "use strict";
 
   // Item Details view (FCL end column) - Session Prompt "Item Details View".
@@ -26,8 +27,13 @@ sap.ui.define([
       this._oRouter.getRoute("itemDetail").attachPatternMatched(this._onObjectMatched, this);
       this._aSectionMeta = ItemSectionConfig;
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta,
-        this._onSectionContentLoaded.bind(this), "itemSectionFlags", "itemDetailSectionsContainer");
+        this._onSectionContentLoaded.bind(this), "itemSectionFlags", "itemDetailSectionsContainer", "itemOrderUi");
       this.getView().setModel(this._createSectionFlagsModel(), "itemSectionFlags");
+      // ret-10-28 follow-up: profile-keyed (not per-order-type, see
+      // OrderModeConfig.getItemUi) - limits Returns item drill-down to just
+      // the Details section for now.
+      this._oItemUi = OrderModeConfig.getItemUi(ServiceSchema.profileId);
+      this.getView().setModel(new JSONModel(this._oItemUi), "itemOrderUi");
       this.getView().setModel(this._createSectionsNavModel(), "itemSectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
     },
@@ -113,8 +119,13 @@ sap.ui.define([
 
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
+      var oItemUi = this._oItemUi;
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey) };
+        return {
+          id: oMeta.id,
+          title: oBundle.getText(oMeta.titleKey),
+          visible: OrderModeConfig.uiFlag(oItemUi, "sections", oMeta.id, "visible")
+        };
       });
       return new JSONModel({ list: aList });
     },

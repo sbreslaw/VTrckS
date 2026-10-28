@@ -2,8 +2,9 @@
 sap.ui.define([
   "cdc/vaccreq/model/schema/OrdersSchema",
   "cdc/vaccreq/model/schema/ReturnsSchema",
-  "cdc/vaccreq/model/formatter"
-], function (OrdersSchema, ReturnsSchema, formatter) {
+  "cdc/vaccreq/model/formatter",
+  "cdc/vaccreq/model/OrderModeConfig"
+], function (OrdersSchema, ReturnsSchema, formatter, OrderModeConfig) {
   "use strict";
 
   // ret-10-28 #5 regression guard: ItemDetail.controller.js#_bindItemHeader
@@ -63,5 +64,25 @@ sap.ui.define([
 
   QUnit.test("returns empty string when the order id part is missing (unresolved context)", function (assert) {
     assert.strictEqual(formatter.itemDetailSubtitle("", "000010", "Return", "Item"), "");
+  });
+
+  // ret-10-28 follow-up: item-level sections, limited to Details for _RET
+  // (ItemDetail.controller.js reads this via ServiceSchema.profileId, same
+  // profile-keyed idiom as SectionFactory.js's fragment-variant lookup).
+  QUnit.module("OrderModeConfig.getItemUi");
+
+  QUnit.test("returns profile hides every item section except itemDetails", function (assert) {
+    var oItemUi = OrderModeConfig.getItemUi("returns");
+    assert.strictEqual(OrderModeConfig.uiFlag(oItemUi, "sections", "itemDetails", "visible"), true);
+    ["itemShipping", "itemShippingTransactions", "itemPrices", "itemTransactionHistory"].forEach(function (sId) {
+      assert.strictEqual(OrderModeConfig.uiFlag(oItemUi, "sections", sId, "visible"), false, sId + " is hidden");
+    });
+  });
+
+  QUnit.test("orders profile leaves every item section visible", function (assert) {
+    var oItemUi = OrderModeConfig.getItemUi("orders");
+    ["itemDetails", "itemShipping", "itemShippingTransactions", "itemPrices", "itemTransactionHistory"].forEach(function (sId) {
+      assert.strictEqual(OrderModeConfig.uiFlag(oItemUi, "sections", sId, "visible"), true, sId + " is visible");
+    });
   });
 });
