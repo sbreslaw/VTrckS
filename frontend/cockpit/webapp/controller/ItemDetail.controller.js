@@ -180,9 +180,13 @@ sap.ui.define([
 
       [oView.byId("itemDetailSubtitle"), oView.byId("itemDetailSubtitleExpanded")].forEach(function (oControl) {
         oControl.bindProperty("text", {
+          // ret-10-28 #5: was hardcoded "SalesOrder"/"SalesOrderItem" -
+          // CustomerReturnManage's keys are CustomerReturn/CustomerReturnItem
+          // (confirmed via ui_customerreturnmanage metadata), so this threw a
+          // property-not-found autoExpandSelect error for every _RET item nav.
           parts: [
-            { path: "SalesOrder" },
-            { path: "SalesOrderItem" },
+            { path: ServiceSchema.keys.orderId },
+            { path: ServiceSchema.itemProperties.itemNumber },
             { path: "orderContext>/title" },
             { path: "i18n>itemDetailItemPrefix" }
           ],
