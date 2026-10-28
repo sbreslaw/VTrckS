@@ -268,7 +268,12 @@ sap.ui.define([
       // 2026-10-27 metadata re-audit: confirmed real (Edm.Decimal, Precision 13,
       // Scale variable) on CustomerReturnItemManageType.
       taxAmount: "TaxAmount",
-      batch: "Batch",
+      // 2026-10-28 metadata re-audit: LotNumber (Edm.String, MaxLength 10) was
+      // just added to CustomerReturnItemManageType, no FieldControl/F4 ref -
+      // the Lot Number column now reads/writes this instead of Batch (which
+      // still exists on this entity but is no longer the field the backend
+      // wants for this UI; sections/returns/Items.fragment.xml hazard #3).
+      batch: "LotNumber",
       // 2026-10-27 metadata re-audit: confirmed real (Edm.Date) on
       // CustomerReturnItemManageType - Items.fragment.xml's ExpirationDate
       // DatePicker was already correctly bound to it all along.
@@ -599,13 +604,15 @@ sap.ui.define([
     },
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw
-    // JS number, not a string, on this service); Batch confirmed PATCHable;
-    // ExpirationDate confirmed to exist (2026-10-27 metadata) but its
-    // PATCH-ability was not independently re-confirmed this session - stays
-    // null (read-only) until verified.
+    // JS number, not a string, on this service); LotNumber (2026-10-28
+    // metadata, no FieldControl annotation found - same no-restriction shape
+    // as Batch before it) presumed PATCHable, not independently re-confirmed
+    // this session; ExpirationDate confirmed to exist (2026-10-27 metadata)
+    // but its PATCH-ability was not independently re-confirmed this session -
+    // stays null (read-only) until verified.
     updatableItemProperties: {
       quantity: "RequestedQuantity",
-      batch: "Batch",
+      batch: "LotNumber",
       expirationDate: null
     },
 
