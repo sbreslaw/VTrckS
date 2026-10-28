@@ -4701,7 +4701,7 @@ sap.ui.define([
         oEnumsModel.setProperty("/EDIT_STATUS", aContexts.map(function (oCtx) {
           var sStatus = oCtx.getProperty(oProps.status);
           var sText = oCtx.getProperty(oProps.text);
-          return { key: sStatus, text: sText ? (sStatus + " " + sText) : sStatus };
+          return { key: sStatus, text: sText ? sText : sStatus };
         }));
       }.bind(this), function () {
         if (this._iOrderStatusRequest === iRequest) {

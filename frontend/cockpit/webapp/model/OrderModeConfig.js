@@ -6,11 +6,6 @@ sap.ui.define([
   // Carries an order CATEGORY (CR-1014-001 §0); legacy FLP mappings may still pass an order type.
   var STARTUP_PARAMETER = "providerOrderType";
   var DEFAULT_CATEGORY = "_ORD";
-  var ZREP_STATUS_OPTIONS = [
-    { key: "2A", i18nKey: "enumStatus2A" },
-    { key: "2B", i18nKey: "enumStatus2B" },
-    { key: "2C", i18nKey: "enumStatus2C" }
-  ];
 
   // The existing views are the shared baseline; add only confirmed per-type
   // differences here. `ui` is the single UI-config source, exposed to the
@@ -86,6 +81,7 @@ sap.ui.define([
     },
     sections: {
       inventory: { visible: false },
+      shipping: { visible: false },
       shippingTransactions: { visible: false },
       transactionHistory: { visible: false },
       orgData: { visible: false },

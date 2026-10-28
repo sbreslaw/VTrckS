@@ -532,7 +532,7 @@
 								String type bound straight to a numeric control property. -->
 							<VBox>
 								<layoutData>
-									<l:GridData span="XL3 L3 M3 S12"/>
+									<l:GridData span="XL2 L2 M2 S12"/>
 								</layoutData>
 								<Text text="{CustomerPurchaseOrderSuplmnt}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<StepInput
