@@ -96,6 +96,14 @@
                     "groupId": "$auto"
                 }
             },
+            "ord": {
+                "dataSource": "mainService",
+                "settings": {
+                    "operationMode": "Server",
+                    "autoExpandSelect": true,
+                    "groupId": "$auto"
+                }
+            },
             "shippingAddressVH": {
                 "dataSource": "shippingAddressValueHelp",
                 "settings": {

@@ -178,7 +178,7 @@ sap.ui.define([
     });
   }
 
-  function loadProviderRows(oMainModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
+  function loadProviderRows(oSalesAreaModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
     iRowLimit) {
     var oProps = ServiceSchema.customerSalesAreaProperties;
     var pPinRows = sPin ? loadPinRows(oProviderModel, sPin).catch(function () { return []; }) : Promise.resolve(null);
@@ -201,7 +201,7 @@ sap.ui.define([
           return oRow[oPinProps.soldToParty];
         }))));
       }
-      return requestRows(oMainModel, ServiceSchema.entitySets.customerSalesArea, providerSelect(),
+      return requestRows(oSalesAreaModel, ServiceSchema.entitySets.customerSalesArea, providerSelect(),
         aFilters.filter(Boolean), iRowLimit);
     }).then(function (aProviderRows) {
       var aRows = normalizeProviderRows(aProviderRows, {});
@@ -212,6 +212,14 @@ sap.ui.define([
 
   function loadContactRows(oMainModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
     iRowLimit) {
+    // ret-10-28 #2: HeaderPartner/_Partner reads are a confirmed backend 500
+    // bug for returns (ReturnsSchema.contactPartnerFunction: null signals
+    // "no working AP-contact concept on this service") - skip the request
+    // entirely rather than surfacing a new console error once the Provider VH
+    // becomes reachable for returns.
+    if (!ServiceSchema.contactPartnerFunction) {
+      return Promise.resolve([]);
+    }
     var oContactProps = ServiceSchema.headerPartnerProperties;
     var oProviderProps = ServiceSchema.customerSalesAreaProperties;
     var sSalesOrderNavigation = "_SalesOrder";
@@ -219,7 +227,7 @@ sap.ui.define([
       return Promise.resolve([]);
     }
     var aFilters = [
-      new Filter(oContactProps.partnerFunction, FilterOperator.EQ, "AP"),
+      new Filter(oContactProps.partnerFunction, FilterOperator.EQ, ServiceSchema.contactPartnerFunction),
       new Filter(oContactProps.contactPerson, FilterOperator.NE, ""),
       new Filter(oContactProps.fullName, FilterOperator.NE, ""),
       containsFilter(oContactProps.fullName, sName),
@@ -235,7 +243,7 @@ sap.ui.define([
         and: false
       }));
     }
-    if (aBaseFilters && aBaseFilters.length) {
+    if (aBaseFilters && aBaseFilters.length && ServiceSchema.salesArea && ServiceSchema.salesArea.salesOrganization) {
       aFilters.push(new Filter(sSalesOrderNavigation + "/" + oProviderProps.salesOrganization,
         FilterOperator.EQ, ServiceSchema.salesArea.salesOrganization));
     }
@@ -301,7 +309,7 @@ sap.ui.define([
     return aRows;
   }
 
-  function loadRows(oMainModel, oProviderModel, sMode, mValues, sBasicSearch, aBaseFilters, iRowLimit) {
+  function loadRows(oMainModel, oSalesAreaModel, oProviderModel, sMode, mValues, sBasicSearch, aBaseFilters, iRowLimit) {
     iRowLimit = iRowLimit || DEFAULT_ROW_LIMIT;
     var sName = value(mValues, sMode === MODE_CONTACT ? FIELD_PATHS.contactName :
       sMode === MODE_PROVIDER ? FIELD_PATHS.providerName : FIELD_PATHS.name);
@@ -316,11 +324,11 @@ sap.ui.define([
         .catch(function () { return []; });
     }
     if (sMode === MODE_PROVIDER) {
-      return loadProviderRows(oMainModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
+      return loadProviderRows(oSalesAreaModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
         iRowLimit);
     }
     return Promise.all([
-      loadProviderRows(oMainModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
+      loadProviderRows(oSalesAreaModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
         iRowLimit),
       loadContactRows(oMainModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
         Math.ceil(iRowLimit / 2)).catch(function () { return []; })

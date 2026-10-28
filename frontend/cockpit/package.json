@@ -7,6 +7,7 @@
     "start_old": "ui5 serve -o index.html",
     "build_old": "ui5 build --clean-dest",
     "start": "fiori run --open \"index.html?sap-ui-xx-viewCache=false\"",
+    "test": "fiori run --open \"test/unit/unitTests.qunit.html\"",
     "start-local": "fiori run --config ./ui5-local.yaml --open \"test/flpSandboxMockServer.html?sap-ui-xx-viewCache=false#app-tile\"",
     "start-local-zrep": "fiori run --config ./ui5-local.yaml --open \"test/flpSandbox.html?sap-ui-xx-viewCache=false#app-tile?providerOrderType=ZREP\"",
     "start-noflp": "fiori run --open \"index.html?sap-ui-xx-viewCache=false\"",

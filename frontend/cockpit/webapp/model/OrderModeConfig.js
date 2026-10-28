@@ -125,7 +125,15 @@ sap.ui.define([
       // was based on the OLDER 2026-10-26 metadata, which omitted them.
     }),
     columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-    sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
+    // ret-10-28 #1: shipping UN-HIDDEN for _RET - DeliveryBlockReason is a
+    // real, raw-code-only property on CustomerReturnManageType (confirmed
+    // live, 2026-10-28 metadata); sections/returns/Shipping.fragment.xml maps
+    // it instead of orders' _OverallDeliveryBlockStatus text lookup (which
+    // does not exist on this service). Every other PROVIDER_ORDER_UI_HIDDEN
+    // section stays hidden for _RET.
+    sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections, {
+      shipping: { visible: true }
+    })
   };
 
   function baselineType(sOrderType, sTitleKey) {
@@ -346,6 +354,29 @@ sap.ui.define([
     return bDefault !== false;
   }
 
+  // Item Details view (ItemDetail route) sections have no per-order-type config
+  // like the header `ui.sections` above - ADR-002's service profile
+  // (ServiceSchema.profileId: "orders"/"returns") is 1:1 with order category
+  // for the whole running app instance, so this is keyed by profileId instead
+  // of duplicating per order type. ret-10-28 follow-up: only itemDetails is
+  // visible for the returns profile for now (ItemSectionConfig.js ids) - the
+  // other 4 item sections render fine but have no returns-specific backing
+  // data/design yet.
+  var ITEM_UI_HIDDEN_BY_PROFILE = {
+    returns: {
+      sections: {
+        itemShipping: { visible: false },
+        itemShippingTransactions: { visible: false },
+        itemPrices: { visible: false },
+        itemTransactionHistory: { visible: false }
+      }
+    }
+  };
+
+  function getItemUi(sProfileId) {
+    return JSON.parse(JSON.stringify(ITEM_UI_HIDDEN_BY_PROFILE[sProfileId] || { sections: {} }));
+  }
+
   return {
     startupParameter: STARTUP_PARAMETER,
     defaultCategory: DEFAULT_CATEGORY,
@@ -356,6 +387,7 @@ sap.ui.define([
     getCategoryOrderTypes: getCategoryOrderTypes,
     resolveOrderType: resolveOrderType,
     resolve: resolve,
-    uiFlag: uiFlag
+    uiFlag: uiFlag,
+    getItemUi: getItemUi
   };
 });

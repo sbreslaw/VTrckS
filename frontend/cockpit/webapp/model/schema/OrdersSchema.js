@@ -657,6 +657,11 @@ sap.ui.define([
       organizationDivision: "10"
     },
 
+    // ret-10-28 #2: which named model (manifest.json sap.ui5.models) backs
+    // Provider VH/typeahead lookups against entitySets.customerSalesArea.
+    // "" = default (unnamed) model, i.e. this profile's own serviceRoot.
+    providerLookupModel: "",
+
     // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
     // definition extension action on the standard BO, name/params TBD once
     // activated on-system). Null means confirmed BLOCKED-BY-SERVICE; affected
@@ -689,6 +694,30 @@ sap.ui.define([
     statusProperties: {
       code: "OverallSDProcessStatus",
       text: "OverallSDProcessStatus_Text"
+    },
+
+    // ret-10-28 #3: one declared source for every "status code -> text" VH
+    // list (model/StatusValueHelp.js), consumed by both Master's filterStatus
+    // dropdown and Detail's Status field Select - the per-order-type business
+    // status profile (UserStatusDerived's own code/text pairs), same source
+    // Detail._loadOrderStatusVH already used before this change.
+    statusValueHelp: {
+      model: "po",
+      entitySet: "OrderStatus",
+      codeProperty: "Status",
+      textProperty: "StatusTextDescription",
+      typeFilterProperty: "OrderType"
+    },
+
+    // ret-10-28 #7: single declared source for the Category field's "code ->
+    // text" VH (Detail.controller.js#_loadCategoryOptions) - this entity set's
+    // code domain (BSARK, SD document purchase order type) is a cross-document
+    // standard fixed-values list, not order-type-specific.
+    categoryValueHelp: {
+      model: "",
+      entitySet: "CustomerPurchaseOrderType",
+      codeProperty: "CustomerPurchaseOrderType",
+      textProperty: "CustomerPurchaseOrderType_Text"
     },
 
     // HeaderPartnerType (so.xml ~line 1065) - reached through the header's

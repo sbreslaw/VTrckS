@@ -309,30 +309,38 @@
 						</f:label>
 
 						<f:fields>
-							<!-- One Select for both modes, items from the live po>/OrderStatus
-								VH (filtered by order type, Detail.controller.js#_loadOrderStatusVH).
-								Change-Mode writes straight through to UserStatusDerived
-								(.onDetailStatusChange); createMode only buffers into
-								createEnrich>/status - status derivation on create is still part
-								of the not-yet-built enrichment action per ADDENDUM-001, so the
-								selection there stays local-only until that action exists. -->
-							<!-- Live-test (exceptions.txt 2026-10-27): UserStatusDerived confirmed
-								 absent on CustomerReturnManageType (ReturnsSchema.js headerProperties.
-								 userStatus: null) - Returns' own status concept is the direct
-								 OverallSDProcessStatus/_Text property (statusProperties), which has no
-								 user-settable Change-Mode equivalent and no onDetailStatusChange
-								 write-path for this profile, so the Select is read-only-only here
-								 (always shown, never in edit mode). -->
+							<!-- ret-10-28 #4: replaces the previous read-only-Text-only rendering
+								with the shared orders Text+Select layout, mapped to this service's
+								own OverallSDProcessStatus / OverallSDProcessStatus entity set VH
+								(ServiceSchema.statusValueHelp, model/StatusValueHelp.js) instead of
+								orders' UserStatusDerived/po>/OrderStatus. OverallSDProcessStatus is
+								CONFIRMED SAP__core.Computed (2026-10-28 metadata) - not writable -
+								so the Select stays enabled="false" with an explanatory tooltip
+								rather than faking a write path; exact status-mapping UX (if any)
+								is still being decided by the backend team (OPEN_QUESTIONS.md). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 								<!-- OverallSDProcessStatus_Text lives on the separate OverallSDProcessStatusType,
 									 reached only via _OverallSDProcessStatus (not a direct header property). -->
-								<Text text="{_OverallSDProcessStatus/OverallSDProcessStatus_Text}"/>
+								<Text text="{_OverallSDProcessStatus/OverallSDProcessStatus_Text}"
+									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
+								<Select
+									selectedKey="{OverallSDProcessStatus}"
+									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
+									width="100%"
+									enabled="false"
+									forceSelection="false"
+									tooltip="{i18n>statusDerivedByBackend}"
+									change=".onDetailStatusChange"
+									items="{enums>/EDIT_STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
+
 
 					<f:FormElement visible="{= ${orderUi>/fields/detailsExisId/visible} !== false }">
 						<f:label>

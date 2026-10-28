@@ -79,15 +79,17 @@
               </Label>
             </f:label>
             <f:fields>
-              <!-- "VH-shaped control rendered disabled - display value only this
-                   phase" (session prompt 3.3.1) - real top-level fixed-values
-                   EntitySet (so.xml line 2538, ServiceSchema.entitySets is not
-                   extended for this since it's read-only VH-shape only here). -->
-              <ComboBox selectedKey="{SalesDocumentRjcnReason}" enabled="false"
-                items="{path: '/SalesDocumentRjcnReason'}">
-                <core:Item key="{SalesDocumentRjcnReason}" text="{SalesDocumentRjcnReason_Text}" />
+              <!-- ret-10-28: was a ComboBox bound to the absolute top-level
+                   "/SalesDocumentRjcnReason" fixed-values EntitySet - that set
+                   only exists on the Provider Orders service
+                   (c_salesordermanage_sd), not ui_customerreturnmanage, and
+                   threw "Failed to get contexts" for _RET. Display-only here
+                   regardless (enabled="false" always), so just show the item's
+                   own nav Text (_SalesDocumentRjcnReason, works on both
+                   profiles per ServiceSchema navigation.itemToRejectionReason). -->
+              <Text text="{path: '_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text', formatter: '.formatter.orDash'}">
                 <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
-              </ComboBox>
+              </Text>
             </f:fields>
           </f:FormElement>
 
