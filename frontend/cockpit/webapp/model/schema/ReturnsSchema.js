@@ -153,7 +153,11 @@ sap.ui.define([
       // ZOrdDesc - absent; no free-text header description field confirmed on
       // CustomerReturnManageType.
       description: null,
-      category: null
+      // ret-10-28 #7 metadata re-audit: CustomerPurchaseOrderType IS real on
+      // CustomerReturnManageType (previous comment wrongly claimed no category
+      // concept existed) - raw code only here (categoryValueHelp above resolves
+      // its text via the Orders service's own VH, same domain).
+      category: "CustomerPurchaseOrderType"
     },
 
     // Parties reads 500 on this service (backend bug, excluded from scope) -
@@ -426,6 +430,20 @@ sap.ui.define([
       codeProperty: "OverallSDProcessStatus",
       textProperty: "OverallSDProcessStatus_Text",
       typeFilterProperty: null
+    },
+
+    // ret-10-28 #7: CustomerPurchaseOrderType is real on CustomerReturnManageType
+    // (2026-10-28 metadata: SAP__UI.Hidden, no SAP__common.Text annotation - raw
+    // code only on THIS service) but its VH entity set only exists on the Orders
+    // service (c_salesordermanage_srv so.xml ~line 718) - same BSARK domain
+    // (SD document purchase order type) is universal across both services, so
+    // reuse it via the always-loaded "ord" model, same precedent as
+    // providerLookupModel above.
+    categoryValueHelp: {
+      model: "ord",
+      entitySet: "CustomerPurchaseOrderType",
+      codeProperty: "CustomerPurchaseOrderType",
+      textProperty: "CustomerPurchaseOrderType_Text"
     },
 
     contactPartnerFunction: null,

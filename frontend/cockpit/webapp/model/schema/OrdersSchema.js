@@ -709,6 +709,17 @@ sap.ui.define([
       typeFilterProperty: "OrderType"
     },
 
+    // ret-10-28 #7: single declared source for the Category field's "code ->
+    // text" VH (Detail.controller.js#_loadCategoryOptions) - this entity set's
+    // code domain (BSARK, SD document purchase order type) is a cross-document
+    // standard fixed-values list, not order-type-specific.
+    categoryValueHelp: {
+      model: "",
+      entitySet: "CustomerPurchaseOrderType",
+      codeProperty: "CustomerPurchaseOrderType",
+      textProperty: "CustomerPurchaseOrderType_Text"
+    },
+
     // HeaderPartnerType (so.xml ~line 1065) - reached through the header's
     // _Partner navigation for editing and queried top-level for historical
     // AP-contact fallback searches.

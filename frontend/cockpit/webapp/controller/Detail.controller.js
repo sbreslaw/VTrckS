@@ -4734,30 +4734,29 @@ sap.ui.define([
         options: []
       });
 
-      // ADR-002 PR1: entitySets.customerPurchaseOrderType and its value-help
-      // properties are null on ReturnsSchema (no Category concept confirmed
-      // on this service) - concatenating null $select segments with "+"
-      // produced a literal "$select=null,null" that the OData V4 parser
-      // rejects (live-confirmed SyntaxError on every Detail navigation).
-      // Leave /category/options empty for this profile instead of querying.
-      if (!ServiceSchema.entitySets.customerPurchaseOrderType) {
+      // ret-10-28 #7: categoryValueHelp is a profile-declared VH source (model
+      // may be a named model, e.g. Returns reuses the Orders service's own
+      // VH via the always-loaded "ord" model - same domain, no local VH entity
+      // set exists on the Returns service itself).
+      var oCategoryValueHelp = ServiceSchema.categoryValueHelp;
+      if (!oCategoryValueHelp) {
         return;
       }
 
       // Component model: _applyOrderUi also runs from onInit, before view model propagation.
-      var oListBinding = this.getOwnerComponent().getModel().bindList(
-        "/" + ServiceSchema.entitySets.customerPurchaseOrderType,
+      var oListBinding = this.getOwnerComponent().getModel(oCategoryValueHelp.model || undefined).bindList(
+        "/" + oCategoryValueHelp.entitySet,
         undefined,
         undefined,
         undefined,
-        { $select: ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode + "," + ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText }
+        { $select: oCategoryValueHelp.codeProperty + "," + oCategoryValueHelp.textProperty }
       );
 
       oListBinding.requestContexts(0, 100).then(function (aContexts) {
         var aServiceOptions = aContexts.map(function (oContext) {
           return {
-            key: oContext.getProperty(ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeCode),
-            text: oContext.getProperty(ServiceSchema.valueHelpProperties.customerPurchaseOrderTypeText)
+            key: oContext.getProperty(oCategoryValueHelp.codeProperty),
+            text: oContext.getProperty(oCategoryValueHelp.textProperty)
           };
         });
 
