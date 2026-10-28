@@ -194,10 +194,20 @@ sap.ui.define([
         });
       });
 
-      oView.byId("itemDetailStatus").bindProperty("text", {
-        path: "_SDProcessStatus/SDProcessStatus_Text",
-        formatter: formatter.orDash
-      });
+      // ret-10-28 #5: was a hardcoded literal path to the orders-only
+      // _SDProcessStatus nav (absent on CustomerReturnItemManageType, no
+      // equivalent concept confirmed for returns - itemDetailProperties.
+      // statusText is null there) - never bind a literal path that's null
+      // on the active profile, so just show the dash placeholder instead.
+      var sStatusTextPath = ServiceSchema.itemDetailProperties.statusText;
+      if (sStatusTextPath) {
+        oView.byId("itemDetailStatus").bindProperty("text", {
+          path: sStatusTextPath,
+          formatter: formatter.orDash
+        });
+      } else {
+        oView.byId("itemDetailStatus").setText(formatter.orDash());
+      }
     }
   });
 });

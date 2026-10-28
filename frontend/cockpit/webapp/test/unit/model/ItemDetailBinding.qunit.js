@@ -31,6 +31,15 @@ sap.ui.define([
     assert.ok(sPath.indexOf("SalesOrder") === -1, "path must not contain the orders-only SalesOrder key");
   });
 
+  // ret-10-28 #5 (cont'd): itemDetailStatus also used to hardcode the
+  // orders-only "_SDProcessStatus/SDProcessStatus_Text" literal path - same
+  // bug class, same root cause (absent nav corrupts auto-$expand/$select for
+  // the whole item context, cascading "previous request failed" to every
+  // other field). Pin down the null-guard value the controller now checks.
+  QUnit.test("itemDetailProperties.statusText is null (no equivalent nav on this service)", function (assert) {
+    assert.strictEqual(ReturnsSchema.itemDetailProperties.statusText, null);
+  });
+
   QUnit.module("OrdersSchema item-detail key mapping (regression guard)");
 
   QUnit.test("keys.orderId is SalesOrder", function (assert) {
@@ -39,6 +48,10 @@ sap.ui.define([
 
   QUnit.test("itemProperties.itemNumber is SalesOrderItem", function (assert) {
     assert.strictEqual(OrdersSchema.itemProperties.itemNumber, "SalesOrderItem");
+  });
+
+  QUnit.test("itemDetailProperties.statusText is the real _SDProcessStatus nav", function (assert) {
+    assert.strictEqual(OrdersSchema.itemDetailProperties.statusText, "_SDProcessStatus/SDProcessStatus_Text");
   });
 
   QUnit.module("formatter.itemDetailSubtitle");
