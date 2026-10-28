@@ -36,14 +36,23 @@ sap.ui.define([
       item: "CustomerReturnItemManage",
       status: "OverallSDProcessStatus",
       salesOrderType: "CustomerReturnType",
+      // DeliveryBlockReason (ret-10-28 #1): Edm.String raw code, SAP__UI.Hidden,
+      // NO Text annotation/ValueListReferences on this service (confirmed live,
+      // 2026-10-28 metadata) - no separate "entity set" concept, it's a plain
+      // property on CustomerReturnManageType (see headerProperties below).
       deliveryBlockReason: null,
       deliveryPriority: null,
       orderReason: "ReturnsOrderReason",
       shipToParty: "HeaderShipToParty",
-      // Absent on this service - the Provider picker triad is sourced from
-      // providerOrderService.entitySets.customerSalesArea (po model) instead,
-      // confirmed live (NOTES.md "Returns MVP-2 Step-0", 2026-10-26, §6).
-      customerSalesArea: null,
+      // ret-10-28 #2: F4 c_soldtosalesareavh is confirmed triad-less live
+      // (no SalesOrganization/DistributionChannel/Division - just
+      // Customer/CustomerName/City/PostalCode/Country) - per session prompt's
+      // own documented fallback, Provider VH/typeahead/suggest for _RET reads
+      // CustomerSalesArea off the new named "ord" model (manifest.json,
+      // C_SALESORDERMANAGE_SRV's own /CustomerSalesArea - same KNVV data,
+      // has the triad) instead of this (ui_customerreturnmanage) service.
+      // See providerLookupModel below.
+      customerSalesArea: "CustomerSalesArea",
       contactInfo: null,
       // NDC Code Value Help lives on a SEPARATE F4 service for returns
       // (f4Product block below, c_custretprodbyslsorgdistrchnl via srvd_f4),
@@ -84,7 +93,14 @@ sap.ui.define([
       providerId: "SoldToParty",
       providerName: "SoldToPartyName",
       status: "OverallSDProcessStatus",
-      userStatus: null,
+      // ret-10-28 #4: no separate writable business-status field exists on
+      // CustomerReturnManageType (unlike orders' UserStatusDerived) -
+      // OverallSDProcessStatus is CONFIRMED SAP__core.Computed (2026-10-28
+      // metadata), i.e. not writable either way. Reusing this same key (not a
+      // new one) lets onDetailStatusChange keep a single branch-free lookup
+      // (ServiceSchema.headerProperties.userStatus); the Details Status Select
+      // stays enabled=false for _RET so this write path never actually fires.
+      userStatus: "OverallSDProcessStatus",
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
       netValue: "TotalNetAmount",
@@ -107,7 +123,10 @@ sap.ui.define([
       shippingCondition: "ShippingCondition",
       deliveryStatus: null,
       deliveryBlockStatus: null,
-      deliveryBlockReason: null,
+      // ret-10-28 #1: real property on CustomerReturnManageType, raw code only
+      // (no Text annotation exists for it on this service - see entitySets
+      // comment above).
+      deliveryBlockReason: "DeliveryBlockReason",
       billingBlockReason: "HeaderBillingBlockReason",
       billingBlockStatus: null,
       billingStatus: null,
@@ -177,8 +196,22 @@ sap.ui.define([
       text: "@com.sap.vocabularies.Common.v1.Text"
     },
 
-    // Matches entitySets.customerSalesArea = null above (see providerOrderService instead).
-    customerSalesAreaProperties: null,
+    // ret-10-28 #2: F4 c_soldtosalesareavh is confirmed triad-less live - the
+    // Provider VH/typeahead instead reads CustomerSalesArea off the "ord"
+    // model (manifest.json, C_SALESORDERMANAGE_SRV's own entity set, same
+    // KNVV data/shape as OrdersSchema's own customerSalesAreaProperties below -
+    // this is a literal copy of that shape, not an independent re-derivation).
+    customerSalesAreaProperties: {
+      customer: "Customer",
+      customerName: "CustomerName",
+      organizationName2: "OrganizationBPName2",
+      cityName: "CityName",
+      postalCode: "PostalCode",
+      countryText: "Country_Text",
+      salesOrganization: "SalesOrganization",
+      distributionChannel: "DistributionChannel",
+      division: "OrganizationDivision"
+    },
 
     paymentMethodProperties: null,
 
@@ -361,9 +394,10 @@ sap.ui.define([
     saveAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.SaveChanges",
     discardAction: "/DiscardChanges",
 
-    // No hardcoded fallback triad on this service - the real triad is sourced
-    // from providerOrderService.entitySets.customerSalesArea (po model),
-    // confirmed live (NOTES.md 2026-10-26 §6) - PR2 concern.
+    // No confirmed default SalesOrganization/DistributionChannel/Division
+    // triad for returns (do not invent orders' "1000"/"10"/"10") - stays null,
+    // callers must skip the soft pre-filter entirely when this is null rather
+    // than filtering on an empty/invented value (ret-10-28 #2).
     salesArea: null,
 
     enrichmentAction: null,
@@ -374,6 +408,24 @@ sap.ui.define([
     statusProperties: {
       code: "OverallSDProcessStatus",
       text: "OverallSDProcessStatus_Text"
+    },
+
+    // ret-10-28 #2: see OrdersSchema.js providerLookupModel comment - "ord"
+    // points Provider VH/typeahead/suggest at C_SALESORDERMANAGE_SRV's own
+    // /CustomerSalesArea instead of this (triad-less) service.
+    providerLookupModel: "ord",
+
+    // ret-10-28 #3/#4: no per-order-type business status profile exists on
+    // this service (unlike orders' po>/OrderStatus) - OverallSDProcessStatus
+    // is the only "status" concept returns has, so it doubles as both the
+    // display/filter source (statusProperties above) and the VH options
+    // source here, unfiltered by order type (typeFilterProperty: null).
+    statusValueHelp: {
+      model: "",
+      entitySet: "OverallSDProcessStatus",
+      codeProperty: "OverallSDProcessStatus",
+      textProperty: "OverallSDProcessStatus_Text",
+      typeFilterProperty: null
     },
 
     contactPartnerFunction: null,

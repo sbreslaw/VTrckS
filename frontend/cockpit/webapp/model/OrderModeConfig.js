@@ -125,7 +125,15 @@ sap.ui.define([
       // was based on the OLDER 2026-10-26 metadata, which omitted them.
     }),
     columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
-    sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections)
+    // ret-10-28 #1: shipping UN-HIDDEN for _RET - DeliveryBlockReason is a
+    // real, raw-code-only property on CustomerReturnManageType (confirmed
+    // live, 2026-10-28 metadata); sections/returns/Shipping.fragment.xml maps
+    // it instead of orders' _OverallDeliveryBlockStatus text lookup (which
+    // does not exist on this service). Every other PROVIDER_ORDER_UI_HIDDEN
+    // section stays hidden for _RET.
+    sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections, {
+      shipping: { visible: true }
+    })
   };
 
   function baselineType(sOrderType, sTitleKey) {
