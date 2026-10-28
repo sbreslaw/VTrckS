@@ -48,6 +48,7 @@ sap.ui.define([
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor",
   "cdc/vaccreq/model/PricingColumns",
+  "cdc/vaccreq/model/StatusValueHelp",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/ProviderInventoryService",
@@ -59,7 +60,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -2506,6 +2507,21 @@ sap.ui.define([
       oDialog.open();
     },
 
+    // ret-10-28 #2: which named model (ServiceSchema.providerLookupModel)
+    // backs Provider VH/typeahead/suggest lookups against entitySets.
+    // customerSalesArea - "" (orders) resolves to the default/unnamed model
+    // (this profile's own serviceRoot); "ord" (returns) resolves to the named
+    // manifest.json model pointed at C_SALESORDERMANAGE_SRV's own
+    // /CustomerSalesArea (the F4 for returns' own SoldToParty is confirmed
+    // triad-less, so this is the documented fallback).
+    _getProviderLookupModel: function () {
+      return this.getOwnerComponent().getModel(ServiceSchema.providerLookupModel || undefined);
+    },
+
+    _providerLookupPath: function (sPath) {
+      return (ServiceSchema.providerLookupModel ? ServiceSchema.providerLookupModel + ">" : "") + sPath;
+    },
+
     // v5 ("UX phasing + triad sourcing"): Provider VH backed by the real,
     // top-level `/CustomerSalesArea` entity set - keyed by Customer +
     // SalesOrganization + DistributionChannel + Division (design/so.xml
@@ -2518,24 +2534,24 @@ sap.ui.define([
     // the real CreateWithSalesOrderType params (see
     // Detail.controller.js#onProviderValueHelpRequest / CreateOrderService.js#save).
     _openShipToPartyValueHelpDialog: function (sTitle, fnApply) {
-      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
-      // customerSalesArea are all null on ReturnsSchema (no confirmed
-      // equivalent entity set on this service) - building this dialog would
-      // throw synchronously. No functional Returns equivalent yet (PR2).
-      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea || !ServiceSchema.entitySets.customerSalesArea) {
+      // ret-10-28 #2: customerSalesAreaProperties/entitySets.customerSalesArea
+      // are now populated on ReturnsSchema too (providerLookupModel "ord") -
+      // salesArea itself legitimately stays null for returns (no confirmed
+      // default triad - see ReturnsSchema.js), so it's no longer part of this
+      // guard; the soft org pre-filter below is simply skipped when absent.
+      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.entitySets.customerSalesArea) {
         MessageToast.show(this.getResourceBundle().getText("valueHelpNotAvailable"));
         return;
       }
       var oProps = ServiceSchema.customerSalesAreaProperties;
       var oArea = ServiceSchema.salesArea;
-      var aAreaFilters = [
-        new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)
-      ];
+      var aAreaFilters = (oArea && oArea.salesOrganization) ?
+        [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)] : [];
       var oDialog = new SelectDialog({
         title: sTitle,
         growing: true,
         items: {
-          path: "/" + ServiceSchema.entitySets.customerSalesArea,
+          path: this._providerLookupPath("/" + ServiceSchema.entitySets.customerSalesArea),
           parameters: {
             $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
               oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
@@ -2594,10 +2610,9 @@ sap.ui.define([
 
     _openProviderValueHelpDialog: function (fnApply) {
       var oBundle = this.getResourceBundle();
-      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
-      // customerSalesArea are all null on ReturnsSchema - no functional
-      // Returns equivalent yet (PR2). Fail gracefully instead of throwing.
-      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea || !ServiceSchema.entitySets.customerSalesArea) {
+      // ret-10-28 #2: see _openShipToPartyValueHelpDialog comment - salesArea
+      // is intentionally not part of this guard for returns.
+      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.entitySets.customerSalesArea) {
         MessageToast.show(oBundle.getText("valueHelpNotAvailable"));
         return;
       }
@@ -2693,11 +2708,13 @@ sap.ui.define([
         oTable.setBusy(true);
         ProviderSearchService.loadRows(
           this.getView().getModel(),
+          this._getProviderLookupModel(),
           this.getOwnerComponent().getModel("po"),
           sSearchMode,
           fnGetFieldValues(),
           oBasicSearch.getValue(),
-          [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)],
+          (oArea && oArea.salesOrganization) ?
+            [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)] : [],
           iRowLimit
         ).then(function (aRows) {
           if (iCurrentRequest !== iLoadRequest) {
@@ -3594,10 +3611,9 @@ sap.ui.define([
       var sValue = oEvent.getParameter("suggestValue");
       var oInput = oEvent.getSource();
       this._debounce("provider", function () {
-        // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
-        // customerSalesArea are all null on ReturnsSchema - no functional
-        // Returns equivalent yet (PR2).
-        if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea) {
+        // ret-10-28 #2: salesArea intentionally not part of this guard - see
+        // _openShipToPartyValueHelpDialog comment.
+        if (!ServiceSchema.customerSalesAreaProperties) {
           return;
         }
         var oProps = ServiceSchema.customerSalesAreaProperties;
@@ -3610,7 +3626,7 @@ sap.ui.define([
           // live) - bound lazily here instead, well after the header's own
           // binding is already resolved, so autoExpandSelect never sees it.
           oInput.bindAggregation("suggestionItems", {
-            path: "/" + ServiceSchema.entitySets.customerSalesArea,
+            path: this._providerLookupPath("/" + ServiceSchema.entitySets.customerSalesArea),
             parameters: {
               $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
                 oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
@@ -3619,7 +3635,8 @@ sap.ui.define([
           });
           oBinding = oInput.getBinding("suggestionItems");
         }
-        var aFilters = [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)];
+        var aFilters = (oArea && oArea.salesOrganization) ?
+          [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)] : [];
         if (sValue) {
           aFilters.push(new Filter({
             filters: [
@@ -3674,18 +3691,16 @@ sap.ui.define([
         this._setProviderValueState(true);
         return;
       }
-      // ADR-002 PR1: customerSalesAreaProperties/salesArea/entitySets.
-      // customerSalesArea are all null on ReturnsSchema - no functional
-      // Returns equivalent yet (PR2).
-      if (!ServiceSchema.customerSalesAreaProperties || !ServiceSchema.salesArea) {
+      // ret-10-28 #2: salesArea intentionally not part of this guard - see
+      // _openShipToPartyValueHelpDialog comment.
+      if (!ServiceSchema.customerSalesAreaProperties) {
         return;
       }
       var oProps = ServiceSchema.customerSalesAreaProperties;
       var oArea = ServiceSchema.salesArea;
-      var oLookupBinding = this.getView().getModel().bindList(
+      var oLookupBinding = this._getProviderLookupModel().bindList(
         "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
         [
-          new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
           new Filter({
             filters: [
               new Filter(oProps.customerName, FilterOperator.EQ, sValue),
@@ -3693,7 +3708,8 @@ sap.ui.define([
             ],
             and: false
           })
-        ],
+        ].concat((oArea && oArea.salesOrganization) ?
+          [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)] : []),
         {
           $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
             oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
@@ -4552,7 +4568,7 @@ sap.ui.define([
       const oProps = ServiceSchema.customerSalesAreaProperties;
       const oArea = ServiceSchema.salesArea;
 
-      return this.getView().getModel().bindList(
+      return this._getProviderLookupModel().bindList(
         "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined,
         [
           new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization),
@@ -4672,16 +4688,14 @@ sap.ui.define([
     },
 
     // Status field (Details.fragment.xml, mapped to ServiceSchema.headerProperties.
-    // userStatus/UserStatusDerived) - the Change-Mode Select's items now come from the
-    // live po>/OrderStatus entity set (OrderStatusType, key OrderType+Status), filtered
-    // to the current order type, replacing the old static per-order-type
-    // editStatusOptions array. "key"/"text" keep the same {code, "code description"}
-    // shape the existing masterStatusCode/detailStatusText formatters and
-    // onDetailStatusChange already expect. Request-token guarded like
-    // _loadCategoryOptions, since an order-type switch can fire this more than once.
+    // userStatus) - options come from the one shared source declared by
+    // ServiceSchema.statusValueHelp (model/StatusValueHelp.js), filtered to the
+    // current order type when the profile declares a typeFilterProperty
+    // (orders: po>/OrderStatus by OrderType; returns: this service's own
+    // /OverallSDProcessStatus, unfiltered - no per-type status profile exists).
+    // Request-token guarded like _loadCategoryOptions, since an order-type
+    // switch can fire this more than once.
     _loadOrderStatusVH: function (sOrderType) {
-      var oSchema = ServiceSchema.providerOrderService;
-      var oProps = oSchema.orderStatusProperties;
       var oEnumsModel = this.getView().getModel("enums");
       var iRequest = (this._iOrderStatusRequest || 0) + 1;
       this._iOrderStatusRequest = iRequest;
@@ -4689,24 +4703,9 @@ sap.ui.define([
         oEnumsModel.setProperty("/EDIT_STATUS", []);
         return;
       }
-      var oListBinding = this.getOwnerComponent().getModel("po").bindList(
-        "/" + oSchema.entitySets.orderStatus, undefined, undefined,
-        new Filter(oProps.orderType, FilterOperator.EQ, sOrderType),
-        { $select: [oProps.status, oProps.text].join(",") }
-      );
-      oListBinding.requestContexts(0, 200).then(function (aContexts) {
-        if (this._iOrderStatusRequest !== iRequest) {
-          return;
-        }
-        oEnumsModel.setProperty("/EDIT_STATUS", aContexts.map(function (oCtx) {
-          var sStatus = oCtx.getProperty(oProps.status);
-          var sText = oCtx.getProperty(oProps.text);
-          return { key: sStatus, text: sText ? sText : sStatus };
-        }));
-      }.bind(this), function () {
+      StatusValueHelp.load(this.getOwnerComponent(), ServiceSchema.statusValueHelp, [sOrderType]).then(function (aOptions) {
         if (this._iOrderStatusRequest === iRequest) {
-          // Non-fatal: the Select then just offers no options.
-          oEnumsModel.setProperty("/EDIT_STATUS", []);
+          oEnumsModel.setProperty("/EDIT_STATUS", aOptions);
         }
       }.bind(this));
     },
