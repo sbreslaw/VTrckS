@@ -626,6 +626,8 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
+            return CreateOrderService._replayContact(oNewContext, oCreateOptions);
+          }).then(function () {
             // Both SaveChanges above and this PATCH just succeeded,
             // each re-running the same backend validation - collapse
             // the resulting exact-duplicate messages (see
@@ -664,6 +666,29 @@ sap.ui.define([
       }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
+    },
+
+    // Internal — persists the createMode Contact picker's selection
+    // (createEnrich>/contactId, Detail.controller.js#onContactValueHelpRequest)
+    // as a real "AP" HeaderPartner row. No header/item property for Contact
+    // exists (OPEN_QUESTIONS.md item 17 previously called this unconfirmed) -
+    // the only real write path is the same CreatePartner-bound-action-then-
+    // PATCH-Customer two-step already used by the Parties Involved section's
+    // own Add flow (Detail.controller.js#_onPartiesAddConfirm). Runs as its
+    // own batch (the action's response, with the new row's own key, must
+    // resolve before the follow-up PATCH can target it - unlike
+    // _replayHeaderProperties above, this can't be a single flat PATCH list).
+    _replayContact: function (oNewContext, oCreateOptions) {
+      if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.createPartnerAction || !ServiceSchema.contactPartnerFunction) {
+        return Promise.resolve();
+      }
+      var oModel = oNewContext.getModel();
+      var oActionBinding = oModel.bindContext(ServiceSchema.createPartnerAction + "(...)", oNewContext);
+      oActionBinding.setParameter("PartnerFunction", ServiceSchema.contactPartnerFunction);
+      return oActionBinding.execute(CREATE_REPLAY_GROUP).then(function () {
+        oActionBinding.getBoundContext().setProperty(ServiceSchema.headerPartnerProperties.customer, oCreateOptions.contactId);
+        return oModel.submitBatch(CREATE_REPLAY_GROUP);
+      });
     },
 
     // Step ② — post-create enrichment action (description/status-if-changed/

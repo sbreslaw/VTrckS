@@ -451,7 +451,7 @@ sap.ui.define([
       textProperty: "CustomerPurchaseOrderType_Text"
     },
 
-    contactPartnerFunction: null,
+    contactPartnerFunction: "AP",
 
     // HeaderPartnerType - 2026-10-27 metadata re-audit: customer/contactPerson/
     // phone(InternationalPhoneNumber)/email(EmailAddress)/postalCode/cityName/

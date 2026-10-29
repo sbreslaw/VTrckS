@@ -4353,7 +4353,8 @@ sap.ui.define([
         return that._deleteEmptyItemRows(oItemsBinding).then(function () {
           // This promise boundary also routes synchronous setup failures through the cleanup path.
           return CreateOrderService.save(oContext, oItemsBinding, that._oCreateSession, {
-            shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId")
+            shipToAddressId: that.getView().getModel("createEnrich").getProperty("/providerAddressId"),
+            contactId: that.getView().getModel("createEnrich").getProperty("/contactId")
           });
         });
       })
@@ -4366,8 +4367,11 @@ sap.ui.define([
           sNewId = oResult.orderId;
           var oEnrich = that.getView().getModel("createEnrich").getData();
           return CreateOrderService.saveNotes(oNewContext, oEnrich.notes).then(function () {
+            // contactId is no longer part of this payload - it's now a real,
+            // persisted HeaderPartner row (CreateOrderService.js#_replayContact,
+            // run earlier as part of save()), not pending on this still-blocked
+            // enrichment action.
             return CreateOrderService.enrich(oNewContext, {
-              contactId: oEnrich.contactId,
               employeeResponsibleId: oEnrich.employeeResponsibleId,
               status: oEnrich.status,
               shipToPartyId: oEnrich.shipToPartyId
