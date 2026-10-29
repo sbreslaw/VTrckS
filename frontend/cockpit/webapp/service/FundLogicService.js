@@ -23,14 +23,20 @@ sap.ui.define([
   // backend read itself. Cleared on SaveChanges success (the post-commit
   // reload is then authoritative) and on Cancel/Discard - see
   // Detail.controller.js#_completeCreate/_destroyCreateContext.
-  var ZZ_FIELDS = [
-    ServiceSchema.itemProperties.vfcQty,
-    ServiceSchema.itemProperties.stateQty,
-    ServiceSchema.itemProperties.qty317,
-    ServiceSchema.itemProperties.chipQty,
-    ServiceSchema.itemProperties.panQty,
-    ServiceSchema.itemProperties.resQty
-  ];
+  // Read fresh per call, never cached at module scope - these are all null
+  // on ReturnsSchema (no Fund Type concept there), so a module-level array
+  // would go stale and silently hold nulls after a same-tab _RET -> _ORD
+  // profile relaunch (same bug class as the PricingColumns.js Sorter crash).
+  function getZzFields() {
+    return [
+      ServiceSchema.itemProperties.vfcQty,
+      ServiceSchema.itemProperties.stateQty,
+      ServiceSchema.itemProperties.qty317,
+      ServiceSchema.itemProperties.chipQty,
+      ServiceSchema.itemProperties.panQty,
+      ServiceSchema.itemProperties.resQty
+    ];
+  }
   // Live-test, 2026-10-01: the backend's own first-item POST can ALSO return
   // an adjusted RequestedQuantity (e.g. 1 -> 10, a pack-size/minimum-order
   // rule) - a snapshot taken before that adjustment must be rescaled to the
@@ -43,7 +49,7 @@ sap.ui.define([
 
   function snapshotZzFields(oRowContext) {
     var oSnapshot = {};
-    ZZ_FIELDS.forEach(function (sField) {
+    getZzFields().forEach(function (sField) {
       oSnapshot[sField] = oRowContext.getProperty(sField);
     });
     oSnapshot[QUANTITY_FIELD] = parseFloat(oRowContext.getProperty(QUANTITY_FIELD)) || 0;
@@ -62,7 +68,7 @@ sap.ui.define([
     if (!fOldQty || !fNewQty || fOldQty === fNewQty) {
       return oSnapshot;
     }
-    var aNonZeroFields = ZZ_FIELDS.filter(function (sField) { return oSnapshot[sField]; });
+    var aNonZeroFields = getZzFields().filter(function (sField) { return oSnapshot[sField]; });
     if (!aNonZeroFields.length) {
       return oSnapshot;
     }
@@ -179,7 +185,7 @@ sap.ui.define([
       var oEffectiveSnapshot = rescaleSnapshot(oSnapshot, fCurrentQty);
       var oNewSnapshot = {};
       var aPending = [];
-      ZZ_FIELDS.forEach(function (sField) {
+      getZzFields().forEach(function (sField) {
         var iCurrent;
         try {
           iCurrent = parseInt(oRowContext.getProperty(sField), 10);
@@ -241,6 +247,6 @@ sap.ui.define([
     // the _Item list's own $select on its own - Detail.controller.js's
     // _rebindItemsGroup must force them in explicitly, or the getProperty()
     // calls above throw "invalid segment" (confirmed live).
-    ZZ_FIELDS: ZZ_FIELDS
+    getZzFields: getZzFields
   };
 });

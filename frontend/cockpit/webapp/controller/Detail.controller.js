@@ -3847,7 +3847,7 @@ sap.ui.define([
       // all null/undefined on ReturnsSchema (order-specific custom fields,
       // no Returns equivalent) - filter before join, or a null entry becomes
       // an empty $select segment (trailing/duplicate commas, parser error).
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.ZZ_FIELDS.filter(function (sField) { return !!sField; })).join(",") });
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.getZzFields().filter(function (sField) { return !!sField; })).join(",") });
       oTable.bindItems(oBindingInfo);
       // bindItems() always creates a fresh binding instance - re-attach here
       // (see _onItemCreateActivate) rather than relying on one set up once.

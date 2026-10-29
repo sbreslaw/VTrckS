@@ -43,8 +43,10 @@ sap.ui.define([
   var ITEM_GROUP = ServiceSchema.itemInteractiveGroup;
   // v5 Required Fix 4 (replay-list drift guard): this list is DERIVED from
   // updatableHeaderProperties in ServiceSchema.js, not hand-maintained here —
-  // see the comment there.
-  var REPLAY_HEADER_PROPERTIES = ServiceSchema.createReplayHeaderProperties;
+  // see the comment there. Read fresh at the one call site below (never
+  // cached here) - the literal field names differ per profile, so a
+  // module-level capture would go stale after a same-tab profile relaunch
+  // (same bug class as the PricingColumns.js Sorter crash).
   // Issue Batch 9-30-001 §2 (payload hygiene): the observed live create POST
   // (issues/9-30-001.md #2) also sent SalesOrderItem ("000010" - the client's
   // own scratch numbering, not a real key), SalesOrderItemText (the backend
@@ -649,7 +651,7 @@ sap.ui.define([
     // context, in one batch. Items are deep-created earlier, on the sticky
     // session context, before SaveChanges (see save() above).
     _replayHeaderProperties: function (oNewContext, oScratchData, oCreateOptions) {
-      REPLAY_HEADER_PROPERTIES.forEach(function (sProperty) {
+      ServiceSchema.createReplayHeaderProperties.forEach(function (sProperty) {
         if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "") {
           oNewContext.setProperty(sProperty, oScratchData[sProperty]);
         }
