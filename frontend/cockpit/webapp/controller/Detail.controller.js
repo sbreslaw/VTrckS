@@ -2962,7 +2962,11 @@ sap.ui.define([
               var oContext = oEvent.getSource().getBindingContext("picker");
               if (oContext) {
                 fnSelectContact(oContext.getObject());
-                oTable.setSelectedIndex(oContext.getIndex());
+                // "picker" is a JSONModel (not OData V4) - its Context has no
+                // getIndex() (confirmed live: "t.getIndex is not a function");
+                // the row index is the context path's own last segment instead.
+                var sPath = oContext.getPath();
+                oTable.setSelectedIndex(parseInt(sPath.slice(sPath.lastIndexOf("/") + 1), 10));
               }
             }
           })
@@ -3777,7 +3781,10 @@ sap.ui.define([
     _debounce: function (sKey, fnCallback) {
       this._mDebounceTimers = this._mDebounceTimers || {};
       clearTimeout(this._mDebounceTimers[sKey]);
-      this._mDebounceTimers[sKey] = setTimeout(fnCallback, 300);
+      // setTimeout invokes fnCallback with no receiver - bind the controller's
+      // own "this" or any fnCallback referencing it (e.g. onProviderSuggest's
+      // this._providerLookupPath) throws "is not a function" (confirmed live).
+      this._mDebounceTimers[sKey] = setTimeout(fnCallback.bind(this), 300);
     },
 
 
