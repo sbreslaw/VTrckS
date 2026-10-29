@@ -685,7 +685,13 @@ sap.ui.define([
       var oModel = oNewContext.getModel();
       var oActionBinding = oModel.bindContext(ServiceSchema.createPartnerAction + "(...)", oNewContext);
       oActionBinding.setParameter("PartnerFunction", ServiceSchema.contactPartnerFunction);
-      return oActionBinding.execute(CREATE_REPLAY_GROUP).then(function () {
+      // CREATE_REPLAY_GROUP is a manually-submitted ("API") group - execute()
+      // alone only queues the request; it never resolves without an explicit
+      // submitBatch, so that call must happen BEFORE awaiting the promise
+      // (awaiting first deadlocks the whole save chain forever).
+      var oExecutePromise = oActionBinding.execute(CREATE_REPLAY_GROUP);
+      oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via oExecutePromise below */ });
+      return oExecutePromise.then(function () {
         oActionBinding.getBoundContext().setProperty(ServiceSchema.headerPartnerProperties.customer, oCreateOptions.contactId);
         return oModel.submitBatch(CREATE_REPLAY_GROUP);
       });
