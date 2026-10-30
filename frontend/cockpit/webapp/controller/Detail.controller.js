@@ -3631,11 +3631,31 @@ sap.ui.define([
       }) : []);
     },
 
-    // Issue Batch 9-30-001 §3.3: Provider typeahead - filters the Input's own
-    // "suggestionItems" aggregation binding (Details.fragment.xml) the same
-    // way _openShipToPartyValueHelpDialog's own search handler does (soft
-    // pre-filter on SalesOrganization + Contains on name/code), debounced so
-    // every keystroke doesn't fire its own $filter request.
+    // Max provider rows to fetch per Provider typeahead keystroke.
+    PROVIDER_SUGGEST_ROW_LIMIT: 50,
+
+    // Issue Batch 9-30-001 §3.3: Provider typeahead - re-queries the provider
+    // lookup model on every debounced keystroke (soft pre-filter on
+    // SalesOrganization + Contains on name/code, same as
+    // _openShipToPartyValueHelpDialog's own search handler).
+    //
+    // Live-test (2026-10-30): a live suggestionItems list binding against the
+    // NAMED "ord" model threw a flood of "Failed to enhance query options for
+    // auto-$expand/$select ... does not point to a property" against the
+    // HEADER's own (default-model) context on every keystroke, plus
+    // FormatException ("Type 'sap.ui.model.odata.type.Raw' does not support
+    // formatting") on the rendered rows - confirmed live that sap.m.Input's
+    // suggestion popover clones its list items with the surrounding Form's
+    // own (default-model) binding context, NOT the suggestionItems binding's
+    // own per-row context, whenever that binding targets a model other than
+    // the control's inherited one. This went unnoticed for Orders only
+    // because OrdersSchema.providerLookupModel is "" (the lookup IS the
+    // inherited/default model there, so the wrong-context fallback happened
+    // to still resolve correctly) - Returns' "ord" lookup model exposed it.
+    // Fixed by never live-binding suggestionItems to the OData model at all:
+    // rows are fetched via the same requestContexts idiom as
+    // _createProviderLookupBinding and snapshotted into a plain JSONModel,
+    // which has no autoExpandSelect/context-propagation behavior to get wrong.
     onProviderSuggest: function (oEvent) {
       var sValue = oEvent.getParameter("suggestValue");
       var oInput = oEvent.getSource();
@@ -3647,22 +3667,15 @@ sap.ui.define([
         }
         var oProps = ServiceSchema.customerSalesAreaProperties;
         var oArea = ServiceSchema.salesArea;
-        var oBinding = oInput.getBinding("suggestionItems");
-        if (!oBinding) {
-          // Live-test follow-up: a declarative suggestionItems aggregation
-          // nested in this header-bound Form polluted the header context's
-          // own autoExpandSelect with a bogus "Customer" property (confirmed
-          // live) - bound lazily here instead, well after the header's own
-          // binding is already resolved, so autoExpandSelect never sees it.
+        if (!oInput.getBinding("suggestionItems")) {
+          this.getView().setModel(new JSONModel({ rows: [] }), "providerSuggest");
           oInput.bindAggregation("suggestionItems", {
-            path: this._providerLookupPath("/" + ServiceSchema.entitySets.customerSalesArea),
-            parameters: {
-              $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
-                oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
-            },
-            template: new CoreListItem({ text: "{" + oProps.customerName + "}", additionalText: "{" + oProps.customer + "}" })
+            path: "providerSuggest>/rows",
+            template: new CoreListItem({
+              text: "{providerSuggest>" + oProps.customerName + "}",
+              additionalText: "{providerSuggest>" + oProps.customer + "}"
+            })
           });
-          oBinding = oInput.getBinding("suggestionItems");
         }
         var aFilters = (oArea && oArea.salesOrganization) ?
           [new Filter(oProps.salesOrganization, FilterOperator.EQ, oArea.salesOrganization)] : [];
@@ -3675,7 +3688,18 @@ sap.ui.define([
             and: false
           }));
         }
-        oBinding.filter(aFilters);
+        var oLookupBinding = this._getProviderLookupModel().bindList(
+          "/" + ServiceSchema.entitySets.customerSalesArea, undefined, undefined, aFilters,
+          {
+            $select: [oProps.customer, oProps.customerName, oProps.cityName, oProps.postalCode, oProps.countryText,
+              oProps.salesOrganization, oProps.distributionChannel, oProps.division].join(",")
+          }
+        );
+        oLookupBinding.requestContexts(0, this.PROVIDER_SUGGEST_ROW_LIMIT).then(function (aContexts) {
+          this.getView().getModel("providerSuggest").setProperty("/rows", aContexts.map(function (oContext) {
+            return oContext.getObject();
+          }));
+        }.bind(this));
       });
     },
 
