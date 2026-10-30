@@ -3705,7 +3705,13 @@ sap.ui.define([
 
     onProviderSuggestionSelected: function (oEvent) {
       var oSelectedRow = oEvent.getParameter("selectedRow") || oEvent.getParameter("selectedItem");
-      var oRowContext = oSelectedRow && oSelectedRow.getBindingContext();
+      // Rows are snapshotted into the named "providerSuggest" JSONModel
+      // (onProviderSuggest above) - getBindingContext() with no model name
+      // resolves to the surrounding Form's own (unrelated, default-model)
+      // context instead, which silently fed undefined provider ids into every
+      // downstream query (ProviderContact/CustomerSalesArea "Illegal value:
+      // undefined", live-test 2026-10-30).
+      var oRowContext = oSelectedRow && oSelectedRow.getBindingContext("providerSuggest");
       if (!oRowContext) {
         return;
       }
