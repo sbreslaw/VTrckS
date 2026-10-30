@@ -205,6 +205,11 @@ sap.ui.define([
     // model (manifest.json, C_SALESORDERMANAGE_SRV's own entity set, same
     // KNVV data/shape as OrdersSchema's own customerSalesAreaProperties below -
     // this is a literal copy of that shape, not an independent re-derivation).
+    // 2026-10-30: division MUST match OrdersSchema's own value ("Division"),
+    // not this service's own headerProperties.division name - the query runs
+    // against the Orders service's CustomerSalesArea entity type (via "ord"),
+    // which has no "OrganizationDivision" property (confirmed live: threw
+    // "Invalid (navigation) property 'OrganizationDivision' in $select").
     customerSalesAreaProperties: {
       customer: "Customer",
       customerName: "CustomerName",
@@ -214,7 +219,7 @@ sap.ui.define([
       countryText: "Country_Text",
       salesOrganization: "SalesOrganization",
       distributionChannel: "DistributionChannel",
-      division: "OrganizationDivision"
+      division: "Division"
     },
 
     paymentMethodProperties: null,
@@ -452,6 +457,17 @@ sap.ui.define([
     },
 
     contactPartnerFunction: "AP",
+
+    // 2026-10-30: _Partner/HeaderPartner reads still 500 on this service
+    // (confirmed backend bug, NOTES.md) - this is now a SEPARATE flag from
+    // contactPartnerFunction above (which is also used for the unrelated
+    // CreatePartner-replay write path and had to become "AP" for that), so
+    // ProviderSearchService.js#loadContactRows can keep skipping its
+    // Provider-VH "Contact" search mode for _RET without being re-enabled by
+    // that change (confirmed live regression: a stale contactPartnerFunction
+    // === null check let the HeaderPartner query fire again once that value
+    // became "AP", throwing "invalid property '_SalesOrder'" on $expand).
+    contactSearchSupported: false,
 
     // HeaderPartnerType - 2026-10-27 metadata re-audit: customer/contactPerson/
     // phone(InternationalPhoneNumber)/email(EmailAddress)/postalCode/cityName/

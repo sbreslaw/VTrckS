@@ -212,12 +212,14 @@ sap.ui.define([
 
   function loadContactRows(oMainModel, oProviderModel, sName, sId, sPin, sCity, sBasicSearch, aBaseFilters,
     iRowLimit) {
-    // ret-10-28 #2: HeaderPartner/_Partner reads are a confirmed backend 500
-    // bug for returns (ReturnsSchema.contactPartnerFunction: null signals
-    // "no working AP-contact concept on this service") - skip the request
-    // entirely rather than surfacing a new console error once the Provider VH
-    // becomes reachable for returns.
-    if (!ServiceSchema.contactPartnerFunction) {
+    // ret-10-28 #2 / 2026-10-30: HeaderPartner/_Partner reads are a confirmed
+    // backend 500 bug for returns - contactSearchSupported (NOT
+    // contactPartnerFunction, which is also used for the unrelated
+    // CreatePartner-replay write path and can be truthy for a profile whose
+    // HeaderPartner search read is still broken) is the dedicated signal to
+    // skip this request entirely rather than surfacing a console error once
+    // the Provider VH becomes reachable for returns.
+    if (!ServiceSchema.contactPartnerFunction || !ServiceSchema.contactSearchSupported) {
       return Promise.resolve([]);
     }
     var oContactProps = ServiceSchema.headerPartnerProperties;

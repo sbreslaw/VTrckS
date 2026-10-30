@@ -725,6 +725,10 @@ sap.ui.define([
     // AP-contact fallback searches.
     // Partner function of the order's Contact (Master Contact column, Details > General > Contact).
     contactPartnerFunction: "AP",
+    // Provider VH's "Contact" search mode (ProviderSearchService.js#loadContactRows)
+    // reads HeaderPartner top-level, which works on this service - see
+    // ReturnsSchema's own contactSearchSupported: false for the counter-case.
+    contactSearchSupported: true,
     headerPartnerProperties: {
       salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
