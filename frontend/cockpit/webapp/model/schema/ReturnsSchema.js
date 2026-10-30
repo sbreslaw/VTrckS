@@ -55,9 +55,13 @@ sap.ui.define([
       customerSalesArea: "CustomerSalesArea",
       contactInfo: null,
       // NDC Code Value Help lives on a SEPARATE F4 service for returns
-      // (f4Product block below, c_custretprodbyslsorgdistrchnl via srvd_f4),
-      // not a top-level entity set on this main service - PR2 concern.
-      product: null,
+      // (f4Product block below, c_custretprodbyslsorgdistrchnl via srvd_f4,
+      // confirmed by the live Product ValueListReferences annotation on
+      // CustomerReturnItemManageType). Named here too (PR2 wiring) so the
+      // shared NDC controller code in Detail.controller.js can address it the
+      // same way as Orders' own top-level /Product - see productLookupModel
+      // below for which named model actually backs this entity set.
+      product: "C_CustRetProdBySlsOrgDistrChnl",
       customerPurchaseOrderType: null,
       partnerFunction: "PartnerFunction",
       // Parties reads (_Partner/HeaderPartner) are a confirmed backend bug on
@@ -229,9 +233,20 @@ sap.ui.define([
       name: "UserDescription"
     },
 
-    // NDC Code Value Help is the f4Product block below (separate F4 service), not
-    // a top-level entity set on this service - PR2 concern.
-    productProperties: null,
+    // NDC Code Value Help is the f4Product block below (separate F4 service),
+    // not a top-level entity set on this service. Mapped into the same
+    // generic shape OrdersSchema.productProperties uses (so the shared
+    // Detail.controller.js NDC handlers work unchanged for both profiles) -
+    // group/industryStandardName (brand) have no equivalent on this F4
+    // entity (C_CustRetProdBySlsOrgDistrChnl only exposes Product/
+    // ProductName/RequestedQuantityUnit, see f4Product.properties below).
+    productProperties: {
+      id: "Product",
+      text: "ProductName",
+      group: null,
+      industryStandardName: null,
+      baseUnit: "RequestedQuantityUnit"
+    },
 
     itemProperties: {
       material: "Product",
@@ -428,6 +443,12 @@ sap.ui.define([
     // points Provider VH/typeahead/suggest at C_SALESORDERMANAGE_SRV's own
     // /CustomerSalesArea instead of this (triad-less) service.
     providerLookupModel: "ord",
+
+    // See OrdersSchema.js productLookupModel comment. "f4ProductVH" points
+    // the Item-level NDC Code Value Help/typeahead at the separate F4 service
+    // (manifest.json named model, f4Product.serviceRoot below) instead of
+    // this (no top-level Product entity set) service.
+    productLookupModel: "f4ProductVH",
 
     // ret-10-28 #3/#4: no per-order-type business status profile exists on
     // this service (unlike orders' po>/OrderStatus) - OverallSDProcessStatus
@@ -665,9 +686,15 @@ sap.ui.define([
     statusSource: "e008",
 
     // Returns-only extension (no orders analog): NDC Code Value Help, a
-    // SEPARATE F4 service (srvd_f4), confirmed live - PR2 concern.
+    // SEPARATE F4 service (srvd_f4). entitySet/properties confirmed live;
+    // serviceRoot's ;ps=...;va=... context-parameter suffix confirmed from the
+    // live Product ValueListReferences annotation on
+    // CustomerReturnItemManageType (2026-10-28 metadata, same pattern already
+    // used for shippingAddressValueHelp in manifest.json) - PR2 wiring (this
+    // session), see productLookupModel/entitySets.product/productProperties
+    // above.
     f4Product: {
-      serviceRoot: "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001/",
+      serviceRoot: "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001;ps='srvd-ui_customerreturnmanage-0001';va='com.sap.gateway.srvd.ui_customerreturnmanage.v0001.et-c_customerreturnitemmanagetp.product'/",
       entitySet: "C_CustRetProdBySlsOrgDistrChnl",
       properties: {
         salesOrganization: "SalesOrganization",

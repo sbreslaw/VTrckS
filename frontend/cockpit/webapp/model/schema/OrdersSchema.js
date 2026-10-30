@@ -662,6 +662,13 @@ sap.ui.define([
     // "" = default (unnamed) model, i.e. this profile's own serviceRoot.
     providerLookupModel: "",
 
+    // Issue Batch 9-30-002: which named model backs the NDC Code Value Help/
+    // typeahead lookups against entitySets.product. "" = default (unnamed)
+    // model - this profile's own top-level /Product EntitySet. Returns has no
+    // such top-level entity set and instead routes through a separate F4
+    // service (ReturnsSchema.js productLookupModel/f4Product).
+    productLookupModel: "",
+
     // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
     // definition extension action on the standard BO, name/params TBD once
     // activated on-system). Null means confirmed BLOCKED-BY-SERVICE; affected

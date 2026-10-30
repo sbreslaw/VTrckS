@@ -35,6 +35,13 @@
                 "settings": {
                     "odataVersion": "4.0"
                 }
+            },
+            "f4ProductValueHelp": {
+                "uri": "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001;ps='srvd-ui_customerreturnmanage-0001';va='com.sap.gateway.srvd.ui_customerreturnmanage.v0001.et-c_customerreturnitemmanagetp.product'/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
             }
         },
         "sourceTemplate": {
@@ -106,6 +113,13 @@
             },
             "shippingAddressVH": {
                 "dataSource": "shippingAddressValueHelp",
+                "settings": {
+                    "operationMode": "Server",
+                    "groupId": "$direct"
+                }
+            },
+            "f4ProductVH": {
+                "dataSource": "f4ProductValueHelp",
                 "settings": {
                     "operationMode": "Server",
                     "groupId": "$direct"

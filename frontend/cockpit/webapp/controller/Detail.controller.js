@@ -1045,42 +1045,48 @@ sap.ui.define([
       this._checkItemRowComplete(oRowContext);
     },
 
-    // Issue Batch 9-30-001 §3.4: NDC typeahead - filters the row's own
-    // templated Input's "suggestionItems" aggregation binding (bound against
-    // /Product, Items.fragment.xml), Contains on id/text, debounced per-row
-    // (keyed by the row context's own path so two different rows' timers
-    // never clobber each other).
+    // Max product rows to fetch per NDC typeahead keystroke.
+    NDC_SUGGEST_ROW_LIMIT: 50,
+
+    // Issue Batch 9-30-001 §3.4: NDC typeahead - filters the row's own Input
+    // via a fresh requestContexts() query on every debounced keystroke,
+    // snapshotted into a per-control "ndcSuggest" JSONModel (debounced per-row
+    // via the row context's own path so two different rows' timers never
+    // clobber each other).
+    //
+    // Live-test (2026-10-30, same bug class as Provider's onProviderSuggest):
+    // a declarative suggestionItems aggregation live-bound to the OData model
+    // (whether the default model or a NAMED one like "f4ProductVH") confirmed
+    // the exact same sap.m.Input suggestion-popover context-propagation bug
+    // fixed for Provider - rows are fetched via requestContexts and
+    // snapshotted into a plain JSONModel instead, which has no
+    // autoExpandSelect/context-propagation behavior to get wrong. The
+    // JSONModel is set directly on the Input control instance (not the view)
+    // since each item row has its own Input - this also naturally isolates
+    // rows across sap.ui.table control recycling as the user scrolls.
     onItemNdcSuggest: function (oEvent) {
       var sValue = oEvent.getParameter("suggestValue");
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
       var sKey = "ndc:" + (oRowContext ? oRowContext.getPath() : "");
       this._debounce(sKey, function () {
-        // ADR-002 PR1: productProperties/entitySets.product are null on
-        // ReturnsSchema - no NDC/Product lookup wired yet (PR2 concern).
-        if (!ServiceSchema.productProperties) {
+        // ADR-002 PR1 (orders)/PR2 wiring (returns): productProperties is
+        // null only if a profile has no NDC lookup wired at all.
+        if (!ServiceSchema.productProperties || !oRowContext) {
           return;
         }
         var oProps = ServiceSchema.productProperties;
-        var oBinding = oInput.getBinding("suggestionItems");
-        if (!oBinding) {
-          // Live-test (9-30-001 follow-up): a declarative suggestionItems
-          // aggregation nested in this row template polluted the outer
-          // _Item list's own autoExpandSelect $select with "Product_Text"
-          // (not a real _Item property - confirmed live 404) - bound
-          // lazily here instead, well after the table's own binding is
-          // already resolved, so autoExpandSelect never sees it.
-          // Live-test follow-up: $select must carry the same fields
-          // _applyNdcPick reads (brand/UOM), or the suggestion path silently
-          // defaults Product/Product_Text only and leaves Brand/UOM unset.
+        if (!oInput.getBinding("suggestionItems")) {
+          oInput.setModel(new JSONModel({ rows: [] }), "ndcSuggest");
           oInput.bindAggregation("suggestionItems", {
-            path: "/" + ServiceSchema.entitySets.product,
-            parameters: { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") },
-            template: new CoreListItem({ text: "{" + oProps.text + "}", additionalText: "{" + oProps.id + "}" })
+            path: "ndcSuggest>/rows",
+            template: new CoreListItem({
+              text: "{ndcSuggest>" + oProps.text + "}",
+              additionalText: "{ndcSuggest>" + oProps.id + "}"
+            })
           });
-          oBinding = oInput.getBinding("suggestionItems");
         }
-        var aFilters = [];
+        var aFilters = this._productLookupFilters();
         if (sValue) {
           aFilters.push(new Filter({
             filters: [
@@ -1090,15 +1096,33 @@ sap.ui.define([
             and: false
           }));
         }
-        oBinding.filter(aFilters);
-      });
+        var oLookupBinding = this._getProductLookupModel().bindList(
+          "/" + ServiceSchema.entitySets.product, undefined, undefined, aFilters,
+          { $select: this._productSelect(oProps) }
+        );
+        oLookupBinding.requestContexts(0, this.NDC_SUGGEST_ROW_LIMIT).then(function (aContexts) {
+          // The row template control may have been recycled for a different
+          // row by the time this resolves (sap.ui.table row virtualization) -
+          // only apply if it's still showing the row this fetch was for.
+          if (oInput.getBindingContext() !== oRowContext) {
+            return;
+          }
+          oInput.getModel("ndcSuggest").setProperty("/rows", aContexts.map(function (oContext) {
+            return oContext.getObject();
+          }));
+        });
+      }.bind(this));
     },
 
     onItemNdcSuggestionSelected: function (oEvent) {
       var oInput = oEvent.getSource();
       var oRowContext = oInput.getBindingContext();
       var oSelectedRow = oEvent.getParameter("selectedRow") || oEvent.getParameter("selectedItem");
-      var oProductContext = oSelectedRow && oSelectedRow.getBindingContext();
+      // Rows are snapshotted into the per-control "ndcSuggest" JSONModel
+      // (onItemNdcSuggest above) - getBindingContext() with no model name
+      // resolves to the row's own (unrelated) default-model context instead,
+      // same silent-wrong-context bug fixed for Provider's suggestion pick.
+      var oProductContext = oSelectedRow && oSelectedRow.getBindingContext("ndcSuggest");
       if (!oRowContext || !oProductContext) {
         return;
       }
@@ -1134,18 +1158,19 @@ sap.ui.define([
         return Promise.resolve(false);
       }
       oInput.setValue(sValue);
-      // ADR-002 PR1: productProperties/entitySets.product are null on
-      // ReturnsSchema - no NDC/Product lookup wired yet (PR2 concern). Revert
-      // the input rather than throwing building the lookup binding below.
+      // Only a profile with no NDC lookup wired at all (productProperties
+      // null) reverts here - orders and returns both now have a confirmed
+      // lookup (see entitySets.product/productLookupModel).
       if (!ServiceSchema.productProperties) {
         oInput.setValue(sPreviousNdc);
         this._setNdcValueState(oInput, true);
         return Promise.resolve(false);
       }
-      var oLookupBinding = oRowContext.getModel().bindList(
-        "/" + ServiceSchema.entitySets.product, undefined, undefined,
-        [new Filter(oProps.id, FilterOperator.EQ, sValue)],
-        { $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",") }
+      var aFilters = this._productLookupFilters();
+      aFilters.push(new Filter(oProps.id, FilterOperator.EQ, sValue));
+      var oLookupBinding = this._getProductLookupModel().bindList(
+        "/" + ServiceSchema.entitySets.product, undefined, undefined, aFilters,
+        { $select: this._productSelect(oProps) }
       );
       return oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
         if (oInput.getValue().trim() !== sValue) {
@@ -2547,6 +2572,59 @@ sap.ui.define([
       return (ServiceSchema.providerLookupModel ? ServiceSchema.providerLookupModel + ">" : "") + sPath;
     },
 
+    // Which named model (ServiceSchema.productLookupModel) backs the
+    // Item-level NDC Code Value Help/typeahead lookups against entitySets.
+    // product - "" (orders) resolves to the default/unnamed model (this
+    // profile's own top-level /Product); "f4ProductVH" (returns) resolves to
+    // the named manifest.json model pointed at the separate F4 service
+    // (ReturnsSchema.js f4Product.serviceRoot - no top-level Product entity
+    // set exists on the main returns service). Mirrors _getProviderLookupModel.
+    _getProductLookupModel: function () {
+      return this.getOwnerComponent().getModel(ServiceSchema.productLookupModel || undefined);
+    },
+
+    // Soft pre-filter (same idiom as Provider's oArea.salesOrganization
+    // filter) - only applies when this profile's product lookup is keyed by
+    // SalesOrganization/DistributionChannel (ServiceSchema.f4Product, returns
+    // only) AND the header context already carries real values for them
+    // (seeded once a Provider has been picked, _applyProviderPick). Skipped
+    // entirely (not filtered on an invented/empty value) otherwise - same
+    // precedent as ServiceSchema.salesArea being null for returns.
+    _productLookupFilters: function () {
+      if (!ServiceSchema.f4Product) {
+        return [];
+      }
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext) {
+        return [];
+      }
+      var oFilterProps = ServiceSchema.f4Product.properties;
+      var sSalesOrg = oHeaderContext.getProperty(ServiceSchema.headerProperties.salesOrganization);
+      var sDistrChannel = oHeaderContext.getProperty(ServiceSchema.headerProperties.distributionChannel);
+      var aFilters = [];
+      if (sSalesOrg) {
+        aFilters.push(new Filter(oFilterProps.salesOrganization, FilterOperator.EQ, sSalesOrg));
+      }
+      if (sDistrChannel) {
+        aFilters.push(new Filter(oFilterProps.distributionChannel, FilterOperator.EQ, sDistrChannel));
+      }
+      return aFilters;
+    },
+
+    // $select for the NDC product lookup (id/text/industryStandardName/
+    // baseUnit) - filters out null property names before joining. Live-test
+    // (this session): ReturnsSchema.productProperties.industryStandardName is
+    // null (this F4 entity has no brand concept) - joining the raw array
+    // produced a double comma ("Product,ProductName,,RequestedQuantityUnit"),
+    // a malformed $select the OData V4 URI parser rejected outright
+    // ("Expected PATH but instead saw ','"), which is what actually threw on
+    // every NDC suggest/VH/paste call for returns, not a missing-model issue.
+    _productSelect: function (oProps) {
+      return [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit]
+        .filter(function (sPath) { return !!sPath; })
+        .join(",");
+    },
+
     // v5 ("UX phasing + triad sourcing"): Provider VH backed by the real,
     // top-level `/CustomerSalesArea` entity set - keyed by Customer +
     // SalesOrganization + DistributionChannel + Division (design/so.xml
@@ -3051,27 +3129,47 @@ sap.ui.define([
       });
     },
 
-    // NDC Code VH backed by this same service's own top-level `/Product`
-    // EntitySet (ProductType) - search by material description or code.
-    // Session Prompt (Detail View Adjustments) 3.7: $select now also includes
-    // BaseUnit (ServiceSchema.productProperties.baseUnit), carried over to the
-    // picked row's RequestedQuantityUnit (onItemNdcValueHelpRequest) so Items
-    // UOM can go back to being read-only.
+    // Max product rows to fetch per NDC Value Help dialog search.
+    PRODUCT_VALUE_HELP_ROW_LIMIT: 500,
+
+    // NDC Code VH - orders' own top-level `/Product` EntitySet (ProductType)
+    // on the default model; returns' separate F4 service (f4ProductVH named
+    // model) - search by material description or code either way, routed via
+    // _getProductLookupModel()/_productLookupFilters(). Session Prompt
+    // (Detail View Adjustments) 3.7: $select now also includes BaseUnit
+    // (ServiceSchema.productProperties.baseUnit), carried over to the picked
+    // row's RequestedQuantityUnit (onItemNdcValueHelpRequest) so Items UOM can
+    // go back to being read-only.
+    //
+    // Live-test (same bug class as Provider/Contact VH, confirmed this
+    // session): binding the GridTable's rows directly to a named OData model
+    // (bindingInfo.model) left the row context registered under that model
+    // name, which plain unprefixed column templates ("{Product}") can't see -
+    // rewired to the same "named JSONModel set directly on the table" idiom
+    // already proven by _openProviderContactValueHelpDialog's "picker" model:
+    // fetch via requestContexts, snapshot into a JSONModel, column templates
+    // read "picker>" + path regardless of which real model backed the fetch.
     _openProductValueHelpDialog: function (sTitle, fnApply) {
+      var that = this;
       var oBundle = this.getResourceBundle();
-      // ADR-002 PR1: productProperties/entitySets.product are null on
-      // ReturnsSchema (no confirmed Product/NDC entity set on this service
-      // yet - PR2 concern). Fail gracefully instead of throwing.
+      // Only a profile with no NDC lookup wired at all (productProperties
+      // null) fails gracefully here - orders and returns both now have one.
       if (!ServiceSchema.productProperties) {
         MessageToast.show(oBundle.getText("valueHelpNotAvailable"));
         return;
       }
       var oProps = ServiceSchema.productProperties;
+      // Filter out fields with no equivalent property on this profile's
+      // product lookup (e.g. returns' F4 entity has no industryStandardName/
+      // brand concept) - a null path both breaks the $select (see
+      // _productSelect) and throws building the FilterBar's per-field search
+      // Input below (sap.ui.comp.filterbar's addFilterGroupItem requires a
+      // non-empty name, live-test this session).
       var aFields = [
         { path: oProps.id, labelKey: "productHelpProductId" },
         { path: oProps.text, labelKey: "productHelpProduct" },
         { path: oProps.industryStandardName, labelKey: "productHelpBrand" }
-      ];
+      ].filter(function (oField) { return !!oField.path; });
       var oBasicSearch = new SearchField({
         width: "100%",
         placeholder: oBundle.getText("valueHelpSearchPlaceholder")
@@ -3098,91 +3196,121 @@ sap.ui.define([
         });
         return aFilters;
       };
-      var oTable = new GridTable({
-        selectionMode: "Single",
-        selectionBehavior: "RowOnly",
-        rowMode: new AutoRowMode({ minRowCount: 8 }),
-        threshold: 100,
-        enableColumnReordering: false,
-        rowSelectionChange: function (oEvent) {
-          var oContext = oEvent.getParameter("rowContext");
-          if (oContext) {
-            fnApply(oContext.getObject());
-            oDialog.close();
-          }
-        }
-      }).addStyleClass("detailSingleSelectValueHelpTable");
-      [
-        { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
-        { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
-        { path: oProps.group, labelKey: "productHelpBaseCategory", width: "10rem" },
-        { path: oProps.industryStandardName, labelKey: "productHelpBrand", width: "10rem" }
-      ].forEach(function (oColumn) {
-        oTable.addColumn(new GridColumn({
-          label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
-          template: oColumn.path ? new Text({ text: "{" + oColumn.path + "}" }) : new Text(),
-          width: oColumn.width
-        }));
-      });
-      var oDialog = new ValueHelpDialog({
-        title: sTitle,
-        key: oProps.id,
-        descriptionKey: oProps.text,
-        contentWidth: "66rem",
-        contentHeight: "47rem",
-        draggable: true,
-        resizable: true,
-        supportMultiselect: false,
-        supportRanges: false,
-        supportRangesOnly: false,
-        cancel: function () {
-          oDialog.close();
-        },
-        afterClose: function () {
-          oDialog.destroy();
-        }
-      });
-      var fnBindRows = function () {
-        oTable.clearSelection();
-        oTable.bindRows({
-          path: "/" + ServiceSchema.entitySets.product,
-          parameters: {
-            $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
-          },
-          filters: fnGetFilters(),
-          events: {
-            dataRequested: function () { oDialog.setBusy(true); },
-            dataReceived: function () {
-              oDialog.setBusy(false);
-              oDialog.update();
-            }
-          }
+      var fnFetchRows = function () {
+        var aFilters = that._productLookupFilters().concat(fnGetFilters());
+        var oLookupBinding = that._getProductLookupModel().bindList(
+          "/" + ServiceSchema.entitySets.product, undefined, undefined, aFilters,
+          { $select: that._productSelect(oProps) }
+        );
+        return oLookupBinding.requestContexts(0, that.PRODUCT_VALUE_HELP_ROW_LIMIT).then(function (aContexts) {
+          return aContexts.map(function (oContext) { return oContext.getObject(); });
+        }).catch(function () {
+          return [];
         });
       };
-      var oFilterBar = new FilterBar({
-        advancedMode: true,
-        filterBarExpanded: true,
-        showGoOnFB: true,
-        search: fnBindRows
+      // Live-test (this session): building/opening the dialog BEFORE the
+      // first fetch resolves (table bound to an empty "picker>/rows", then
+      // populated later via setProperty once data arrived) left the
+      // GridTable permanently stuck on its "No data found" placeholder even
+      // though the binding's own getLength() and the JSONModel's row count
+      // were both correct (401) - sap.ui.table's row container never
+      // recovers from being first rendered with zero rows this way. Fixed by
+      // mirroring _openProviderContactValueHelpDialog's precedent: fetch
+      // once up front and only build/open the dialog once real data is
+      // already in the JSONModel, before binding rows to it for the first
+      // time. Later re-searches (fnBindRows below) rebind a table that
+      // already rendered real rows once, which is not affected by this.
+      fnFetchRows().then(function (aInitialRows) {
+        var oPickerModel = new JSONModel({ rows: aInitialRows });
+        var oTable = new GridTable({
+          selectionMode: "Single",
+          selectionBehavior: "RowOnly",
+          rowMode: new AutoRowMode({ minRowCount: 8 }),
+          threshold: 100,
+          enableColumnReordering: false,
+          rowSelectionChange: function (oEvent) {
+            var oContext = oEvent.getParameter("rowContext");
+            if (oContext) {
+              fnApply(oContext.getObject());
+              oDialog.close();
+            }
+          }
+        }).addStyleClass("detailSingleSelectValueHelpTable");
+        oTable.setModel(oPickerModel, "picker");
+        oTable.bindRows({ path: "picker>/rows" });
+        [
+          { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
+          { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
+          { path: oProps.group, labelKey: "productHelpBaseCategory", width: "10rem" },
+          { path: oProps.industryStandardName, labelKey: "productHelpBrand", width: "10rem" }
+        ].forEach(function (oColumn) {
+          oTable.addColumn(new GridColumn({
+            label: new Text({ text: oBundle.getText(oColumn.labelKey) }),
+            template: oColumn.path ? new Text({ text: "{picker>" + oColumn.path + "}" }) : new Text(),
+            width: oColumn.width
+          }));
+        });
+        var oDialog = new ValueHelpDialog({
+          title: sTitle,
+          key: oProps.id,
+          descriptionKey: oProps.text,
+          contentWidth: "66rem",
+          contentHeight: "47rem",
+          draggable: true,
+          resizable: true,
+          supportMultiselect: false,
+          supportRanges: false,
+          supportRangesOnly: false,
+          cancel: function () {
+            oDialog.close();
+          },
+          afterClose: function () {
+            oDialog.destroy();
+          }
+        });
+        var fnBindRows = function () {
+          oTable.clearSelection();
+          oDialog.setBusy(true);
+          fnFetchRows().then(function (aRows) {
+            oPickerModel.setProperty("/rows", aRows);
+            oDialog.setBusy(false);
+            oDialog.update();
+          });
+        };
+        var oFilterBar = new FilterBar({
+          advancedMode: true,
+          filterBarExpanded: true,
+          showGoOnFB: true,
+          search: fnBindRows
+        });
+        oFilterBar.setBasicSearch(oBasicSearch);
+        oBasicSearch.attachSearch(fnBindRows);
+        aFieldControls.forEach(function (oFieldControl) {
+          oFilterBar.addFilterGroupItem(new FilterGroupItem({
+            groupName: "productValueHelp",
+            name: oFieldControl.definition.path,
+            label: oBundle.getText(oFieldControl.definition.labelKey),
+            visibleInFilterBar: true,
+            control: oFieldControl.control
+          }));
+        });
+        oDialog.setFilterBar(oFilterBar);
+        oDialog.setTable(oTable);
+        oTable.setSelectionMode("Single");
+        oTable.setSelectionBehavior("RowOnly");
+        // Live-test (this session): even with data already in the model
+        // before the first bindRows() call, sap.ui.table's AutoRowMode can
+        // still compute a 0 row count (never instantiating any Row
+        // objects) if the dialog's layout/height wasn't fully settled at
+        // the time the table first measured itself. ValueHelpTableFitter
+        // (already proven in _openProviderContactValueHelpDialog) attaches
+        // a ResizeHandler that re-measures and forces a real row count
+        // once the dialog has actually finished opening/laying out.
+        ValueHelpTableFitter.attach(oDialog, oTable, ResizeHandler);
+        that.getView().addDependent(oDialog);
+        oDialog.open();
+        ValueHelpTableFitter.fit(oDialog, oTable);
       });
-      oFilterBar.setBasicSearch(oBasicSearch);
-      oBasicSearch.attachSearch(fnBindRows);
-      aFieldControls.forEach(function (oFieldControl) {
-        oFilterBar.addFilterGroupItem(new FilterGroupItem({
-          groupName: "productValueHelp",
-          name: oFieldControl.definition.path,
-          label: oBundle.getText(oFieldControl.definition.labelKey),
-          visibleInFilterBar: true,
-          control: oFieldControl.control
-        }));
-      });
-      oDialog.setFilterBar(oFilterBar);
-      oDialog.setTable(oTable);
-      oTable.setSelectionMode("Single");
-      oTable.setSelectionBehavior("RowOnly");
-      this.getView().addDependent(oDialog);
-      oDialog.open();
-      fnBindRows();
     },
 
     // Prefill the selected Provider's current default contact. The backend's
@@ -3575,7 +3703,7 @@ sap.ui.define([
         items: {
           path: "/" + ServiceSchema.entitySets.product,
           parameters: {
-            $select: [oProps.id, oProps.text, oProps.industryStandardName, oProps.baseUnit].join(",")
+            $select: this._productSelect(oProps)
           },
           filters: aExclusionFilters,
           template: new StandardListItem({
