@@ -134,9 +134,28 @@ sap.ui.define([
     var oParams = {
       SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || oFallbackArea.salesOrganization,
       DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || oFallbackArea.distributionChannel,
-      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || oFallbackArea.organizationDivision,
-      SoldToPartyForCreate: oScratchData[ServiceSchema.headerProperties.providerId] || ""
+      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || oFallbackArea.organizationDivision
     };
+    // CONFIRMED BUG (live-tested, Returns, 2026-11-02): SoldToPartyForCreate
+    // is a real, Nullable=false parameter on CreateWithSalesOrderType (_ORD,
+    // so_C_SALESORDERMANAGE metadata) but does NOT exist at all on
+    // CreateWithCustomerReturnType (_RET, ui_customerreturnmanage metadata
+    // 2026-10-28 - only _it/CustomerReturnType/SalesOrganization/
+    // DistributionChannel/OrganizationDivision are defined). The OData V4
+    // model's setParameter() doesn't validate against metadata client-side,
+    // so sending this unsupported name silently "succeeds" opening the
+    // session - but corrupts the backend's sticky-session state so that
+    // EVERY later POST to _Item (even an empty {} body) 422s
+    // (/IWBEP/CM_V4S_RUN/000 Provider_Application_Error). Confirmed live:
+    // omitting it here and PATCHing SoldToParty onto the session afterward
+    // instead (see _ensureSession below) makes item creation succeed with no
+    // 422, matching the proven-working standard app "Manage Customer
+    // Returns V2" flow (which also PATCHes SoldToParty post-create, never
+    // passes it to the create action). Only include it for profiles whose
+    // action actually defines it (_ORD).
+    if (ServiceSchema.profileId !== "returns") {
+      oParams.SoldToPartyForCreate = oScratchData[ServiceSchema.headerProperties.providerId] || "";
+    }
     // CONFIRMED BUG (live-tested, Returns): this action's own mandatory
     // order-type parameter is named SalesOrderType on CreateWithSalesOrderType
     // (_ORD) but CustomerReturnType on CreateWithCustomerReturnType (_RET) -
@@ -351,6 +370,21 @@ sap.ui.define([
           }).getBoundContext();
           oSession.opened = true;
           oSession.plainContext = oPlainContext;
+          // Returns (_RET): SoldToPartyForCreate isn't a real parameter of
+          // CreateWithCustomerReturnType (see buildCreateActionParams above)
+          // - PATCH it here instead, same as the proven-working standard
+          // app's own post-create call. Must complete before any _Item POST
+          // is attempted against this session (confirmed live: an _Item POST
+          // issued before this PATCH lands still 422s).
+          if (ServiceSchema.profileId === "returns") {
+            var sSoldToParty = oScratchData[ServiceSchema.headerProperties.providerId];
+            if (sSoldToParty) {
+              return oPlainContext.setProperty(ServiceSchema.headerProperties.providerId, sSoldToParty)
+                .then(function () {
+                  return oPlainContext;
+                });
+            }
+          }
           return oPlainContext;
         })
         .then(function (oPlainContext) {
@@ -380,6 +414,51 @@ sap.ui.define([
           $$updateGroupId: ITEM_GROUP,
           $select: "SAP__Messages"
         });
+        // CONFIRMED BUG (live-tested, Returns, 2026-11-02): a single
+        // _Item POST carrying Product+RequestedQuantity+RequestedQuantityUnit
+        // all at once still 422s (/IWBEP/CM_V4S_RUN/000
+        // Provider_Application_Error) even once SoldToPartyForCreate is no
+        // longer sent to the create action (see _ensureSession above) - this
+        // is a SEPARATE backend quirk from that one. The proven-working
+        // standard app "Manage Customer Returns V2" never sends item fields
+        // on the initial POST either: it always creates a bare row first
+        // (empty body), then PATCHes Product+RequestedQuantityUnit, then
+        // PATCHes RequestedQuantity+RequestedQuantityUnit - confirmed live
+        // to succeed end-to-end (no 422) against our own session, replacing
+        // the single combined create() Orders (_ORD) still uses below
+        // (never observed to need this, left unchanged to avoid regressing
+        // a working flow).
+        if (ServiceSchema.profileId === "returns") {
+          var oClean = cleanItemPayload(oItemData);
+          var sMaterialKey = ServiceSchema.itemProperties.material;
+          var sUnitKey = ServiceSchema.itemProperties.unit;
+          var oIncrementalContext = oItemsBinding.create({});
+          return oIncrementalContext.created().then(function () {
+            var aPatches = [];
+            var oFirstPatch = {};
+            if (oClean[sMaterialKey] !== undefined) {
+              oFirstPatch[sMaterialKey] = oClean[sMaterialKey];
+            }
+            if (oClean[sUnitKey] !== undefined) {
+              oFirstPatch[sUnitKey] = oClean[sUnitKey];
+            }
+            Object.keys(oFirstPatch).forEach(function (sKey) {
+              aPatches.push(oIncrementalContext.setProperty(sKey, oFirstPatch[sKey]));
+            });
+            return Promise.all(aPatches);
+          }).then(function () {
+            var aPatches = [];
+            Object.keys(oClean).forEach(function (sKey) {
+              if (sKey === sMaterialKey) {
+                return;
+              }
+              aPatches.push(oIncrementalContext.setProperty(sKey, oClean[sKey]));
+            });
+            return Promise.all(aPatches);
+          }).then(function () {
+            return oIncrementalContext;
+          });
+        }
         var oNewItemContext = oItemsBinding.create(cleanItemPayload(oItemData));
         return oNewItemContext.created().then(function () {
           return oNewItemContext;
