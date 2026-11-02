@@ -922,13 +922,19 @@ sap.ui.define([
         var oNewRowData = {};
         oNewRowData[oProps.material] = "";
         oNewRowData[oProps.quantity] = "0";
-        oNewRowData[oProps.unit] = ServiceSchema.createPayloadUom;
-        oNewRowData[oProps.vfcQty] = 0;
-        oNewRowData[oProps.qty317] = 0;
-        oNewRowData[oProps.stateQty] = 0;
-        oNewRowData[oProps.chipQty] = 0;
-        oNewRowData[oProps.panQty] = 0;
-        oNewRowData[oProps.resQty] = 0;
+        if (ServiceSchema.createPayloadUom) {
+          oNewRowData[oProps.unit] = ServiceSchema.createPayloadUom;
+        }
+        // CONFIRMED BUG (live-tested, Returns): these six are null on
+        // ReturnsSchema (no fund-split concept there) - writing oNewRowData
+        // [null] coerces to a single bogus "null" string key instead of six
+        // real ones, silently polluting every scratch row's own data object.
+        // Harmless to the actual create POST (cleanItemPayload's schema-
+        // driven whitelist never forwards it), but still wrong - skip
+        // entirely when the schema says this field doesn't exist.
+        FundLogicService.getZzFields().forEach(function (sField) {
+          oNewRowData[sField] = 0;
+        });
         if (!this._bItemsSessionBound && bCreateMode) {
           oNewRowData[oProps.itemNumber] = ("000000" + iNextItemNumber).slice(-6);
           iNextItemNumber += 10;
