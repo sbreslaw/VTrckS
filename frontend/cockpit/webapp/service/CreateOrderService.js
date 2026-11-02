@@ -131,13 +131,22 @@ sap.ui.define([
     // harvested the real triad from the Provider VH pick still works, and a
     // row that somehow hasn't yet just sends undefined rather than throwing.
     var oFallbackArea = ServiceSchema.salesArea || {};
-    return {
-      SalesOrderType: sOrderType,
+    var oParams = {
       SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || oFallbackArea.salesOrganization,
       DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || oFallbackArea.distributionChannel,
       OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || oFallbackArea.organizationDivision,
       SoldToPartyForCreate: oScratchData[ServiceSchema.headerProperties.providerId] || ""
     };
+    // CONFIRMED BUG (live-tested, Returns): this action's own mandatory
+    // order-type parameter is named SalesOrderType on CreateWithSalesOrderType
+    // (_ORD) but CustomerReturnType on CreateWithCustomerReturnType (_RET) -
+    // a hardcoded "SalesOrderType" key here 400'd every Returns session open
+    // ("No value for mandatory parameter 'CustomerReturnType' specified").
+    // headerProperties.salesOrderType is itself already the correct literal
+    // name per profile ("SalesOrderType" / "CustomerReturnType"), so reuse it
+    // as the param key instead of a fixed string.
+    oParams[ServiceSchema.headerProperties.salesOrderType] = sOrderType;
+    return oParams;
   }
 
   // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the ITEM_PROPERTIES

@@ -28,6 +28,13 @@ sap.ui.define([
   // would go stale and silently hold nulls after a same-tab _RET -> _ORD
   // profile relaunch (same bug class as the PricingColumns.js Sorter crash).
   function getZzFields() {
+    // CONFIRMED BUG (live-tested, Returns): all six of these are null on
+    // ReturnsSchema (no Fund Type concept there) - Context#getProperty(null)
+    // throws SYNCHRONOUSLY ("Accessed value is not primitive") instead of
+    // just returning undefined, which used to abort snapshotZzFields (called
+    // from cacheAllocation, in turn called from onProdQtyChange on every
+    // keystroke) before the quantity field write even landed - filter them
+    // out here once so every caller is automatically safe.
     return [
       ServiceSchema.itemProperties.vfcQty,
       ServiceSchema.itemProperties.stateQty,
@@ -35,7 +42,9 @@ sap.ui.define([
       ServiceSchema.itemProperties.chipQty,
       ServiceSchema.itemProperties.panQty,
       ServiceSchema.itemProperties.resQty
-    ];
+    ].filter(function (sField) {
+      return !!sField;
+    });
   }
   // Live-test, 2026-10-01: the backend's own first-item POST can ALSO return
   // an adjusted RequestedQuantity (e.g. 1 -> 10, a pack-size/minimum-order

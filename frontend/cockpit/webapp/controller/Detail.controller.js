@@ -1397,7 +1397,9 @@ sap.ui.define([
     },
 
     _clearFundTypeSelection: function (oRowContext) {
-      if (!oRowContext || !oRowContext.getProperty(ServiceSchema.itemProperties.fundType)) {
+      // Guard against Context#getProperty(null) (itemProperties.fundType is
+      // null for Returns) - see _applyQtyValue's comment for the same bug.
+      if (!oRowContext || !ServiceSchema.itemProperties.fundType || !oRowContext.getProperty(ServiceSchema.itemProperties.fundType)) {
         return [];
       }
       var aPending = [oRowContext.setProperty(ServiceSchema.itemProperties.fundType, "")];
@@ -1420,7 +1422,15 @@ sap.ui.define([
     _parseQtyValue: function (sRawValue) {
       var aMatch = /^(\d+)(?:\.0*)?$/.exec(String(sRawValue || "").replace(/[\s,]/g, ""));
       var iQty = aMatch ? parseInt(aMatch[1], 10) : NaN;
-      if (!(iQty > 0) || iQty > ServiceSchema.itemFieldLimits.qtyMax) {
+      // CONFIRMED BUG (live-tested, Returns): itemFieldLimits.qtyMax is null
+      // for Returns (no Int32 fund-type mirror field to bound against, see
+      // qtyMax's own schema comment) - `iQty > null` coerces null to 0 in
+      // JS, so this used to reject EVERY positive quantity on Returns
+      // ("Not applied..." warning), silently blocking _checkItemRowComplete
+      // from ever firing and so no item create batch call ever went out.
+      // A null qtyMax means "no schema-defined upper bound", not "max 0".
+      var iQtyMax = ServiceSchema.itemFieldLimits.qtyMax;
+      if (!(iQty > 0) || (iQtyMax !== null && iQty > iQtyMax)) {
         return null;
       }
       return String(iQty);
@@ -1454,7 +1464,17 @@ sap.ui.define([
       var aPending = [];
       // A2/A4: which quantity mirror gets the value now follows the row's own
       // fundType selection (see onFundTypeChange) instead of always ZZSTATEQTY.
-      var oFundType = this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType));
+      // CONFIRMED BUG (live-tested, Returns): itemProperties.fundType is null
+      // for Returns (no fund-split concept there) - Context#getProperty(null)
+      // throws SYNCHRONOUSLY ("Accessed value is not primitive", same class of
+      // bug as the bindProperty(null) gotcha) instead of just returning
+      // undefined, which used to abort this whole function before it ever
+      // reached the quantity setProperty below - the Qty input looked like it
+      // accepted the typed value (local widget state) but the row's real
+      // RequestedQuantity model property was silently never written.
+      var oFundType = ServiceSchema.itemProperties.fundType
+        ? this._getFundTypeEntry(oRowContext.getProperty(ServiceSchema.itemProperties.fundType))
+        : null;
       if (oFundType && oFundType.targetField) {
         aPending.push(oRowContext.setProperty(oFundType.targetField, iValue));
       }
