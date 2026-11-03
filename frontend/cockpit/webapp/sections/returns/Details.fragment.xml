@@ -57,6 +57,28 @@
 						</f:fields>
 					</f:FormElement>
 
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>colDescription}" required="false">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+
+						<f:fields>
+							<VBox>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+								<!-- <Text text="{ZOrdDesc}" visible="{= !${sectionFlags>/details/editing} }"/> -->
+								<!-- <Input id="headerDescInput" value="{path: 'ZOrdDesc', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+									maxLength="40" visible="{sectionFlags>/details/editing}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/> -->
+							</VBox>
+						</f:fields>
+					</f:FormElement>
+
 					<!-- Live-test (exceptions.txt 2026-10-27): ZOrdDesc removed - confirmed
 						genuinely absent on CustomerReturnManageType (ReturnsSchema.js
 						headerProperties.description: null, "no free-text header description
@@ -506,13 +528,26 @@
 						</f:fields>
 					</f:FormElement>
 
+
+					<!-- SPACER -->
+					<f:FormElement>
+						<f:fields>
+							<Text text=" ">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+					<!-- SPACER -->
+
 					<!-- RESTORED (2026-10-27 metadata re-audit): CustomerPurchaseOrderSuplmnt
 						IS real on CustomerReturnManageType - a prior round this session wrongly
 						removed this FormElement assuming the property was absent (based on the
 						OLDER 2026-10-26 metadata, which omitted it). Same Edm.String(4)->StepInput
 						OneWay+formatter+explicit-change-handler pattern as the orders-side
 						Details.fragment.xml (Return Orders session prompt 1.3). -->
-					<f:FormElement visible="{= ${orderUi>/fields/detailsNoOfBoxes/visible} !== false }">
+					<f:FormElement visible="{orderUi>/fields/detailsNoOfBoxes/visible}">
 						<f:label>
 							<Label text="{i18n>detailsNoOfBoxes}" required="false">
 								<layoutData>
@@ -543,25 +578,8 @@
 
 
 <!-- SPACER -->
-					<f:FormElement>
-						<!-- <f:label>
-							<Label text=" " required="false">
-								<layoutData>
-									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
-								</layoutData>
-							</Label>
-						</f:label> -->
-						<f:fields>
-							<Text text=" ">
-								<layoutData>
-									<l:GridData span="XL8 L8 M8 S12"/>
-								</layoutData>
-							</Text>
-						</f:fields>
-					</f:FormElement>
 
-
-					<f:FormElement visible="{= ${orderUi>/fields/detailsShippingCondition/visible} !== false }">
+					<f:FormElement visible="{orderUi>/fields/detailsShippingCondition/visible}">
 						<f:label>
 							<Label text="{i18n>detailsShippingCondition}" required="false">
 								<layoutData>
@@ -593,7 +611,7 @@
 						</f:fields>
 					</f:FormElement>
 
-					<f:FormElement visible="{= ${orderUi>/fields/detailsLabelAddress/visible} !== false }">
+					<f:FormElement visible="{orderUi>/fields/detailsLabelAddress/visible}">
 						<f:label>
 							<Label text="{i18n>detailsLabelAddress}" required="false">
 								<layoutData>
