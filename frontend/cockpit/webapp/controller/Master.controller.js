@@ -41,6 +41,7 @@ sap.ui.define([
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/model/StatusValueHelp",
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/service/ProviderSearchService",
   "cdc/vaccreq/util/ValueHelpTableFitter",
@@ -50,7 +51,7 @@ sap.ui.define([
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
-  formatter, ServiceSchema, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue
+  formatter, ServiceSchema, StatusValueHelp, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue
 ) {
   "use strict";
 
@@ -1699,15 +1700,23 @@ sap.ui.define([
       }
     },
 
+    // ret-10-28 #3: options now come from the same shared source
+    // (ServiceSchema.statusValueHelp, model/StatusValueHelp.js) Detail's own
+    // Status field Select uses, built as STATIC items (not a bound list) over
+    // the union of the category's authorized order types - matches the VH
+    // logic of the corresponding Status field in Details, per the issue text.
+    // onSearch (below) is unchanged - it keeps filtering statusProperties.code
+    // EQ key, exactly as before.
     _populateStatusCodes: function () {
       var oStatus = this.byId("filterStatus");
       oStatus.removeAllItems();
-      oStatus.bindItems({
-        path: "/" + ServiceSchema.entitySets.status,
-        template: new Item({
-          key: "{" + ServiceSchema.statusProperties.code + "}",
-          text: "{" + ServiceSchema.statusProperties.text + "}"
-        })
+      var aOrderTypes = this._getAuthorizedOrderTypes("READ").map(function (oType) {
+        return oType.orderType;
+      });
+      StatusValueHelp.load(this.getOwnerComponent(), ServiceSchema.statusValueHelp, aOrderTypes).then(function (aOptions) {
+        aOptions.forEach(function (oOption) {
+          oStatus.addItem(new Item({ key: oOption.key, text: oOption.text }));
+        });
       });
     },
 

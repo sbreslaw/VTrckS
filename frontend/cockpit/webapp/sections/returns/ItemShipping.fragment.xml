@@ -1,0 +1,10 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- ret-10-28 #5: profile variant (SectionFactory.js) - every field in the
+       shared ItemShipping.fragment.xml (_SalesOrder nav, _DeliveryStatus nav,
+       DeliveryBlockStatus, PartialDeliveryIsAllowed, OrderCombinationIsAllowed)
+       is confirmed absent on CustomerReturnItemManageType (ui_customerreturnmanage
+       2026-10-28 metadata) - none of it applies to a Customer Return item, so
+       this is a designed empty state, same idiom as ItemShippingTransactions/
+       ItemTransactionHistory's own placeholders. -->
+  <MessageStrip text="{i18n>itemDetailShippingNotApplicableReturns}" type="Information" showIcon="true" />
+</core:FragmentDefinition>

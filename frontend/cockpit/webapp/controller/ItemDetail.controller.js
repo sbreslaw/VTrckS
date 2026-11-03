@@ -9,8 +9,9 @@ sap.ui.define([
   "cdc/vaccreq/sections/ItemSectionConfig",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
-  "cdc/vaccreq/model/PricingColumns"
-], function (Controller, MessagePopover, MessageItem, Fragment, Messaging, JSONModel, SectionFactory, ItemSectionConfig, formatter, ServiceSchema, PricingColumns) {
+  "cdc/vaccreq/model/PricingColumns",
+  "cdc/vaccreq/model/OrderModeConfig"
+], function (Controller, MessagePopover, MessageItem, Fragment, Messaging, JSONModel, SectionFactory, ItemSectionConfig, formatter, ServiceSchema, PricingColumns, OrderModeConfig) {
   "use strict";
 
   // Item Details view (FCL end column) - Session Prompt "Item Details View".
@@ -26,8 +27,13 @@ sap.ui.define([
       this._oRouter.getRoute("itemDetail").attachPatternMatched(this._onObjectMatched, this);
       this._aSectionMeta = ItemSectionConfig;
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta,
-        this._onSectionContentLoaded.bind(this), "itemSectionFlags", "itemDetailSectionsContainer");
+        this._onSectionContentLoaded.bind(this), "itemSectionFlags", "itemDetailSectionsContainer", "itemOrderUi");
       this.getView().setModel(this._createSectionFlagsModel(), "itemSectionFlags");
+      // ret-10-28 follow-up: profile-keyed (not per-order-type, see
+      // OrderModeConfig.getItemUi) - limits Returns item drill-down to just
+      // the Details section for now.
+      this._oItemUi = OrderModeConfig.getItemUi(ServiceSchema.profileId);
+      this.getView().setModel(new JSONModel(this._oItemUi), "itemOrderUi");
       this.getView().setModel(this._createSectionsNavModel(), "itemSectionsNav");
       this.getView().setModel(Messaging.getMessageModel(), "message");
     },
@@ -113,8 +119,13 @@ sap.ui.define([
 
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
+      var oItemUi = this._oItemUi;
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey) };
+        return {
+          id: oMeta.id,
+          title: oBundle.getText(oMeta.titleKey),
+          visible: OrderModeConfig.uiFlag(oItemUi, "sections", oMeta.id, "visible")
+        };
       });
       return new JSONModel({ list: aList });
     },
@@ -180,9 +191,13 @@ sap.ui.define([
 
       [oView.byId("itemDetailSubtitle"), oView.byId("itemDetailSubtitleExpanded")].forEach(function (oControl) {
         oControl.bindProperty("text", {
+          // ret-10-28 #5: was hardcoded "SalesOrder"/"SalesOrderItem" -
+          // CustomerReturnManage's keys are CustomerReturn/CustomerReturnItem
+          // (confirmed via ui_customerreturnmanage metadata), so this threw a
+          // property-not-found autoExpandSelect error for every _RET item nav.
           parts: [
-            { path: "SalesOrder" },
-            { path: "SalesOrderItem" },
+            { path: ServiceSchema.keys.orderId },
+            { path: ServiceSchema.itemProperties.itemNumber },
             { path: "orderContext>/title" },
             { path: "i18n>itemDetailItemPrefix" }
           ],
@@ -190,10 +205,20 @@ sap.ui.define([
         });
       });
 
-      oView.byId("itemDetailStatus").bindProperty("text", {
-        path: "_SDProcessStatus/SDProcessStatus_Text",
-        formatter: formatter.orDash
-      });
+      // ret-10-28 #5: was a hardcoded literal path to the orders-only
+      // _SDProcessStatus nav (absent on CustomerReturnItemManageType, no
+      // equivalent concept confirmed for returns - itemDetailProperties.
+      // statusText is null there) - never bind a literal path that's null
+      // on the active profile, so just show the dash placeholder instead.
+      var sStatusTextPath = ServiceSchema.itemDetailProperties.statusText;
+      if (sStatusTextPath) {
+        oView.byId("itemDetailStatus").bindProperty("text", {
+          path: sStatusTextPath,
+          formatter: formatter.orDash
+        });
+      } else {
+        oView.byId("itemDetailStatus").setText(formatter.orDash());
+      }
     }
   });
 });

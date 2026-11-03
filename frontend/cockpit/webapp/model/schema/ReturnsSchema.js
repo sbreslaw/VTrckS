@@ -36,19 +36,32 @@ sap.ui.define([
       item: "CustomerReturnItemManage",
       status: "OverallSDProcessStatus",
       salesOrderType: "CustomerReturnType",
+      // DeliveryBlockReason (ret-10-28 #1): Edm.String raw code, SAP__UI.Hidden,
+      // NO Text annotation/ValueListReferences on this service (confirmed live,
+      // 2026-10-28 metadata) - no separate "entity set" concept, it's a plain
+      // property on CustomerReturnManageType (see headerProperties below).
       deliveryBlockReason: null,
       deliveryPriority: null,
       orderReason: "ReturnsOrderReason",
       shipToParty: "HeaderShipToParty",
-      // Absent on this service - the Provider picker triad is sourced from
-      // providerOrderService.entitySets.customerSalesArea (po model) instead,
-      // confirmed live (NOTES.md "Returns MVP-2 Step-0", 2026-10-26, §6).
-      customerSalesArea: null,
+      // ret-10-28 #2: F4 c_soldtosalesareavh is confirmed triad-less live
+      // (no SalesOrganization/DistributionChannel/Division - just
+      // Customer/CustomerName/City/PostalCode/Country) - per session prompt's
+      // own documented fallback, Provider VH/typeahead/suggest for _RET reads
+      // CustomerSalesArea off the new named "ord" model (manifest.json,
+      // C_SALESORDERMANAGE_SRV's own /CustomerSalesArea - same KNVV data,
+      // has the triad) instead of this (ui_customerreturnmanage) service.
+      // See providerLookupModel below.
+      customerSalesArea: "CustomerSalesArea",
       contactInfo: null,
       // NDC Code Value Help lives on a SEPARATE F4 service for returns
-      // (f4Product block below, c_custretprodbyslsorgdistrchnl via srvd_f4),
-      // not a top-level entity set on this main service - PR2 concern.
-      product: null,
+      // (f4Product block below, c_custretprodbyslsorgdistrchnl via srvd_f4,
+      // confirmed by the live Product ValueListReferences annotation on
+      // CustomerReturnItemManageType). Named here too (PR2 wiring) so the
+      // shared NDC controller code in Detail.controller.js can address it the
+      // same way as Orders' own top-level /Product - see productLookupModel
+      // below for which named model actually backs this entity set.
+      product: "C_CustRetProdBySlsOrgDistrChnl",
       customerPurchaseOrderType: null,
       partnerFunction: "PartnerFunction",
       // Parties reads (_Partner/HeaderPartner) are a confirmed backend bug on
@@ -84,7 +97,14 @@ sap.ui.define([
       providerId: "SoldToParty",
       providerName: "SoldToPartyName",
       status: "OverallSDProcessStatus",
-      userStatus: null,
+      // ret-10-28 #4: no separate writable business-status field exists on
+      // CustomerReturnManageType (unlike orders' UserStatusDerived) -
+      // OverallSDProcessStatus is CONFIRMED SAP__core.Computed (2026-10-28
+      // metadata), i.e. not writable either way. Reusing this same key (not a
+      // new one) lets onDetailStatusChange keep a single branch-free lookup
+      // (ServiceSchema.headerProperties.userStatus); the Details Status Select
+      // stays enabled=false for _RET so this write path never actually fires.
+      userStatus: "OverallSDProcessStatus",
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
       netValue: "TotalNetAmount",
@@ -107,7 +127,10 @@ sap.ui.define([
       shippingCondition: "ShippingCondition",
       deliveryStatus: null,
       deliveryBlockStatus: null,
-      deliveryBlockReason: null,
+      // ret-10-28 #1: real property on CustomerReturnManageType, raw code only
+      // (no Text annotation exists for it on this service - see entitySets
+      // comment above).
+      deliveryBlockReason: "DeliveryBlockReason",
       billingBlockReason: "HeaderBillingBlockReason",
       billingBlockStatus: null,
       billingStatus: null,
@@ -134,7 +157,11 @@ sap.ui.define([
       // ZOrdDesc - absent; no free-text header description field confirmed on
       // CustomerReturnManageType.
       description: null,
-      category: null
+      // ret-10-28 #7 metadata re-audit: CustomerPurchaseOrderType IS real on
+      // CustomerReturnManageType (previous comment wrongly claimed no category
+      // concept existed) - raw code only here (categoryValueHelp above resolves
+      // its text via the Orders service's own VH, same domain).
+      category: "CustomerPurchaseOrderType"
     },
 
     // Parties reads 500 on this service (backend bug, excluded from scope) -
@@ -177,8 +204,27 @@ sap.ui.define([
       text: "@com.sap.vocabularies.Common.v1.Text"
     },
 
-    // Matches entitySets.customerSalesArea = null above (see providerOrderService instead).
-    customerSalesAreaProperties: null,
+    // ret-10-28 #2: F4 c_soldtosalesareavh is confirmed triad-less live - the
+    // Provider VH/typeahead instead reads CustomerSalesArea off the "ord"
+    // model (manifest.json, C_SALESORDERMANAGE_SRV's own entity set, same
+    // KNVV data/shape as OrdersSchema's own customerSalesAreaProperties below -
+    // this is a literal copy of that shape, not an independent re-derivation).
+    // 2026-10-30: division MUST match OrdersSchema's own value ("Division"),
+    // not this service's own headerProperties.division name - the query runs
+    // against the Orders service's CustomerSalesArea entity type (via "ord"),
+    // which has no "OrganizationDivision" property (confirmed live: threw
+    // "Invalid (navigation) property 'OrganizationDivision' in $select").
+    customerSalesAreaProperties: {
+      customer: "Customer",
+      customerName: "CustomerName",
+      organizationName2: "OrganizationBPName2",
+      cityName: "CityName",
+      postalCode: "PostalCode",
+      countryText: "Country_Text",
+      salesOrganization: "SalesOrganization",
+      distributionChannel: "DistributionChannel",
+      division: "Division"
+    },
 
     paymentMethodProperties: null,
 
@@ -187,9 +233,20 @@ sap.ui.define([
       name: "UserDescription"
     },
 
-    // NDC Code Value Help is the f4Product block below (separate F4 service), not
-    // a top-level entity set on this service - PR2 concern.
-    productProperties: null,
+    // NDC Code Value Help is the f4Product block below (separate F4 service),
+    // not a top-level entity set on this service. Mapped into the same
+    // generic shape OrdersSchema.productProperties uses (so the shared
+    // Detail.controller.js NDC handlers work unchanged for both profiles) -
+    // group/industryStandardName (brand) have no equivalent on this F4
+    // entity (C_CustRetProdBySlsOrgDistrChnl only exposes Product/
+    // ProductName/RequestedQuantityUnit, see f4Product.properties below).
+    productProperties: {
+      id: "Product",
+      text: "ProductName",
+      group: null,
+      industryStandardName: null,
+      baseUnit: "RequestedQuantityUnit"
+    },
 
     itemProperties: {
       material: "Product",
@@ -231,7 +288,12 @@ sap.ui.define([
       // 2026-10-27 metadata re-audit: confirmed real (Edm.Decimal, Precision 13,
       // Scale variable) on CustomerReturnItemManageType.
       taxAmount: "TaxAmount",
-      batch: "Batch",
+      // 2026-10-28 metadata re-audit: LotNumber (Edm.String, MaxLength 10) was
+      // just added to CustomerReturnItemManageType, no FieldControl/F4 ref -
+      // the Lot Number column now reads/writes this instead of Batch (which
+      // still exists on this entity but is no longer the field the backend
+      // wants for this UI; sections/returns/Items.fragment.xml hazard #3).
+      batch: "LotNumber",
       // 2026-10-27 metadata re-audit: confirmed real (Edm.Date) on
       // CustomerReturnItemManageType - Items.fragment.xml's ExpirationDate
       // DatePicker was already correctly bound to it all along.
@@ -361,9 +423,10 @@ sap.ui.define([
     saveAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.SaveChanges",
     discardAction: "/DiscardChanges",
 
-    // No hardcoded fallback triad on this service - the real triad is sourced
-    // from providerOrderService.entitySets.customerSalesArea (po model),
-    // confirmed live (NOTES.md 2026-10-26 §6) - PR2 concern.
+    // No confirmed default SalesOrganization/DistributionChannel/Division
+    // triad for returns (do not invent orders' "1000"/"10"/"10") - stays null,
+    // callers must skip the soft pre-filter entirely when this is null rather
+    // than filtering on an empty/invented value (ret-10-28 #2).
     salesArea: null,
 
     enrichmentAction: null,
@@ -376,7 +439,56 @@ sap.ui.define([
       text: "OverallSDProcessStatus_Text"
     },
 
-    contactPartnerFunction: null,
+    // ret-10-28 #2: see OrdersSchema.js providerLookupModel comment - "ord"
+    // points Provider VH/typeahead/suggest at C_SALESORDERMANAGE_SRV's own
+    // /CustomerSalesArea instead of this (triad-less) service.
+    providerLookupModel: "ord",
+
+    // See OrdersSchema.js productLookupModel comment. "f4ProductVH" points
+    // the Item-level NDC Code Value Help/typeahead at the separate F4 service
+    // (manifest.json named model, f4Product.serviceRoot below) instead of
+    // this (no top-level Product entity set) service.
+    productLookupModel: "f4ProductVH",
+
+    // ret-10-28 #3/#4: no per-order-type business status profile exists on
+    // this service (unlike orders' po>/OrderStatus) - OverallSDProcessStatus
+    // is the only "status" concept returns has, so it doubles as both the
+    // display/filter source (statusProperties above) and the VH options
+    // source here, unfiltered by order type (typeFilterProperty: null).
+    statusValueHelp: {
+      model: "",
+      entitySet: "OverallSDProcessStatus",
+      codeProperty: "OverallSDProcessStatus",
+      textProperty: "OverallSDProcessStatus_Text",
+      typeFilterProperty: null
+    },
+
+    // ret-10-28 #7: CustomerPurchaseOrderType is real on CustomerReturnManageType
+    // (2026-10-28 metadata: SAP__UI.Hidden, no SAP__common.Text annotation - raw
+    // code only on THIS service) but its VH entity set only exists on the Orders
+    // service (c_salesordermanage_srv so.xml ~line 718) - same BSARK domain
+    // (SD document purchase order type) is universal across both services, so
+    // reuse it via the always-loaded "ord" model, same precedent as
+    // providerLookupModel above.
+    categoryValueHelp: {
+      model: "ord",
+      entitySet: "CustomerPurchaseOrderType",
+      codeProperty: "CustomerPurchaseOrderType",
+      textProperty: "CustomerPurchaseOrderType_Text"
+    },
+
+    contactPartnerFunction: "AP",
+
+    // 2026-10-30: _Partner/HeaderPartner reads still 500 on this service
+    // (confirmed backend bug, NOTES.md) - this is now a SEPARATE flag from
+    // contactPartnerFunction above (which is also used for the unrelated
+    // CreatePartner-replay write path and had to become "AP" for that), so
+    // ProviderSearchService.js#loadContactRows can keep skipping its
+    // Provider-VH "Contact" search mode for _RET without being re-enabled by
+    // that change (confirmed live regression: a stale contactPartnerFunction
+    // === null check let the HeaderPartner query fire again once that value
+    // became "AP", throwing "invalid property '_SalesOrder'" on $expand).
+    contactSearchSupported: false,
 
     // HeaderPartnerType - 2026-10-27 metadata re-audit: customer/contactPerson/
     // phone(InternationalPhoneNumber)/email(EmailAddress)/postalCode/cityName/
@@ -529,13 +641,15 @@ sap.ui.define([
     },
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw
-    // JS number, not a string, on this service); Batch confirmed PATCHable;
-    // ExpirationDate confirmed to exist (2026-10-27 metadata) but its
-    // PATCH-ability was not independently re-confirmed this session - stays
-    // null (read-only) until verified.
+    // JS number, not a string, on this service); LotNumber (2026-10-28
+    // metadata, no FieldControl annotation found - same no-restriction shape
+    // as Batch before it) presumed PATCHable, not independently re-confirmed
+    // this session; ExpirationDate confirmed to exist (2026-10-27 metadata)
+    // but its PATCH-ability was not independently re-confirmed this session -
+    // stays null (read-only) until verified.
     updatableItemProperties: {
       quantity: "RequestedQuantity",
-      batch: "Batch",
+      batch: "LotNumber",
       expirationDate: null
     },
 
@@ -572,9 +686,15 @@ sap.ui.define([
     statusSource: "e008",
 
     // Returns-only extension (no orders analog): NDC Code Value Help, a
-    // SEPARATE F4 service (srvd_f4), confirmed live - PR2 concern.
+    // SEPARATE F4 service (srvd_f4). entitySet/properties confirmed live;
+    // serviceRoot's ;ps=...;va=... context-parameter suffix confirmed from the
+    // live Product ValueListReferences annotation on
+    // CustomerReturnItemManageType (2026-10-28 metadata, same pattern already
+    // used for shippingAddressValueHelp in manifest.json) - PR2 wiring (this
+    // session), see productLookupModel/entitySets.product/productProperties
+    // above.
     f4Product: {
-      serviceRoot: "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001/",
+      serviceRoot: "/sap/opu/odata4/sap/ui_customerreturnmanage/srvd_f4/sap/c_custretprodbyslsorgdistrchnl/0001;ps='srvd-ui_customerreturnmanage-0001';va='com.sap.gateway.srvd.ui_customerreturnmanage.v0001.et-c_customerreturnitemmanagetp.product'/",
       entitySet: "C_CustRetProdBySlsOrgDistrChnl",
       properties: {
         salesOrganization: "SalesOrganization",

@@ -43,8 +43,10 @@ sap.ui.define([
   var ITEM_GROUP = ServiceSchema.itemInteractiveGroup;
   // v5 Required Fix 4 (replay-list drift guard): this list is DERIVED from
   // updatableHeaderProperties in ServiceSchema.js, not hand-maintained here —
-  // see the comment there.
-  var REPLAY_HEADER_PROPERTIES = ServiceSchema.createReplayHeaderProperties;
+  // see the comment there. Read fresh at the one call site below (never
+  // cached here) - the literal field names differ per profile, so a
+  // module-level capture would go stale after a same-tab profile relaunch
+  // (same bug class as the PricingColumns.js Sorter crash).
   // Issue Batch 9-30-001 §2 (payload hygiene): the observed live create POST
   // (issues/9-30-001.md #2) also sent SalesOrderItem ("000010" - the client's
   // own scratch numbering, not a real key), SalesOrderItemText (the backend
@@ -129,13 +131,41 @@ sap.ui.define([
     // harvested the real triad from the Provider VH pick still works, and a
     // row that somehow hasn't yet just sends undefined rather than throwing.
     var oFallbackArea = ServiceSchema.salesArea || {};
-    return {
-      SalesOrderType: sOrderType,
+    var oParams = {
       SalesOrganization: oScratchData[ServiceSchema.headerProperties.salesOrganization] || oFallbackArea.salesOrganization,
       DistributionChannel: oScratchData[ServiceSchema.headerProperties.distributionChannel] || oFallbackArea.distributionChannel,
-      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || oFallbackArea.organizationDivision,
-      SoldToPartyForCreate: oScratchData[ServiceSchema.headerProperties.providerId] || ""
+      OrganizationDivision: oScratchData[ServiceSchema.headerProperties.division] || oFallbackArea.organizationDivision
     };
+    // CONFIRMED BUG (live-tested, Returns, 2026-11-02): SoldToPartyForCreate
+    // is a real, Nullable=false parameter on CreateWithSalesOrderType (_ORD,
+    // so_C_SALESORDERMANAGE metadata) but does NOT exist at all on
+    // CreateWithCustomerReturnType (_RET, ui_customerreturnmanage metadata
+    // 2026-10-28 - only _it/CustomerReturnType/SalesOrganization/
+    // DistributionChannel/OrganizationDivision are defined). The OData V4
+    // model's setParameter() doesn't validate against metadata client-side,
+    // so sending this unsupported name silently "succeeds" opening the
+    // session - but corrupts the backend's sticky-session state so that
+    // EVERY later POST to _Item (even an empty {} body) 422s
+    // (/IWBEP/CM_V4S_RUN/000 Provider_Application_Error). Confirmed live:
+    // omitting it here and PATCHing SoldToParty onto the session afterward
+    // instead (see _ensureSession below) makes item creation succeed with no
+    // 422, matching the proven-working standard app "Manage Customer
+    // Returns V2" flow (which also PATCHes SoldToParty post-create, never
+    // passes it to the create action). Only include it for profiles whose
+    // action actually defines it (_ORD).
+    if (ServiceSchema.profileId !== "returns") {
+      oParams.SoldToPartyForCreate = oScratchData[ServiceSchema.headerProperties.providerId] || "";
+    }
+    // CONFIRMED BUG (live-tested, Returns): this action's own mandatory
+    // order-type parameter is named SalesOrderType on CreateWithSalesOrderType
+    // (_ORD) but CustomerReturnType on CreateWithCustomerReturnType (_RET) -
+    // a hardcoded "SalesOrderType" key here 400'd every Returns session open
+    // ("No value for mandatory parameter 'CustomerReturnType' specified").
+    // headerProperties.salesOrderType is itself already the correct literal
+    // name per profile ("SalesOrderType" / "CustomerReturnType"), so reuse it
+    // as the param key instead of a fixed string.
+    oParams[ServiceSchema.headerProperties.salesOrderType] = sOrderType;
+    return oParams;
   }
 
   // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the ITEM_PROPERTIES
@@ -340,6 +370,21 @@ sap.ui.define([
           }).getBoundContext();
           oSession.opened = true;
           oSession.plainContext = oPlainContext;
+          // Returns (_RET): SoldToPartyForCreate isn't a real parameter of
+          // CreateWithCustomerReturnType (see buildCreateActionParams above)
+          // - PATCH it here instead, same as the proven-working standard
+          // app's own post-create call. Must complete before any _Item POST
+          // is attempted against this session (confirmed live: an _Item POST
+          // issued before this PATCH lands still 422s).
+          if (ServiceSchema.profileId === "returns") {
+            var sSoldToParty = oScratchData[ServiceSchema.headerProperties.providerId];
+            if (sSoldToParty) {
+              return oPlainContext.setProperty(ServiceSchema.headerProperties.providerId, sSoldToParty)
+                .then(function () {
+                  return oPlainContext;
+                });
+            }
+          }
           return oPlainContext;
         })
         .then(function (oPlainContext) {
@@ -369,6 +414,51 @@ sap.ui.define([
           $$updateGroupId: ITEM_GROUP,
           $select: "SAP__Messages"
         });
+        // CONFIRMED BUG (live-tested, Returns, 2026-11-02): a single
+        // _Item POST carrying Product+RequestedQuantity+RequestedQuantityUnit
+        // all at once still 422s (/IWBEP/CM_V4S_RUN/000
+        // Provider_Application_Error) even once SoldToPartyForCreate is no
+        // longer sent to the create action (see _ensureSession above) - this
+        // is a SEPARATE backend quirk from that one. The proven-working
+        // standard app "Manage Customer Returns V2" never sends item fields
+        // on the initial POST either: it always creates a bare row first
+        // (empty body), then PATCHes Product+RequestedQuantityUnit, then
+        // PATCHes RequestedQuantity+RequestedQuantityUnit - confirmed live
+        // to succeed end-to-end (no 422) against our own session, replacing
+        // the single combined create() Orders (_ORD) still uses below
+        // (never observed to need this, left unchanged to avoid regressing
+        // a working flow).
+        if (ServiceSchema.profileId === "returns") {
+          var oClean = cleanItemPayload(oItemData);
+          var sMaterialKey = ServiceSchema.itemProperties.material;
+          var sUnitKey = ServiceSchema.itemProperties.unit;
+          var oIncrementalContext = oItemsBinding.create({});
+          return oIncrementalContext.created().then(function () {
+            var aPatches = [];
+            var oFirstPatch = {};
+            if (oClean[sMaterialKey] !== undefined) {
+              oFirstPatch[sMaterialKey] = oClean[sMaterialKey];
+            }
+            if (oClean[sUnitKey] !== undefined) {
+              oFirstPatch[sUnitKey] = oClean[sUnitKey];
+            }
+            Object.keys(oFirstPatch).forEach(function (sKey) {
+              aPatches.push(oIncrementalContext.setProperty(sKey, oFirstPatch[sKey]));
+            });
+            return Promise.all(aPatches);
+          }).then(function () {
+            var aPatches = [];
+            Object.keys(oClean).forEach(function (sKey) {
+              if (sKey === sMaterialKey) {
+                return;
+              }
+              aPatches.push(oIncrementalContext.setProperty(sKey, oClean[sKey]));
+            });
+            return Promise.all(aPatches);
+          }).then(function () {
+            return oIncrementalContext;
+          });
+        }
         var oNewItemContext = oItemsBinding.create(cleanItemPayload(oItemData));
         return oNewItemContext.created().then(function () {
           return oNewItemContext;
@@ -624,6 +714,8 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
+            return CreateOrderService._replayContact(oNewContext, oCreateOptions);
+          }).then(function () {
             // Both SaveChanges above and this PATCH just succeeded,
             // each re-running the same backend validation - collapse
             // the resulting exact-duplicate messages (see
@@ -649,7 +741,7 @@ sap.ui.define([
     // context, in one batch. Items are deep-created earlier, on the sticky
     // session context, before SaveChanges (see save() above).
     _replayHeaderProperties: function (oNewContext, oScratchData, oCreateOptions) {
-      REPLAY_HEADER_PROPERTIES.forEach(function (sProperty) {
+      ServiceSchema.createReplayHeaderProperties.forEach(function (sProperty) {
         if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "") {
           oNewContext.setProperty(sProperty, oScratchData[sProperty]);
         }
@@ -662,6 +754,35 @@ sap.ui.define([
       }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
+    },
+
+    // Internal — persists the createMode Contact picker's selection
+    // (createEnrich>/contactId, Detail.controller.js#onContactValueHelpRequest)
+    // as a real "AP" HeaderPartner row. No header/item property for Contact
+    // exists (OPEN_QUESTIONS.md item 17 previously called this unconfirmed) -
+    // the only real write path is the same CreatePartner-bound-action-then-
+    // PATCH-Customer two-step already used by the Parties Involved section's
+    // own Add flow (Detail.controller.js#_onPartiesAddConfirm). Runs as its
+    // own batch (the action's response, with the new row's own key, must
+    // resolve before the follow-up PATCH can target it - unlike
+    // _replayHeaderProperties above, this can't be a single flat PATCH list).
+    _replayContact: function (oNewContext, oCreateOptions) {
+      if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.createPartnerAction || !ServiceSchema.contactPartnerFunction) {
+        return Promise.resolve();
+      }
+      var oModel = oNewContext.getModel();
+      var oActionBinding = oModel.bindContext(ServiceSchema.createPartnerAction + "(...)", oNewContext);
+      oActionBinding.setParameter("PartnerFunction", ServiceSchema.contactPartnerFunction);
+      // CREATE_REPLAY_GROUP is a manually-submitted ("API") group - execute()
+      // alone only queues the request; it never resolves without an explicit
+      // submitBatch, so that call must happen BEFORE awaiting the promise
+      // (awaiting first deadlocks the whole save chain forever).
+      var oExecutePromise = oActionBinding.execute(CREATE_REPLAY_GROUP);
+      oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via oExecutePromise below */ });
+      return oExecutePromise.then(function () {
+        oActionBinding.getBoundContext().setProperty(ServiceSchema.headerPartnerProperties.customer, oCreateOptions.contactId);
+        return oModel.submitBatch(CREATE_REPLAY_GROUP);
+      });
     },
 
     // Step ② — post-create enrichment action (description/status-if-changed/

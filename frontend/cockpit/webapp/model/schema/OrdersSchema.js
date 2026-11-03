@@ -657,6 +657,18 @@ sap.ui.define([
       organizationDivision: "10"
     },
 
+    // ret-10-28 #2: which named model (manifest.json sap.ui5.models) backs
+    // Provider VH/typeahead lookups against entitySets.customerSalesArea.
+    // "" = default (unnamed) model, i.e. this profile's own serviceRoot.
+    providerLookupModel: "",
+
+    // Issue Batch 9-30-002: which named model backs the NDC Code Value Help/
+    // typeahead lookups against entitySets.product. "" = default (unnamed)
+    // model - this profile's own top-level /Product EntitySet. Returns has no
+    // such top-level entity set and instead routes through a separate F4
+    // service (ReturnsSchema.js productLookupModel/f4Product).
+    productLookupModel: "",
+
     // Step ② "enrichment action" (ADDENDUM-001: re-routed to a behavior-
     // definition extension action on the standard BO, name/params TBD once
     // activated on-system). Null means confirmed BLOCKED-BY-SERVICE; affected
@@ -691,11 +703,39 @@ sap.ui.define([
       text: "OverallSDProcessStatus_Text"
     },
 
+    // ret-10-28 #3: one declared source for every "status code -> text" VH
+    // list (model/StatusValueHelp.js), consumed by both Master's filterStatus
+    // dropdown and Detail's Status field Select - the per-order-type business
+    // status profile (UserStatusDerived's own code/text pairs), same source
+    // Detail._loadOrderStatusVH already used before this change.
+    statusValueHelp: {
+      model: "po",
+      entitySet: "OrderStatus",
+      codeProperty: "Status",
+      textProperty: "StatusTextDescription",
+      typeFilterProperty: "OrderType"
+    },
+
+    // ret-10-28 #7: single declared source for the Category field's "code ->
+    // text" VH (Detail.controller.js#_loadCategoryOptions) - this entity set's
+    // code domain (BSARK, SD document purchase order type) is a cross-document
+    // standard fixed-values list, not order-type-specific.
+    categoryValueHelp: {
+      model: "",
+      entitySet: "CustomerPurchaseOrderType",
+      codeProperty: "CustomerPurchaseOrderType",
+      textProperty: "CustomerPurchaseOrderType_Text"
+    },
+
     // HeaderPartnerType (so.xml ~line 1065) - reached through the header's
     // _Partner navigation for editing and queried top-level for historical
     // AP-contact fallback searches.
     // Partner function of the order's Contact (Master Contact column, Details > General > Contact).
     contactPartnerFunction: "AP",
+    // Provider VH's "Contact" search mode (ProviderSearchService.js#loadContactRows)
+    // reads HeaderPartner top-level, which works on this service - see
+    // ReturnsSchema's own contactSearchSupported: false for the counter-case.
+    contactSearchSupported: true,
     headerPartnerProperties: {
       salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",

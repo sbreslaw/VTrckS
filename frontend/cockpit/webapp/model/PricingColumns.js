@@ -13,7 +13,12 @@ sap.ui.define([
   // Detail.controller.js (priceTotals section) and ItemDetail.controller.js
   // (itemPrices section) - zero duplicated column logic. Property literals
   // live in ServiceSchema.pricingElements; this module never re-spells them.
-  var P = ServiceSchema.pricingElements.properties;
+  // Read fresh per call (never cached at module scope) - this module is a
+  // long-lived singleton that can outlive a same-tab profile relaunch
+  // (_RET -> _ORD without a full reload), and the two profiles' step/
+  // counter differ (Returns: null, no pricing-procedure concept) - a
+  // module-level capture would silently go stale (confirmed live: creating
+  // a new _ORD order after viewing a _RET order threw inside Sorter).
 
   var oAmountFormat = NumberFormat.getFloatInstance({ minFractionDigits: 2, maxFractionDigits: 2, groupingEnabled: true });
   var oRatioFormat = NumberFormat.getFloatInstance({ minFractionDigits: 2, maxFractionDigits: 3, groupingEnabled: true });
@@ -89,6 +94,7 @@ sap.ui.define([
   }
 
   function createRowTemplate() {
+    var P = ServiceSchema.pricingElements.properties;
     return new ColumnListItem({
       cells: [
         new Text({ text: "{" + P.conditionTypeName + "}" }),
@@ -127,6 +133,7 @@ sap.ui.define([
     if (!oTable || oTable.getColumns().length) {
       return;
     }
+    var P = ServiceSchema.pricingElements.properties;
     createColumns(oBundle).forEach(function (oColumn) {
       oTable.addColumn(oColumn);
     });

@@ -3,8 +3,9 @@
        selected sub-fragment variant - loaded instead of the plain
        Items.fragment.xml by SectionFactory.js when ServiceSchema.profileId
        is "returns". Keep this file IDENTICAL to Items.fragment.xml except
-       for the 2 literal OData-name hazards (item key Link, item description
-       Text) - diff it against that file whenever Items.fragment.xml changes. -->
+       for the 3 literal OData-name hazards (item key Link, item description
+       Text, Lot Number Select) - diff it against that file whenever
+       Items.fragment.xml changes. -->
   <!-- CRUD Task 1 v3 (In-Place Create): the update group for this nested
        "_Item" navigation must match the header context's own group (edit
        session vs. transient create), which XML binding parameters can't
@@ -122,12 +123,17 @@
                  live 404 on "Product_Text") - now bound lazily by
                  Detail.controller.js#onItemNdcSuggest on first use. -->
           </Input>
-          <!-- Return Orders session prompt 3.1: po>/BatchValueHelp (Matnr/Batch, no separate
-               description - see ServiceSchema.providerOrderService.batchValueHelpProperties),
-               bound lazily per row and filtered by the row's Product, same pattern as Order
-               Intention/Fund Type above (Detail.controller.js#_bindBatchValueHelp). -->
+          <!-- ADR-002 hazard #5 (2026-10-28): CustomerReturnItemManageType's own
+               Lot Number field is LotNumber, NOT Batch (Batch still exists on
+               this entity but is a different, unrelated field - confirmed live
+               via a fresh $metadata fetch). The VH item list itself is still
+               po>/BatchValueHelp (Matnr/Batch, no separate description - see
+               ServiceSchema.providerOrderService.batchValueHelpProperties),
+               bound lazily per row and filtered by the row's Product, same
+               pattern as Order Intention/Fund Type above
+               (Detail.controller.js#_bindBatchValueHelp). -->
           <Select
-            selectedKey="{path: 'Batch', mode: 'sap.ui.model.BindingMode.OneWay'}"
+            selectedKey="{path: 'LotNumber', mode: 'sap.ui.model.BindingMode.OneWay'}"
             forceSelection="false"
             visible="{itemsColumns>/lotNumber}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/lotNumber/editable} !== false }"

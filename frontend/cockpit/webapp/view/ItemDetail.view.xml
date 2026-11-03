@@ -49,7 +49,7 @@
       <f:DynamicPageHeader>
         <HBox wrap="Wrap" renderType="Bare" justifyContent="Start" items="{itemSectionsNav>/list}">
           <items>
-            <Link text="{itemSectionsNav>title}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+            <Link text="{itemSectionsNav>title}" visible="{itemSectionsNav>visible}" press=".onAnchorPress" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
               <customData>
                 <core:CustomData key="panelId" value="{itemSectionsNav>id}" writeToDom="false" />
               </customData>

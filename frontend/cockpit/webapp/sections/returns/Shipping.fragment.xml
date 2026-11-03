@@ -1,0 +1,148 @@
+<core:FragmentDefinition 
+  xmlns="sap.m" 
+  xmlns:core="sap.ui.core" 
+  xmlns:f="sap.ui.layout.form" 
+	xmlns:l="sap.ui.layout">
+	<!-- ret-10-28 #1: _RET-specific Shipping variant. Differences from the
+			shared sections/Shipping.fragment.xml:
+			- Shipping Condition FormElement omitted - already shown in
+				sections/returns/Details.fragment.xml for every _RET order type
+				(orderUi>/fields/detailsShippingCondition/visible defaults true
+				there), same convention the shared fragment's own comment documents
+				for ZKB/ZREP's inverse case.
+			- Delivery Status FormElement omitted entirely - CustomerReturnManageType
+				has no equivalent property or _OverallDeliveryStatus navigation at all
+				(ReturnsSchema.js entitySets.deliveryStatus/headerProperties.
+				deliveryStatus both null, confirmed 2026-10-28 metadata) - unlike
+				Delivery Block, there is no raw-code fallback to show either.
+			- Delivery Block shows the raw DeliveryBlockReason code only - this
+				service has NO Text annotation/ValueListReferences for it (confirmed
+				live, 2026-10-28 metadata), unlike orders' _OverallDeliveryBlockStatus/
+				OverallDeliveryBlockStatus_Text nav, so there is no text to look up and
+				no createMode-scratch-context split to cover. -->
+	<f:Form width="auto" editable="{sectionFlags>/shipping/editing}">
+		<f:layout>
+			<f:ResponsiveGridLayout 
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2" 
+				columnsL="2" 
+				columnsM="1" 
+				singleContainerFullSize="true"
+			/>
+		</f:layout>
+
+		<f:formContainers>
+			<f:FormContainer>
+				<f:formElements>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>shippingProvider}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_ShipToParty/FullName}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/shipping/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<Input
+								value="{shippingEdit>/providerName}"
+								showValueHelp="true"
+								visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/shipping/editing} }"
+								valueHelpRequest=".onShippingProviderValueHelpRequest">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
+							<Input
+								value="{path: 'createEnrich>/providerName', mode: 'sap.ui.model.BindingMode.OneWay'}"
+								showValueHelp="true"
+								showSuggestion="true"
+								filterSuggests="false"
+								startSuggestion="2"
+								visible="{sectionFlags>/createMode}"
+								valueHelpRequest=".onProviderValueHelpRequest"
+								suggest=".onProviderSuggest"
+								suggestionItemSelected=".onProviderSuggestionSelected"
+								change=".onProviderChange"
+								tooltip="{i18n>providerLockedTooltip}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Input>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>providerAddress}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_ShipToParty/FormattedPostalAddressDesc}" visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/shipping/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<ComboBox
+								selectedKey="{_ShipToParty/AddressID}"
+								busy="{shippingEdit>/busy}"
+								visible="{= !${sectionFlags>/createMode} &amp;&amp; ${sectionFlags>/shipping/editing} }"
+								items="{shippingEdit>/addresses}">
+								<core:Item key="{shippingEdit>id}" text="{shippingEdit>address}"/>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
+							<ComboBox
+								selectedKey="{shippingEdit>/createAddressKey}"
+								busy="{shippingEdit>/busy}"
+								enabled="{createState>/providerChosen}"
+								visible="{sectionFlags>/createMode}"
+								selectionChange=".onCreateShippingAddressChange"
+								items="{shippingEdit>/addresses}">
+								<core:Item key="{shippingEdit>id}" text="{shippingEdit>address}"/>
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>deliveryBlockStatus}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{DeliveryBlockReason}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer>
+		</f:formContainers>
+	</f:Form>
+</core:FragmentDefinition>
