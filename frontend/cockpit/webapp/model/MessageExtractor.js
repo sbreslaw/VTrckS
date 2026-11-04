@@ -27,6 +27,8 @@ sap.ui.define([
     Product: "items",
     RequestedQuantity: "items",
     RequestedQuantityUnit: "items",
+    ZZ1_LotNumber_SDI: "items",
+    ZZ1_ExpirationDate_SDI: "items",
     Material: "inventory",
     Batch: "inventory",
     Quantity: "inventory",
