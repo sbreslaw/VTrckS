@@ -288,16 +288,15 @@ sap.ui.define([
       // 2026-10-27 metadata re-audit: confirmed real (Edm.Decimal, Precision 13,
       // Scale variable) on CustomerReturnItemManageType.
       taxAmount: "TaxAmount",
-      // 2026-10-28 metadata re-audit: LotNumber (Edm.String, MaxLength 10) was
-      // just added to CustomerReturnItemManageType, no FieldControl/F4 ref -
-      // the Lot Number column now reads/writes this instead of Batch (which
-      // still exists on this entity but is no longer the field the backend
-      // wants for this UI; sections/returns/Items.fragment.xml hazard #3).
-      batch: "LotNumber",
-      // 2026-10-27 metadata re-audit: confirmed real (Edm.Date) on
-      // CustomerReturnItemManageType - Items.fragment.xml's ExpirationDate
-      // DatePicker was already correctly bound to it all along.
-      expirationDate: "ExpirationDate"
+      // 2026-11-04 live $metadata re-check: plain LotNumber/ExpirationDate
+      // never persisted (confirmed backend-side via isolated $direct read/
+      // write, NOTES.md 2026-11-02) - the real, working fields are the
+      // custom extension properties ZZ1_LotNumber_SDI/ZZ1_ExpirationDate_SDI
+      // (both confirmed live on CustomerReturnItemManageType, absent from
+      // the 2026-10-28 static metadata dump - added to the service since).
+      // sections/returns/Items.fragment.xml hazard #3 updated to match.
+      batch: "ZZ1_LotNumber_SDI",
+      expirationDate: "ZZ1_ExpirationDate_SDI"
     },
 
     // Mapped from the live-verified returns ServiceSchema.js itemFieldLimits/
@@ -641,16 +640,14 @@ sap.ui.define([
     },
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw
-    // JS number, not a string, on this service); LotNumber (2026-10-28
-    // metadata, no FieldControl annotation found - same no-restriction shape
-    // as Batch before it) presumed PATCHable, not independently re-confirmed
-    // this session; ExpirationDate confirmed to exist (2026-10-27 metadata)
-    // but its PATCH-ability was not independently re-confirmed this session -
-    // stays null (read-only) until verified.
+    // JS number, not a string, on this service). ZZ1_LotNumber_SDI/
+    // ZZ1_ExpirationDate_SDI (2026-11-04, see itemProperties above) replace
+    // the old LotNumber/ExpirationDate mapping that never persisted;
+    // PATCH-ability of the new fields not yet independently re-confirmed.
     updatableItemProperties: {
       quantity: "RequestedQuantity",
-      batch: "LotNumber",
-      expirationDate: null
+      batch: "ZZ1_LotNumber_SDI",
+      expirationDate: "ZZ1_ExpirationDate_SDI"
     },
 
     editUpdateGroup: "vrEdit",
