@@ -4,8 +4,9 @@ sap.ui.define([
   "sap/ui/model/Sorter",
   "sap/m/Column",
   "sap/m/ColumnListItem",
-  "sap/m/Text"
-], function (ServiceSchema, NumberFormat, Sorter, Column, ColumnListItem, Text) {
+  "sap/m/Text",
+  "sap/m/CheckBox"
+], function (ServiceSchema, NumberFormat, Sorter, Column, ColumnListItem, Text, CheckBox) {
   "use strict";
 
   // Prices Tables (Header "Price Totals" + Item "Prices") session prompt:
@@ -79,17 +80,21 @@ sap.ui.define([
     endValue: endValue
   };
 
-  // 7 read-only columns (Actions/Status from the legacy screen are
+  // 11 read-only columns (Actions/Status from the legacy screen are
   // deliberately dropped, session prompt §2) - identical for both tables.
   function createColumns(oBundle) {
     return [
       new Column({ header: new Text({ text: oBundle.getText("pricingColElement") }) }),
+      new Column({ header: new Text({ text: oBundle.getText("pricingColElementId") }) }),
       new Column({ hAlign: "End", header: new Text({ text: oBundle.getText("pricingColPrice") }) }),
       new Column({ header: new Text({ text: oBundle.getText("pricingColUnit") }) }),
       new Column({ hAlign: "End", header: new Text({ text: oBundle.getText("pricingColPriceUnit") }) }),
       new Column({ header: new Text({ text: oBundle.getText("pricingColUom") }) }),
       new Column({ hAlign: "End", header: new Text({ text: oBundle.getText("pricingColEndValue") }) }),
-      new Column({ header: new Text({ text: oBundle.getText("pricingColCurrency") }) })
+      new Column({ header: new Text({ text: oBundle.getText("pricingColCurrency") }) }),
+      new Column({ hAlign: "Center", header: new Text({ text: oBundle.getText("pricingColManuallyChanged") }) }),
+      new Column({ header: new Text({ text: oBundle.getText("pricingColStatistical") }) }),
+      new Column({ header: new Text({ text: oBundle.getText("pricingColCalculationType") }) })
     ];
   }
 
@@ -98,6 +103,7 @@ sap.ui.define([
     return new ColumnListItem({
       cells: [
         new Text({ text: "{" + P.conditionTypeName + "}" }),
+        new Text({ text: "{" + P.conditionType + "}" }),
         new Text({
           text: {
             parts: [P.rateValueIsNull, P.rateValueIsRatio, P.rateValueIsAmount, P.rateAmount, P.rateRatio],
@@ -115,7 +121,10 @@ sap.ui.define([
         new Text({
           text: { parts: [P.conditionAmountIsNull, P.conditionAmount], formatter: endValue, useRawValues: true }
         }),
-        new Text({ text: "{" + P.transactionCurrency + "}" })
+        new Text({ text: "{" + P.transactionCurrency + "}" }),
+        new CheckBox({ selected: "{" + P.conditionIsManuallyChanged + "}", editable: false }),
+        new Text({ text: "{" + P.conditionIsForStatistics + "}" }),
+        new Text({ text: "{" + P.conditionCalculationType + "}" })
       ]
     });
   }

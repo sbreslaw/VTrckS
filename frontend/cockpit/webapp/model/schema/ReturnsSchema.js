@@ -154,9 +154,9 @@ sap.ui.define([
       // as the orders-side fragment.
       noOfBoxes: "CustomerPurchaseOrderSuplmnt",
       labelAddress: null,
-      // ZOrdDesc - absent; no free-text header description field confirmed on
-      // CustomerReturnManageType.
-      description: null,
+      // 2026-11-05: "Description" confirmed real (live-verified, newer than
+      // the saved metadata dump) - supersedes the prior "ZOrdDesc absent" note.
+      description: "Description",
       // ret-10-28 #7 metadata re-audit: CustomerPurchaseOrderType IS real on
       // CustomerReturnManageType (previous comment wrongly claimed no category
       // concept existed) - raw code only here (categoryValueHelp above resolves
@@ -381,7 +381,13 @@ sap.ui.define([
       properties: {
         step: null,
         counter: null,
+        // 2026-11-05 metadata re-audit (ui_customerreturnmanage_2026-11-04.xml):
+        // ConditionType/ConditionCalculationType/ConditionIsForStatistics/
+        // ConditionIsManuallyChanged all confirmed real on this service's own
+        // HeaderPricingElementType.
+        conditionType: "ConditionType",
         conditionTypeName: "ConditionTypeName",
+        conditionCalculationType: "ConditionCalculationType",
         rateAmount: "ConditionRateAmount",
         rateRatio: "ConditionRateRatio",
         rateValueIsAmount: "ConditionRateValueIsAmount",
@@ -392,6 +398,8 @@ sap.ui.define([
         conditionQuantityUnit: "ConditionQuantityUnit",
         conditionAmount: "ConditionAmount",
         conditionAmountIsNull: "ConditionAmountIsNull",
+        conditionIsForStatistics: "ConditionIsForStatistics",
+        conditionIsManuallyChanged: "ConditionIsManuallyChanged",
         transactionCurrency: "TransactionCurrency"
       }
     },
@@ -634,7 +642,9 @@ sap.ui.define([
       salesOffice: null,
       salesGroup: null,
       priority: null,
-      description: null,
+      // 2026-11-05: live-verified real (newer than the saved metadata dump,
+      // same class of field as the ZZ1_*_SDI remap) - matches headerProperties.description above.
+      description: "Description",
       category: null,
       returnType: null
     },
