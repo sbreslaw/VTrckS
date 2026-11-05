@@ -525,7 +525,9 @@ sap.ui.define([
       properties: {
         step: "PricingProcedureStep",
         counter: "PricingProcedureCounter",
+        conditionType: "ConditionType",
         conditionTypeName: "ConditionTypeName",
+        conditionCalculationType: "ConditionCalculationType",
         rateAmount: "ConditionRateAmount",
         rateRatio: "ConditionRateRatio",
         rateValueIsAmount: "ConditionRateValueIsAmount",
@@ -536,6 +538,8 @@ sap.ui.define([
         conditionQuantityUnit: "ConditionQuantityUnit",
         conditionAmount: "ConditionAmount",
         conditionAmountIsNull: "ConditionAmountIsNull",
+        conditionIsForStatistics: "ConditionIsForStatistics",
+        conditionIsManuallyChanged: "ConditionIsManuallyChanged",
         transactionCurrency: "TransactionCurrency"
       }
     },

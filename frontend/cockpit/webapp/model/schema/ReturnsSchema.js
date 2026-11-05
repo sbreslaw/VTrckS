@@ -382,7 +382,13 @@ sap.ui.define([
       properties: {
         step: null,
         counter: null,
+        // 2026-11-05 metadata re-audit (ui_customerreturnmanage_2026-11-04.xml):
+        // ConditionType/ConditionCalculationType/ConditionIsForStatistics/
+        // ConditionIsManuallyChanged all confirmed real on this service's own
+        // HeaderPricingElementType.
+        conditionType: "ConditionType",
         conditionTypeName: "ConditionTypeName",
+        conditionCalculationType: "ConditionCalculationType",
         rateAmount: "ConditionRateAmount",
         rateRatio: "ConditionRateRatio",
         rateValueIsAmount: "ConditionRateValueIsAmount",
@@ -393,6 +399,8 @@ sap.ui.define([
         conditionQuantityUnit: "ConditionQuantityUnit",
         conditionAmount: "ConditionAmount",
         conditionAmountIsNull: "ConditionAmountIsNull",
+        conditionIsForStatistics: "ConditionIsForStatistics",
+        conditionIsManuallyChanged: "ConditionIsManuallyChanged",
         transactionCurrency: "TransactionCurrency"
       }
     },
