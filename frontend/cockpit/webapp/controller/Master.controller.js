@@ -1153,6 +1153,7 @@ sap.ui.define([
         loadRows: function (sBasicSearch, mFieldValues, sSearchMode, iRowLimit) {
           return ProviderSearchService.loadRows(
             this.getOwnerComponent().getModel(),
+            this.getOwnerComponent().getModel(ServiceSchema.providerLookupModel || undefined),
             this.getOwnerComponent().getModel("po"),
             sSearchMode,
             mFieldValues,
