@@ -55,10 +55,13 @@ sap.ui.define([
 
   };
 
-  // Sections Catalog PR1: sections hidden here are also `locked` — not
-  // offerable in the (PR2) personalization dialog either, since the hide
-  // reflects "this concept does not exist for this category", not a mere
-  // display preference.
+  // Sections Catalog PR1: sections hidden here default to not displayed for
+  // this category. Sections Catalog & Personalization PR2 (user-confirmed
+  // 2026-11-06): `locked` no longer blocks a section from the personalization
+  // dialog — only SectionCatalog's `profiles` (technical capability) does
+  // (see SectionResolver.js `isOfferable`). A profile-safe but
+  // business-locked-hidden section (e.g. Returns' priceTotals below) is still
+  // offerable, unchecked, so the user can opt in.
   function lockedHidden(aIds) {
     var oOut = {};
     aIds.forEach(function (sId) { oOut[sId] = { visible: false, locked: true }; });

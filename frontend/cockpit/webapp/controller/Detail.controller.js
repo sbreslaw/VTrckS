@@ -41,6 +41,7 @@ sap.ui.define([
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/sections/SectionFactory",
   "cdc/vaccreq/sections/SectionCatalog",
+  "cdc/vaccreq/sections/SectionResolver",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/OrderModeConfig",
@@ -60,7 +61,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, SectionResolver, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -184,6 +185,7 @@ sap.ui.define([
 
     onAfterRendering: function () {
       this._oSectionFactory.ensurePanels();
+      this._bPanelsBuilt = true;
       var oAnchorBar = this.byId("detailAnchorBar");
       var aAnchors = oAnchorBar ? oAnchorBar.getItems() : [];
       if (!aAnchors.some(function (oAnchor) { return oAnchor.hasStyleClass("detailAnchorLinkActive"); })) {
@@ -4652,7 +4654,13 @@ sap.ui.define([
       // true only for the lifetime of the "create" route; SectionFactory.js and
       // the fragments both read it directly (design/prompts/CRUD Task 1 Prompt v3.md
       // "sectionFlags gains a createMode dimension").
-      var oData = { createMode: false };
+      // Sections Catalog & Personalization PR2: `currentMode` ("create"|
+      // "edit"|"display") drives the gear button's visibility (Detail.view.xml
+      // navigationActions) — kept in lockstep with _currentSectionMode() by
+      // _applySectionResolution, every time it's called. `hasPersonalization`
+      // toggles the dialog's Reset-to-Default button and is refreshed by
+      // _applySectionPersonalizationValue (initial load, Save, Reset).
+      var oData = { createMode: false, currentMode: "display", hasPersonalization: false };
       this._aSectionMeta.forEach(function (oMeta) {
         if (oMeta.editable) {
           oData[oMeta.id] = { editVisible: true, editEnabled: !!oMeta.editLive };
@@ -4907,23 +4915,43 @@ sap.ui.define([
     },
 
     // Writes the resolved per-section visible/editVisible state (sectionsNav,
-    // sectionFlags) for the given order type + mode; does NOT touch anything
-    // else _applyOrderUi also refreshes (status VH, category options, items
-    // columns) — safe/cheap to call every time a section edit session starts
-    // or ends (_reapplySectionMode), unlike a full _applyOrderUi re-run.
+    // sectionFlags, orderUi) for the given order type + mode; does NOT touch
+    // panel STRUCTURE (order/membership/title/expanded — see
+    // _rebuildSectionStructure for that) or anything else _applyOrderUi also
+    // refreshes (status VH, category options, items columns) — safe/cheap to
+    // call every time a section edit session starts or ends
+    // (_reapplySectionMode), unlike a full structural rebuild.
+    //
+    // Sections Catalog & Personalization PR2: now goes through
+    // SectionResolver (SectionCatalog + OrderModeConfig.resolveSections +
+    // this._oSectionPersonalization), not resolveSections() directly, so a
+    // personalized order/title/expanded state round-trips through every
+    // mode change too. `aResolved`'s order always matches `this._aSectionMeta`'s
+    // CURRENT order — this function never reorders it (only
+    // _rebuildSectionStructure does), so by-index nav patching below stays
+    // valid even when personalization has reordered sections away from
+    // catalog order.
     _applySectionResolution: function (sOrderType, sMode) {
       var oView = this.getView();
       var oNav = oView.getModel("sectionsNav");
       var oFlags = oView.getModel("sectionFlags");
-      var aResolved = OrderModeConfig.resolveSections(sOrderType, sMode);
+      var oOrderUi = oView.getModel("orderUi");
+      var aResolved = SectionResolver.resolve({
+        type: sOrderType,
+        mode: sMode,
+        profileId: ServiceSchema.profileId,
+        personalization: this._oSectionPersonalization
+      });
       this._aResolvedSections = aResolved;
+      this._aSectionMeta = aResolved;
       aResolved.forEach(function (oResolved, iIndex) {
         oNav.setProperty("/list/" + iIndex + "/visible", oResolved.visible);
-        var oMeta = this._aSectionMeta[iIndex];
-        if (oMeta.editable) {
-          oFlags.setProperty("/" + oMeta.id + "/editVisible", oResolved.editable);
+        oOrderUi.setProperty("/sections/" + oResolved.id + "/visible", oResolved.visible);
+        if (oResolved.editable) {
+          oFlags.setProperty("/" + oResolved.id + "/editVisible", oResolved.editVisible);
         }
-      }, this);
+      });
+      oFlags.setProperty("/currentMode", sMode);
       return aResolved;
     },
 
@@ -4938,6 +4966,44 @@ sap.ui.define([
       this._applySectionResolution(this._sOrderType, this._currentSectionMode());
     },
 
+    // Sections Catalog & Personalization PR2: full structural rebuild —
+    // order/membership/title/expanded can all change here (order-type
+    // switch, or a personalization Save/Reset). Only actually destroys/
+    // recreates the panel stack (SectionFactory#rebuild) when the resolved
+    // id SEQUENCE or any title actually differs from what's currently built —
+    // the common case (no personalization yet, or switching between two
+    // orders of order types that resolve to the identical sequence) stays as
+    // cheap as PR1 (zero rebuilds across an entire session). Never called
+    // while a section edit session is active (gear button is hidden then —
+    // see Detail.view.xml/onSectionSettingsPress).
+    _rebuildSectionStructure: function (sOrderType, sMode) {
+      var aResolved = this._applySectionResolution(sOrderType, sMode);
+      var aNewIds = aResolved.map(function (oMeta) { return oMeta.id; });
+      var aNewTitles = aResolved.map(function (oMeta) { return oMeta.title; });
+      var bChanged = !this._aLastSectionOrderIds ||
+        aNewIds.join("\u0001") !== this._aLastSectionOrderIds.join("\u0001") ||
+        aNewTitles.join("\u0001") !== (this._aLastSectionTitles || []).join("\u0001");
+      if (bChanged) {
+        this._rebuildSectionsNavList(aResolved);
+        if (this._bPanelsBuilt) {
+          this._oSectionFactory.rebuild(aResolved);
+        } else {
+          this._oSectionFactory.setMeta(aResolved);
+        }
+        this._aLastSectionOrderIds = aNewIds;
+        this._aLastSectionTitles = aNewTitles;
+      }
+      return aResolved;
+    },
+
+    _rebuildSectionsNavList: function (aResolved) {
+      var oBundle = this.getResourceBundle();
+      var aList = aResolved.map(function (oMeta) {
+        return { id: oMeta.id, title: oMeta.title || oBundle.getText(oMeta.titleKey), visible: oMeta.visible };
+      });
+      this.getView().setModel(new JSONModel({ list: aList }), "sectionsNav");
+    },
+
     // The only place `orderUi` is set. Create mode applies the route's type,
     // onInit the category's first type; an existing order re-applies from its OWN SalesOrderType
     // (_syncOrderUiFromContext) - deliberate, an order displays per its type.
@@ -4946,12 +5012,240 @@ sap.ui.define([
       var oView = this.getView();
       this._sOrderType = oMode.orderType;
       oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui));
-      this._applySectionResolution(oMode.orderType, this._currentSectionMode());
+      this._rebuildSectionStructure(oMode.orderType, this._currentSectionMode());
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
       this._loadOrderStatusVH(oMode.orderType);
       this._loadCategoryOptions(oMode);
       // A section un-hidden by this order type may already be expanded.
       this._oSectionFactory.rebind();
+      this._loadSectionPersonalization(oMode.orderType);
+    },
+
+    // Sections Catalog & Personalization PR2: per-order-type personalization
+    // (VariantStore "detailSections.<orderType>"), loaded asynchronously —
+    // baseline renders first (above), then this re-resolves/rebuilds once the
+    // stored value (if any) comes back. Cached per order type for the life of
+    // this view instance (FLP's own writeFrequency:LOW already debounces
+    // repeat reads, but this avoids even issuing them). Request-token guarded
+    // the same way _loadCategoryOptions/_loadOrderStatusVH are, since an order
+    // can be re-opened (same or different type) before a prior load resolves.
+    _loadSectionPersonalization: function (sOrderType) {
+      var iToken = (this._iPersonalizationRequestToken || 0) + 1;
+      this._iPersonalizationRequestToken = iToken;
+      this._oPersonalizationCache = this._oPersonalizationCache || {};
+      if (Object.prototype.hasOwnProperty.call(this._oPersonalizationCache, sOrderType)) {
+        this._applySectionPersonalizationValue(sOrderType, this._oPersonalizationCache[sOrderType]);
+        return;
+      }
+      VariantStore.loadAsync(this._sectionPersonalizationKey(sOrderType)).then(function (oValue) {
+        this._oPersonalizationCache[sOrderType] = oValue;
+        if (this._iPersonalizationRequestToken !== iToken || this._sOrderType !== sOrderType) {
+          return;
+        }
+        this._applySectionPersonalizationValue(sOrderType, oValue);
+      }.bind(this));
+    },
+
+    _sectionPersonalizationKey: function (sOrderType) {
+      return "detailSections." + sOrderType;
+    },
+
+    _applySectionPersonalizationValue: function (sOrderType, oValue) {
+      this._oSectionPersonalization = oValue;
+      this.getView().getModel("sectionFlags").setProperty("/hasPersonalization", !!(oValue && oValue.sections && oValue.sections.length));
+      this._rebuildSectionStructure(sOrderType, this._currentSectionMode());
+      // A personalized section that's now expanded may need its fragment
+      // loaded immediately (mirrors _applyOrderUi's own rebind() call).
+      this._oSectionFactory.rebind();
+    },
+
+    // Sections Catalog & Personalization PR2: ids a user may legitimately
+    // include/exclude/reorder — gated ONLY by SectionCatalog's `profiles`
+    // (technical capability for the active service profile), same condition
+    // as SectionResolver.js's `isOfferable`. OrderModeConfig's `locked`/
+    // `visible` is a business DEFAULT-display decision, not a capability —
+    // a profile-safe but default-hidden section (e.g. Returns' priceTotals)
+    // is still offerable here, unchecked, so the user can opt in
+    // (user-confirmed 2026-11-06: "the dialog must include ALL available
+    // sections from the catalog").
+    _offerableSectionIds: function () {
+      return SectionCatalog.availableFor(ServiceSchema.profileId).map(function (oEntry) { return oEntry.id; });
+    },
+
+    // Sections Catalog & Personalization PR2: gear button press (Detail.view.xml
+    // navigationActions, visible only in display mode — see sectionFlags>/
+    // currentMode). Step-0 verdict: a custom sap.m.Dialog + sap.m.List, NOT
+    // sap.m.p13n.Popup/SelectionPanel — SelectionPanel's own source
+    // (itemFactory vs. enableReorder) confirmed the two are mutually
+    // exclusive in that control, and this dialog needs both a custom
+    // itemFactory (per-row Input/CheckBox) AND reordering. Built
+    // programmatically in JS, mirroring Master.controller.js's existing
+    // in-JS p13n Popup construction rather than introducing a new
+    // fragment+mixin pattern for a one-off dialog.
+    onSectionSettingsPress: function () {
+      if (!this._oP13nSectionsDialog) {
+        this._createSectionPersonalizationDialog();
+      }
+      this._seedSectionPersonalizationDialog();
+      this._oP13nSectionsDialog.open();
+    },
+
+    _createSectionPersonalizationDialog: function () {
+      var oBundle = this.getResourceBundle();
+      this._oP13nSectionsModel = new JSONModel({ rows: [] });
+
+      var oList = new List({
+        mode: "None",
+        items: {
+          path: "p13nSections>/rows",
+          template: new CustomListItem({
+            content: [
+              new HBox({
+                alignItems: "Center",
+                justifyContent: "SpaceBetween",
+                items: [
+                  new HBox({
+                    alignItems: "Center",
+                    items: [
+                      new CheckBox({ selected: "{p13nSections>included}" }),
+                      new Input({
+                        value: "{p13nSections>title}",
+                        placeholder: "{p13nSections>defaultTitle}",
+                        width: "14rem"
+                      }),
+                      new CheckBox({
+                        text: oBundle.getText("p13nSectionExpandedLabel"),
+                        selected: "{p13nSections>expanded}"
+                      })
+                    ]
+                  }),
+                  new HBox({
+                    items: [
+                      new Button({
+                        icon: "sap-icon://slim-arrow-up",
+                        type: "Transparent",
+                        tooltip: oBundle.getText("p13nSectionMoveUp"),
+                        press: this._onSectionRowMove.bind(this, -1)
+                      }),
+                      new Button({
+                        icon: "sap-icon://slim-arrow-down",
+                        type: "Transparent",
+                        tooltip: oBundle.getText("p13nSectionMoveDown"),
+                        press: this._onSectionRowMove.bind(this, 1)
+                      })
+                    ]
+                  })
+                ]
+              })
+            ]
+          })
+        }
+      }).addStyleClass("sapUiTinyMarginBottom");
+      oList.setModel(this._oP13nSectionsModel, "p13nSections");
+
+      this._oP13nSectionsDialog = new Dialog({
+        title: oBundle.getText("p13nSectionsDialogTitle"),
+        contentWidth: "32rem",
+        resizable: true,
+        content: [oList],
+        buttons: [
+          new Button({
+            text: oBundle.getText("p13nSectionsResetButton"),
+            visible: "{sectionFlags>/hasPersonalization}",
+            press: this.onSectionPersonalizationReset.bind(this)
+          }),
+          new Button({
+            text: oBundle.getText("cancel"),
+            press: this.onSectionPersonalizationCancel.bind(this)
+          }),
+          new Button({
+            text: oBundle.getText("actionSave"),
+            type: "Emphasized",
+            press: this.onSectionPersonalizationSave.bind(this)
+          })
+        ]
+      });
+      this.getView().addDependent(this._oP13nSectionsDialog);
+    },
+
+    _seedSectionPersonalizationDialog: function () {
+      var oBundle = this.getResourceBundle();
+      var oOfferableSet = {};
+      this._offerableSectionIds().forEach(function (sId) { oOfferableSet[sId] = true; });
+      var aRows = this._aSectionMeta.filter(function (oMeta) {
+        return oOfferableSet[oMeta.id];
+      }).map(function (oMeta) {
+        return {
+          id: oMeta.id,
+          defaultTitle: oBundle.getText(oMeta.titleKey),
+          title: oMeta.title || "",
+          included: !!oMeta.visible,
+          expanded: !!oMeta.expanded
+        };
+      });
+      this._oP13nSectionsModel.setData({ rows: aRows });
+    },
+
+    _onSectionRowMove: function (iDelta, oEvent) {
+      var oContext = oEvent.getSource().getBindingContext("p13nSections");
+      var iIndex = parseInt(oContext.getPath().split("/").pop(), 10);
+      var iTarget = iIndex + iDelta;
+      var aRows = this._oP13nSectionsModel.getProperty("/rows");
+      if (iTarget < 0 || iTarget >= aRows.length) {
+        return;
+      }
+      var oMoved = aRows[iIndex];
+      aRows[iIndex] = aRows[iTarget];
+      aRows[iTarget] = oMoved;
+      this._oP13nSectionsModel.setProperty("/rows", aRows);
+    },
+
+    onSectionPersonalizationSave: function () {
+      var oBundle = this.getResourceBundle();
+      var aRows = this._oP13nSectionsModel.getProperty("/rows");
+      var aIncluded = aRows.filter(function (oRow) { return oRow.included; });
+      if (!aIncluded.length) {
+        MessageToast.show(oBundle.getText("p13nSectionsMinOneError"));
+        return;
+      }
+      var oValue = {
+        version: 1,
+        sections: aIncluded.map(function (oRow) {
+          return { id: oRow.id, expanded: !!oRow.expanded, title: (oRow.title || "").trim() || null };
+        })
+      };
+      var sOrderType = this._sOrderType;
+      this._oP13nSectionsDialog.setBusy(true);
+      VariantStore.saveAsync(this._sectionPersonalizationKey(sOrderType), oValue).then(function () {
+        this._oPersonalizationCache[sOrderType] = oValue;
+        this._oP13nSectionsDialog.setBusy(false);
+        this._oP13nSectionsDialog.close();
+        this._applySectionPersonalizationValue(sOrderType, oValue);
+        MessageToast.show(oBundle.getText("p13nSectionsSaveToast"));
+      }.bind(this), function () {
+        this._oP13nSectionsDialog.setBusy(false);
+        MessageToast.show(oBundle.getText("p13nSectionsSaveError"));
+      }.bind(this));
+    },
+
+    onSectionPersonalizationReset: function () {
+      var oBundle = this.getResourceBundle();
+      var sOrderType = this._sOrderType;
+      this._oP13nSectionsDialog.setBusy(true);
+      VariantStore.deleteAsync(this._sectionPersonalizationKey(sOrderType)).then(function () {
+        this._oPersonalizationCache[sOrderType] = null;
+        this._oP13nSectionsDialog.setBusy(false);
+        this._oP13nSectionsDialog.close();
+        this._applySectionPersonalizationValue(sOrderType, null);
+        MessageToast.show(oBundle.getText("p13nSectionsResetToast"));
+      }.bind(this), function () {
+        this._oP13nSectionsDialog.setBusy(false);
+        MessageToast.show(oBundle.getText("p13nSectionsSaveError"));
+      }.bind(this));
+    },
+
+    onSectionPersonalizationCancel: function () {
+      this._oP13nSectionsDialog.close();
     },
 
     // Status field (Details.fragment.xml, mapped to ServiceSchema.headerProperties.

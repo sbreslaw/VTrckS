@@ -45,6 +45,13 @@
         </f:actions>
         <f:navigationActions>
           <Button
+            id="sectionSettingsBtn"
+            icon="sap-icon://action-settings"
+            type="Transparent"
+            tooltip="{i18n>sectionSettingsBtn}"
+            visible="{= ${sectionFlags>/currentMode} === 'display' }"
+            press=".onSectionSettingsPress" />
+          <Button
             id="messagePopoverBtn"
             icon="sap-icon://message-popup"
             text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
