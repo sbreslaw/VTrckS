@@ -413,14 +413,20 @@
 									mirroring _loadRejectionReasonVH) rather than bound live, both to
 									avoid autoExpandSelect $select pollution risk on the header's own
 									default-model binding and to avoid a second live request per field. -->
+								<!-- Live-test 2026-11-06: PATCHing SpecialProcessingCode on an EXISTING
+									order throws a real ABAP ASSERTION_FAILED dump (500), which also
+									corrupts the rest of that changeset - matches updatableHeaderProperties.
+									returnType being intentionally null. Create-only editable now, same
+									locked-after-create convention as the Provider field above. -->
 								<Text text="{parts: [{path: 'SpecialProcessingCode'}, {path: 'returnTypes>/list'}], formatter: '.formatter.categoryText'}"
-									visible="{= !${sectionFlags>/details/editing} }"/>
+									visible="{= !${sectionFlags>/details/editing} || !${sectionFlags>/createMode} }"/>
 								<ComboBox
 									width="100%"
 									selectedKey="{SpecialProcessingCode}"
-									visible="{sectionFlags>/details/editing}"
+									visible="{= ${sectionFlags>/details/editing} &amp;&amp; ${sectionFlags>/createMode} }"
 									editable="{= ${orderUi>/fields/detailsReturnType/editable} !== false }"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									enabled="{createState>/providerChosen}"
+									tooltip="{i18n>returnTypeLockedTooltip}"
 									items="{returnTypes>/list}">
 									<core:Item key="{returnTypes>key}" text="{returnTypes>text}" />
 								</ComboBox>
