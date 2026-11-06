@@ -21,7 +21,7 @@
     <columns>
       <Column width="3%" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colRowAction}" wrapping="true" /></Column>
       <Column width="6%" visible="{itemsColumns>/optOut}">
-        <VBox class="itemsOptOutHeader">
+        <VBox id="itemsOptOutHeader" class="itemsOptOutHeader">
           <Text text="{i18n>colOptOutPrefix}" wrapping="false" />
           <Text text="{i18n>colOptOutSuffix}" wrapping="false" />
           <Text text="{i18n>colAncillary}" wrapping="true" />
@@ -79,7 +79,7 @@
                after every real-list load/refresh, see
                Detail.controller.js#_computeAncillaryParents); a child row
                itself never gets an opt-out control. -->
-          <CheckBox selected="{ZZ1_SKIPADDANC_SDI}" select=".onItemOptOutChange"
+          <CheckBox selected="{ZZ1_SKIPADDANC_SDI}" select=".onItemOptOutChange" ariaLabelledBy="itemsOptOutHeader"
             visible="{parts: [{path: 'itemsColumns>/optOut'}, {path: 'HigherLevelItem'}], formatter: '.formatter.itemOptOutVisible', useRawValues: true}"
             enabled="{parts: [
                 {path: 'SalesOrderItem'},

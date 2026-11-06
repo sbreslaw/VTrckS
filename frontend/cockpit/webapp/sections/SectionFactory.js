@@ -176,12 +176,45 @@ sap.ui.define([
       // Fragments with more than one root control (e.g. a form plus a sibling
       // MessageStrip) resolve with an array - addContent only accepts one
       // control at a time.
-      (Array.isArray(oContent) ? oContent : [oContent]).forEach(function (oControl) {
+      var aRoots = Array.isArray(oContent) ? oContent : [oContent];
+      aRoots.forEach(function (oControl) {
         oPanel.addContent(oControl);
       });
+      that._wireTableAccessibleNames(oPanel, aRoots);
       if (that._fnOnContentLoaded) {
         that._fnOnContentLoaded(that._oView.getLocalId(sId) || sId, oPanel);
       }
+    });
+  };
+
+  // Accessibility remediation (2026-11-06 review, package B): one hook
+  // covering every section's table(s) instead of touching ~10 fragment files
+  // individually - every sap.m.Table/sap.ui.table.Table under a section's
+  // just-loaded fragment content gets ariaLabelledBy pointed at that
+  // section's own panel Title (built in ensurePanels above, id is always
+  // "<panel id>-title"), UNLESS the table already names itself some other
+  // way (an explicit ariaLabelledBy already set in the fragment, e.g. a
+  // table with its own headerToolbar Title, or sap.m.Table's own
+  // headerText). Applies recursively (findAggregatedObjects) so a table
+  // nested inside a VBox/HBox root control is still found.
+  SectionFactory.prototype._wireTableAccessibleNames = function (oPanel, aRootControls) {
+    var sTitleId = oPanel.getId() + "-title";
+    function isTable(oControl) {
+      return oControl.isA("sap.m.Table") || oControl.isA("sap.ui.table.Table");
+    }
+    aRootControls.forEach(function (oRoot) {
+      if (!oRoot || typeof oRoot.findAggregatedObjects !== "function") {
+        return;
+      }
+      var aTables = isTable(oRoot) ? [oRoot] : oRoot.findAggregatedObjects(true, isTable);
+      aTables.forEach(function (oTable) {
+        var aExisting = oTable.getAriaLabelledBy();
+        var sHeaderText = typeof oTable.getHeaderText === "function" && oTable.getHeaderText();
+        if ((aExisting && aExisting.length) || sHeaderText) {
+          return;
+        }
+        oTable.addAriaLabelledBy(sTitleId);
+      });
     });
   };
 

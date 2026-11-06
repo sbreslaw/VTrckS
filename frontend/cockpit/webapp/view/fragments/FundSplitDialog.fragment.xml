@@ -22,7 +22,7 @@
         <Label text="{i18n>fundSplitIntent}" />
         <Text text="{split>/header/intention}" />
       </f:SimpleForm>
-      <Table id="fundSplitTable" items="{split>/rows}" noDataText="{i18n>fundSplitNoRows}">
+      <Table id="fundSplitTable" items="{split>/rows}" noDataText="{i18n>fundSplitNoRows}" headerText="{i18n>fundSplitTableTitle}">
         <columns>
           <Column><Text text="{i18n>fundSplitColFundCode}" /></Column>
           <Column><Text text="{i18n>fundSplitColFundText}" /></Column>

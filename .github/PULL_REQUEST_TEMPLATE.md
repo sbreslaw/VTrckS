@@ -5,6 +5,9 @@
 - Task/spec reference (if provided by the code owner):
 - Live test: <!-- what was exercised on the dev system; network trace / SE16 / VA03 check where relevant -->
 - Console clean: [ ]   Keyboard pass: [ ]   i18n complete: [ ]
+- Accessibility — screen reader pass (NVDA or equivalent) on changed flows: [ ]
+- Accessibility — 200%/browser-zoom and Windows High Contrast (HCB/HCW) check on changed views: [ ]
+- Accessibility — no color-only signaling introduced (status/criticality conveyed via icon+text, not color alone): [ ]
 
 ## Checklist
 - [ ] No service/entity/property literals outside `model/ServiceSchema.js`

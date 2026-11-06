@@ -25,20 +25,24 @@
           <HBox renderType="Bare" alignItems="Center" class="detailStatusRow">
             <GenericTag id="detailStatus"
               visible="{= !${sectionFlags>/createMode} }"
-              design="StatusIconHidden">
+              design="Full">
            </GenericTag>
           </HBox>
         </f:content>
 
         <f:actions>
-          <Button text="{i18n>actionSave}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
-            visible="{= !${sectionFlags>/createMode} }" />
-          <Button text="{i18n>actionCancel}" enabled="false" tooltip="{i18n>actionLaterTooltip}"
-            visible="{= !${sectionFlags>/createMode} }" />
+          <!-- Accessibility remediation (2026-11-06 review, package E): these 5
+               actions have no backend/handler yet (future phase, see
+               design/OPEN_QUESTIONS.md) - a permanently disabled Button with no
+               way to ever become enabled is an accessibility dead-end (focusable
+               but perpetually inert, or unreachable depending on AT/browser);
+               hidden instead until the feature actually exists. -->
+          <Button text="{i18n>actionSave}" visible="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCancel}" visible="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button id="newOrderBtn" text="{i18n>actionNew}" press=".onNewPress" />
-          <Button text="{i18n>actionCopy}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
-          <Button text="{i18n>actionCreateReturn}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
-          <Button text="{i18n>actionCreateReplacement}" enabled="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCopy}" visible="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCreateReturn}" visible="false" tooltip="{i18n>actionLaterTooltip}" />
+          <Button text="{i18n>actionCreateReplacement}" visible="false" tooltip="{i18n>actionLaterTooltip}" />
           <Button icon="sap-icon://print" text="{i18n>actionPreviewOutput}" press=".onPreviewOutput" visible="{= !${sectionFlags>/createMode} }" />
           <Button icon="sap-icon://refresh" text="{i18n>actionRefresh}" press=".onRefresh" visible="{= !${sectionFlags>/createMode} }" />
           <Button text="{i18n>actionValidate}" press=".onValidate" />
@@ -50,9 +54,9 @@
             text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
             type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
             press=".onMessagePopoverPress" />
-          <Button id="enterFullScreen" icon="sap-icon://full-screen" type="Transparent"
+          <Button id="enterFullScreen" icon="sap-icon://full-screen" type="Transparent" tooltip="{i18n>enterFullScreenTooltip}"
             visible="{= !${appView>/actionButtonsInfo/midColumn/fullScreen} }" press="toggleFullScreen" />
-          <Button id="exitFullScreen" icon="sap-icon://exit-full-screen" type="Transparent"
+          <Button id="exitFullScreen" icon="sap-icon://exit-full-screen" type="Transparent" tooltip="{i18n>exitFullScreenTooltip}"
             visible="{= ${appView>/actionButtonsInfo/midColumn/fullScreen} }" press="toggleFullScreen" />
           <Button icon="sap-icon://decline" type="Transparent" tooltip="{i18n>close}" press=".onCloseColumn" />
         </f:navigationActions>

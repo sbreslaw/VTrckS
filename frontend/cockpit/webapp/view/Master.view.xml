@@ -136,6 +136,7 @@
           columnResize=".onColumnResize"
           sort=".onMasterTableSort"
           rowsUpdated=".onRowsUpdated"
+          ariaLabelledBy="masterTableTitle"
           >
           <t:rowMode>
             <rowmodes:Fixed id="requestsRowMode" rowCount="10" rowContentHeight="32" />
@@ -148,7 +149,7 @@
           </t:noData>
           <t:extension>
             <OverflowToolbar class="masterTableToolbar">
-              <Title text="{parts: ['i18n>masterTitle', 'orderContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
+              <Title id="masterTableTitle" text="{parts: ['i18n>masterTitle', 'orderContext>/title', 'view>/masterCount'], formatter: '.formatter.formatText'}" level="H3" />
               <ToolbarSpacer />
               <MenuButton text="{i18n>masterCreateButton}" type="Transparent">
                 <menu>

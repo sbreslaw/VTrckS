@@ -7,6 +7,7 @@ sap.ui.define([
   "sap/ui/model/type/String",
   "sap/ui/core/Element",
   "sap/ui/core/Item",
+  "sap/ui/core/InvisibleText",
   "sap/ui/core/ResizeHandler",
   "sap/ui/table/Table",
   "sap/ui/table/Column",
@@ -45,13 +46,14 @@ sap.ui.define([
   "cdc/vaccreq/model/VariantStore",
   "cdc/vaccreq/service/ProviderSearchService",
   "cdc/vaccreq/util/ValueHelpTableFitter",
-  "cdc/vaccreq/util/FilterValue"
+  "cdc/vaccreq/util/FilterValue",
+  "cdc/vaccreq/util/UserFeedback"
 ], function (
-  Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
+  Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, InvisibleText, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
-  formatter, ServiceSchema, StatusValueHelp, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue
+  formatter, ServiceSchema, StatusValueHelp, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue, UserFeedback
 ) {
   "use strict";
 
@@ -561,6 +563,11 @@ sap.ui.define([
         threshold: 100,
         enableColumnReordering: false
       });
+      // Accessibility remediation (2026-11-06 review, package B): this table
+      // has no own headerToolbar/headerText (the dialog's own header carries
+      // the title) - an InvisibleText carrying the same title text gives it
+      // an accessible name without any visible UI change.
+      oTable.addAriaLabelledBy(new InvisibleText({ text: oConfig.title }).toStatic());
       oTable.setBusyIndicatorDelay(0);
       if (oValueHelpModel) {
         oTable.setModel(oValueHelpModel);
@@ -1260,6 +1267,13 @@ sap.ui.define([
       var oBinding = oTable.getBinding("rows");
       if (oBinding) {
         oBinding.filter(aFilters);
+        // Accessibility remediation (2026-11-06 review, package C): no visible
+        // UI change - a polite one-time announcement that the (already async)
+        // search/filter the user just triggered has finished.
+        oBinding.attachEventOnce("dataReceived", function () {
+          UserFeedback.announce(this.getOwnerComponent().getModel("i18n").getResourceBundle()
+            .getText("masterTableTitleAnnounce"));
+        }.bind(this));
       }
 
         this._oViewModel.setProperty("/masterHasSearch", true);
