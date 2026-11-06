@@ -69,6 +69,15 @@ sap.ui.define([
       that._oModel = new JSONModel(oData);
       oDialog.setModel(that._oModel, "split");
       that._recalcTotal();
+      // Accessibility remediation (2026-11-06 review, package B): land focus
+      // on the allocation table itself (not a disabled Done/Default Split
+      // button in view mode) regardless of edit/view mode.
+      var oTable = oDialog.findAggregatedObjects(true, function (oControl) {
+        return oControl.isA("sap.m.Table");
+      })[0];
+      if (oTable) {
+        oDialog.setInitialFocus(oTable);
+      }
       oDialog.open();
       return new Promise(function (resolve) {
         oDialog.attachEventOnce("afterClose", resolve);

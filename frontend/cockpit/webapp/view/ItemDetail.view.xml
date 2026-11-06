@@ -8,7 +8,7 @@
     <f:title>
       <f:DynamicPageTitle>
         <f:heading>
-          <Title id="itemDetailTitle" />
+          <Title id="itemDetailTitle" level="H1" />
         </f:heading>
         <f:snappedContent>
           <Text id="itemDetailSubtitle" />

@@ -7,6 +7,7 @@ sap.ui.define([
   "sap/ui/model/type/String",
   "sap/ui/core/Element",
   "sap/ui/core/Item",
+  "sap/ui/core/InvisibleText",
   "sap/ui/core/ResizeHandler",
   "sap/ui/table/Table",
   "sap/ui/table/Column",
@@ -47,7 +48,7 @@ sap.ui.define([
   "cdc/vaccreq/util/ValueHelpTableFitter",
   "cdc/vaccreq/util/FilterValue"
 ], function (
-  Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
+  Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, InvisibleText, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
@@ -561,6 +562,11 @@ sap.ui.define([
         threshold: 100,
         enableColumnReordering: false
       });
+      // Accessibility remediation (2026-11-06 review, package B): this table
+      // has no own headerToolbar/headerText (the dialog's own header carries
+      // the title) - an InvisibleText carrying the same title text gives it
+      // an accessible name without any visible UI change.
+      oTable.addAriaLabelledBy(new InvisibleText({ text: oConfig.title }).toStatic());
       oTable.setBusyIndicatorDelay(0);
       if (oValueHelpModel) {
         oTable.setModel(oValueHelpModel);

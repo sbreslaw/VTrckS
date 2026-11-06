@@ -50,9 +50,9 @@
             text="{path: 'message>/', formatter: '.formatter.messagePopoverButtonText'}"
             type="{path: 'message>/', formatter: '.formatter.messagePopoverButtonType'}"
             press=".onMessagePopoverPress" />
-          <Button id="enterFullScreen" icon="sap-icon://full-screen" type="Transparent"
+          <Button id="enterFullScreen" icon="sap-icon://full-screen" type="Transparent" tooltip="{i18n>enterFullScreenTooltip}"
             visible="{= !${appView>/actionButtonsInfo/midColumn/fullScreen} }" press="toggleFullScreen" />
-          <Button id="exitFullScreen" icon="sap-icon://exit-full-screen" type="Transparent"
+          <Button id="exitFullScreen" icon="sap-icon://exit-full-screen" type="Transparent" tooltip="{i18n>exitFullScreenTooltip}"
             visible="{= ${appView>/actionButtonsInfo/midColumn/fullScreen} }" press="toggleFullScreen" />
           <Button icon="sap-icon://decline" type="Transparent" tooltip="{i18n>close}" press=".onCloseColumn" />
         </f:navigationActions>
