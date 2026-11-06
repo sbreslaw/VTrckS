@@ -55,14 +55,15 @@ sap.ui.define([
   "cdc/vaccreq/service/ProviderSearchService",
   "cdc/vaccreq/service/FundLogicService",
   "cdc/vaccreq/controller/FundSplitDialog",
-  "cdc/vaccreq/util/ValueHelpTableFitter"
+  "cdc/vaccreq/util/ValueHelpTableFitter",
+  "cdc/vaccreq/util/UserFeedback"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
   Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
-  ValueHelpTableFitter
+  ValueHelpTableFitter, UserFeedback
 ) {
   "use strict";
 
@@ -373,6 +374,7 @@ sap.ui.define([
     },
 
     onItemsExport: function (oEvent) {
+      var that = this;
       var oTable = this._byIdInSection("items", "itemsTable");
       var oBinding = oTable.getBinding("items");
       var aContexts = oBinding ? oBinding.getContexts(0, oBinding.getLength()) : [];
@@ -428,7 +430,7 @@ sap.ui.define([
         dataSource: aRows,
         fileName: oBundle.getText("sectionItems") + ".xlsx"
       }).build().catch(function (oError) {
-        MessageToast.show(oError && oError.message ? oError.message : "Export failed");
+        UserFeedback.reportError(MessageExtractor, oError && oError.message ? oError.message : "Export failed", that._openMessagePopover.bind(that));
       });
     },
 
@@ -568,6 +570,7 @@ sap.ui.define([
         this.getView().getModel("createEnrich").setProperty("/status",
           formatter.masterStatusCode(oContext.getProperty(ServiceSchema.headerProperties.userStatus)));
       }
+      UserFeedback.announce(this.getResourceBundle().getText("sectionEditStartAnnounce", [this._getSectionTitle(sSectionId)]));
     },
 
     _prepareShippingEdit: function (oContext) {
@@ -680,6 +683,7 @@ sap.ui.define([
         this._destroyNotesWriteBinding();
       }
       Messaging.removeAllMessages();
+      UserFeedback.announce(this.getResourceBundle().getText("sectionEditCancelAnnounce", [this._getSectionTitle(sSectionId)]));
       this._endEditSession(sSectionId);
     },
 
@@ -721,7 +725,7 @@ sap.ui.define([
       var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
       var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
       if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding, this.getView().getModel("orderUi").getData())) {
-        MessageToast.show(oBundle.getText("itemsIncompleteItemsError"));
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("itemsIncompleteItemsError"), this._openMessagePopover.bind(this));
         return;
       }
       var pRemoveEmptyItems = sSectionId === "items"
@@ -744,6 +748,7 @@ sap.ui.define([
           that._destroyNotesWriteBinding();
         }
         MessageToast.show(oBundle.getText("editSaveSuccess"));
+        UserFeedback.announce(oBundle.getText("sectionEditSaveAnnounce", [that._getSectionTitle(sSectionId)]));
         if (that._aSectionsNeedingFullReload.indexOf(sSectionId) !== -1) {
           that._reloadHeaderContext(oContext.getPath());
         }
@@ -840,6 +845,14 @@ sap.ui.define([
     _byIdInSection: function (sSectionId, sControlId) {
       var oPanel = this.byId(sSectionId);
       return oPanel && Fragment.byId(oPanel.getId(), sControlId);
+    },
+
+    // Accessibility remediation (2026-11-06 review, package C): section titles
+    // for the polite edit-start/save/cancel screen-reader announcements below -
+    // there's no visible UI change, just a resolved i18n string lookup.
+    _getSectionTitle: function (sSectionId) {
+      var oMeta = this._aSectionMeta.find(function (oEntry) { return oEntry.id === sSectionId; });
+      return oMeta ? this.getResourceBundle().getText(oMeta.titleKey) : sSectionId;
     },
 
     onItemsAddMore: function () {
@@ -1623,9 +1636,11 @@ sap.ui.define([
             return that._refreshItemsBinding();
           });
         }
-        MessageToast.show(oStats.rows
+        var sPasteResultText = oStats.rows
           ? oBundle.getText("pasteSummary", [oStats.rows, aClipRows.length, oStats.skipped])
-          : oBundle.getText("pasteNothing", [oBundle.getText("pasteReasonInvalid")]));
+          : oBundle.getText("pasteNothing", [oBundle.getText("pasteReasonInvalid")]);
+        MessageToast.show(sPasteResultText);
+        UserFeedback.announce(sPasteResultText);
       });
     },
 
@@ -2738,6 +2753,7 @@ sap.ui.define([
     },
 
     _openProviderValueHelpDialog: function (fnApply) {
+      var that = this;
       var oBundle = this.getResourceBundle();
       // ret-10-28 #2: see _openShipToPartyValueHelpDialog comment - salesArea
       // is intentionally not part of this guard for returns.
@@ -2861,7 +2877,7 @@ sap.ui.define([
           }
           bHasMoreRows = false;
           oValueHelpModel.setProperty("/rows", []);
-          MessageToast.show(oBundle.getText("providerSearchLoadError"));
+          UserFeedback.reportError(MessageExtractor, oBundle.getText("providerSearchLoadError"), that._openMessagePopover.bind(that));
         }).finally(function () {
           if (iCurrentRequest === iLoadRequest) {
             bRowsLoading = false;
@@ -3509,7 +3525,7 @@ sap.ui.define([
       var oContext = this.getView().getBindingContext();
       var sProviderId = oContext && oContext.getProperty(ServiceSchema.headerProperties.providerId);
       if (!sProviderId) {
-        MessageToast.show(this.getResourceBundle().getText("inventoryProviderRequired"));
+        UserFeedback.reportError(MessageExtractor, this.getResourceBundle().getText("inventoryProviderRequired"), this._openMessagePopover.bind(this));
         return;
       }
       this._oSectionFactory.expandSection("inventory");
@@ -3660,6 +3676,7 @@ sap.ui.define([
           editable: !!this.getView().getModel("sectionFlags").getProperty("/createMode"),
           loaded: true
         });
+        UserFeedback.announce(this.getResourceBundle().getText("inventoryLoadAnnounce"));
       }.bind(this)).catch(function () {
         if (this._iProviderIohRequest === iRequest) {
           oListBinding.destroy();
@@ -4331,11 +4348,11 @@ sap.ui.define([
           press: function () {
             var oData = oAddModel.getData();
             if (!oData.partnerFunction) {
-              MessageToast.show(oBundle.getText("partiesInvolvedAddFunctionRequired"));
+              UserFeedback.reportError(MessageExtractor, oBundle.getText("partiesInvolvedAddFunctionRequired"), that._openMessagePopover.bind(that));
               return;
             }
             if (!oData.customerId) {
-              MessageToast.show(oBundle.getText("partiesInvolvedAddPartnerRequired"));
+              UserFeedback.reportError(MessageExtractor, oBundle.getText("partiesInvolvedAddPartnerRequired"), that._openMessagePopover.bind(that));
               return;
             }
             that._onPartiesAddConfirm(oHeaderContext, oData.partnerFunction, oData.customerId).then(function () {
@@ -4382,7 +4399,7 @@ sap.ui.define([
         }
         MessageToast.show(oBundle.getText("partiesInvolvedAddSuccess"));
       }).catch(function (oError) {
-        MessageToast.show(oBundle.getText("partiesInvolvedAddError"));
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("partiesInvolvedAddError"), that._openMessagePopover.bind(that));
         throw oError;
       });
     },
@@ -4398,6 +4415,7 @@ sap.ui.define([
     // group - not staged for any section Save button), gated in the fragment
     // by the row's own dynamic __EntityControl/Deletable.
     onPartiesDeleteRow: function (oEvent) {
+      var that = this;
       var oBundle = this.getResourceBundle();
       var oRowContext = oEvent.getSource().getBindingContext();
       if (!oRowContext) {
@@ -4411,7 +4429,7 @@ sap.ui.define([
           oRowContext.delete().then(function () {
             MessageToast.show(oBundle.getText("partiesInvolvedDeleteSuccess"));
           }, function () {
-            MessageToast.show(oBundle.getText("partiesInvolvedDeleteError"));
+            UserFeedback.reportError(MessageExtractor, oBundle.getText("partiesInvolvedDeleteError"), that._openMessagePopover.bind(that));
           });
         }
       });
@@ -4488,7 +4506,7 @@ sap.ui.define([
       if (!sProviderId) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
-        MessageToast.show(oBundle.getText("createRequestFieldRequired"));
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("createRequestFieldRequired"), that._openMessagePopover.bind(that));
         this._oSectionFactory.expandSection("details");
         return;
       }
@@ -4498,14 +4516,14 @@ sap.ui.define([
       if (!CreateOrderService.hasMinItems(oItemsBinding)) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
-        MessageToast.show(oBundle.getText("createRequestMinItemsError"));
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("createRequestMinItemsError"), that._openMessagePopover.bind(that));
         this._oSectionFactory.expandSection("items");
         return;
       }
       if (CreateOrderService.hasIncompleteItems(oItemsBinding, this.getView().getModel("orderUi").getData())) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
-        MessageToast.show(oBundle.getText("createRequestIncompleteItemsError"));
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("createRequestIncompleteItemsError"), that._openMessagePopover.bind(that));
         this._oSectionFactory.expandSection("items");
         return;
       }
@@ -4515,14 +4533,18 @@ sap.ui.define([
       if (oIohData.busy || oIohData.error) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
-        MessageToast.show(oBundle.getText(oIohData.error ? "inventoryLoadError" : "inventoryLoading"));
+        if (oIohData.error) {
+          UserFeedback.reportError(MessageExtractor, oBundle.getText("inventoryLoadError"), that._openMessagePopover.bind(that));
+        } else {
+          MessageToast.show(oBundle.getText("inventoryLoading"));
+        }
         this._oSectionFactory.expandSection("inventory");
         return;
       }
       if (oIohData.loaded && ProviderInventoryService.hasInvalidRows(oIohData.rows)) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);
-        MessageToast.show(oBundle.getText("inventoryRequiredFields"));
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("inventoryRequiredFields"), that._openMessagePopover.bind(that));
         this._oSectionFactory.expandSection("inventory");
         return;
       }
