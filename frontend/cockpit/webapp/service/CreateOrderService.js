@@ -595,8 +595,23 @@ sap.ui.define([
           // navigation is a plain POST the metamodel CAN resolve. They must
           // be attached here, before SaveChanges — SaveChanges is the actual
           // SD commit and is expected to reject a header-only order.
+          //
+          // 2026-11-06 (live-reproduced, Returns): this bulk item POST MUST
+          // use CREATE_GROUP ("vrCreate"), NOT CREATE_REPLAY_GROUP - both are
+          // manually-submitted ("API", manifest.json) groups, and issuing
+          // back-to-back submitBatch(CREATE_REPLAY_GROUP) calls (this one,
+          // then _commitStickySession's own SaveChanges submit right after)
+          // let the model coalesce both into ONE physical $batch changeset
+          // containing the item POST AND the SaveChanges action together -
+          // confirmed live to make the sticky session reject the whole batch
+          // ("Sticky session request error: Save not alone in changeset" /
+          // a generic "Error while parsing an XML stream" once other queued
+          // header-PATCH properties get swept in too). Using CREATE_GROUP
+          // here (same group the interactive per-row postItem() path already
+          // uses) makes this submitBatch a fully separate, independent
+          // request - SaveChanges can never end up sharing its changeset.
           var oStickyPlainContext = oModel.bindContext(ServiceSchema.buildHeaderPath(""), undefined, {
-            $$updateGroupId: CREATE_REPLAY_GROUP
+            $$updateGroupId: CREATE_GROUP
           }).getBoundContext();
           var aScratchItemContexts = (oItemsBinding && oItemsBinding.getCurrentContexts) ? oItemsBinding.getCurrentContexts() : [];
           aScratchItemContexts = aScratchItemContexts.filter(function (oItemContext) {
@@ -607,13 +622,13 @@ sap.ui.define([
           // the header - the create action's $select above never covered this
           // separate POST, so it was still coming back with no SAP__Messages.
           var oStickyItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyPlainContext, undefined, undefined, {
-            $$updateGroupId: CREATE_REPLAY_GROUP,
+            $$updateGroupId: CREATE_GROUP,
             $select: "SAP__Messages"
           });
           aScratchItemContexts.forEach(function (oItemContext) {
             oStickyItemsBinding.create(cleanItemPayload(oItemContext.getObject() || {}));
           });
-          var oItemsPromise = oModel.submitBatch(CREATE_REPLAY_GROUP);
+          var oItemsPromise = oModel.submitBatch(CREATE_GROUP);
 
           return oItemsPromise
             .catch(function (oError) {
