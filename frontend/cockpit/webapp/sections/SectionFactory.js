@@ -42,6 +42,36 @@ sap.ui.define([
     this._sOrderUiModel = sOrderUiModel || "orderUi";
   }
 
+  // Sections Catalog & Personalization PR2: updates the meta array WITHOUT
+  // destroying/rebuilding any already-built panels — safe to call before the
+  // very first ensurePanels() (e.g. while the view hasn't rendered yet and no
+  // panel exists at all), so the eventual first build picks up the latest
+  // (possibly personalization-resolved) structure instead of racing a
+  // premature rebuild() that would load fragment content before the view has
+  // a binding context. Callers MUST use rebuild() instead once panels exist.
+  SectionFactory.prototype.setMeta = function (aMeta) {
+    this._aMeta = aMeta || [];
+  };
+
+  // Sections Catalog & Personalization PR2: destroys and rebuilds the entire
+  // panel stack for a new ORDER/MEMBERSHIP/TITLE/EXPANDED resolution (user
+  // personalization Save/Reset, or an order-type switch whose resolved
+  // section order differs from what's currently built). Never called for a
+  // mode-only change (edit session start/end) — those stay on the existing
+  // lightweight visible/editVisible flag writes (Detail.controller.js
+  // #_applySectionResolution), which do not touch panel structure at all.
+  SectionFactory.prototype.rebuild = function (aMeta) {
+    var oContainer = this._oView.byId(this._sContainerId);
+    if (!oContainer) {
+      this.setMeta(aMeta);
+      return;
+    }
+    oContainer.destroyItems();
+    this._mLoaded = {};
+    this.setMeta(aMeta);
+    this.ensurePanels();
+  };
+
   SectionFactory.prototype.ensurePanels = function () {
     var oContainer = this._oView.byId(this._sContainerId);
     if (!oContainer || oContainer.getItems().length) {
@@ -54,7 +84,11 @@ sap.ui.define([
     this._aMeta.forEach(function (oMeta, iIndex) {
       var aToolbarContent = [
           new Title(this._oView.createId(oMeta.id + "-title"), {
-            text: oBundle.getText(oMeta.titleKey),
+            // Sections Catalog & Personalization PR2: a user-given custom
+            // section title (SectionResolver.resolve()'s `title`) wins over
+            // the catalog's i18n default; null/absent (the common case —
+            // most sections are never renamed) falls back exactly like PR1.
+            text: oMeta.title || oBundle.getText(oMeta.titleKey),
             level: "H2",
             titleStyle: "H4"
           })
@@ -137,7 +171,13 @@ sap.ui.define([
       var oPanel = new Panel(this._oView.createId(oMeta.id), {
         headerToolbar: oToolbar,
         expandable: true,
-        expanded: iIndex === 0 || !!oMeta.expanded,
+        // Sections Catalog & Personalization PR2: the old `iIndex === 0`
+        // first-panel-always-expanded special case is gone — PR1 already
+        // folded that into the baseline data itself (OrderModeConfig.js
+        // SECTION_BASELINE_EXPANDED: details/items always expanded), and a
+        // reordered-by-personalization first panel must NOT silently force
+        // itself open just because it happens to render first.
+        expanded: !!oMeta.expanded,
         visible: {
           path: this._sOrderUiModel + ">/sections/" + oMeta.id + "/visible",
           formatter: function (bVisible) { return bVisible !== false; }

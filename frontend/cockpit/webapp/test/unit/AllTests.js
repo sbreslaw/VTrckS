@@ -1,6 +1,7 @@
 sap.ui.define([
   "cdc/vaccreq/test/unit/model/ItemDetailBinding.qunit",
-  "cdc/vaccreq/test/unit/model/SectionsCatalog.qunit"
+  "cdc/vaccreq/test/unit/model/SectionsCatalog.qunit",
+  "cdc/vaccreq/test/unit/model/SectionResolver.qunit"
 ], function () {
   "use strict";
   // Just requiring the modules above is enough to run their QUnit.module/test

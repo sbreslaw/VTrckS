@@ -46,6 +46,62 @@ sap.ui.define([
     }
   }
 
+  // Sections Catalog & Personalization PR2 — the FLP Personalization service
+  // (sap.ushell.Container's "Personalization" service) is CONFIRMED live and
+  // working (manual test, Nov 2026: write via setPersData, full page reload,
+  // fresh getPersonalizer().getPersData() read back the identical value —
+  // real server-side per-user persistence, not just in-memory caching).
+  // This is an ADDITIVE async API, NOT a replacement of load/save above: the
+  // existing sync localStorage-only API has callers (Master.controller.js
+  // column layout/sort/group, Detail.controller.js Items column visibility)
+  // that read/write synchronously and would all need reworking to tolerate a
+  // Promise if the FLP branch were spliced into `load`/`save` themselves —
+  // out of scope and unnecessary risk for this PR. New callers that can
+  // tolerate an async round trip (e.g. a p13n dialog's open/Save, already
+  // async user-gesture boundaries) should use loadAsync/saveAsync/deleteAsync
+  // instead; a future task could migrate the old API once every caller is
+  // audited for async-safety.
+  var CONTAINER_ID = "cdc.vaccreq";
+  var oPersonalizerCache = {};
+  var oContainerPromise = null;
+  var sBackend = null; // "flp" | "localStorage" | null (not yet determined)
+
+  function getPersonalizationService() {
+    if (!oContainerPromise) {
+      oContainerPromise = new Promise(function (resolve) {
+        try {
+          var oUshellContainer = sap.ui.require("sap/ushell/Container");
+          if (!oUshellContainer || !oUshellContainer.getServiceAsync) {
+            resolve(null);
+            return;
+          }
+          oUshellContainer.getServiceAsync("Personalization").then(resolve, function () {
+            resolve(null);
+          });
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+    return oContainerPromise;
+  }
+
+  function getPersonalizer(sKey, oPersService) {
+    if (oPersonalizerCache[sKey]) {
+      return oPersonalizerCache[sKey];
+    }
+    var oPersonalizer = oPersService.getPersonalizer(
+      { container: CONTAINER_ID, item: sKey },
+      {
+        keyCategory: oPersService.constants.keyCategory.FIXED_KEY,
+        writeFrequency: oPersService.constants.writeFrequency.LOW,
+        clientStorageAllowed: true
+      }
+    );
+    oPersonalizerCache[sKey] = oPersonalizer;
+    return oPersonalizer;
+  }
+
   var VariantStore = {
     /**
      * @param {string} sKey stable id for the personalization scope, e.g. "masterFilterBar".
@@ -93,6 +149,69 @@ sap.ui.define([
 
     createModel: function (sKey) {
       return new JSONModel(this.load(sKey));
+    },
+
+    // --- Async, FLP-Personalization-backed API (Sections Catalog &
+    // Personalization PR2) — see the block comment above. Storage shape is
+    // the raw value itself (no variants-map wrapper — each key holds exactly
+    // one current value, unlike the named Save-As variants the sync API
+    // supports). `loadAsync` resolves `null` when nothing is stored yet. ---
+
+    loadAsync: function (sKey) {
+      return getPersonalizationService().then(function (oPersService) {
+        if (!oPersService) {
+          sBackend = sBackend || "localStorage";
+          try {
+            var sRaw = window.localStorage.getItem("cdc.vaccreq.pers." + sKey);
+            return sRaw ? JSON.parse(sRaw) : null;
+          } catch (e) {
+            return null;
+          }
+        }
+        sBackend = "flp";
+        return getPersonalizer(sKey, oPersService).getPersData().then(function (vValue) {
+          return vValue === undefined ? null : vValue;
+        });
+      });
+    },
+
+    saveAsync: function (sKey, vValue) {
+      return getPersonalizationService().then(function (oPersService) {
+        if (!oPersService) {
+          sBackend = sBackend || "localStorage";
+          try {
+            window.localStorage.setItem("cdc.vaccreq.pers." + sKey, JSON.stringify(vValue));
+          } catch (e) {
+            // best-effort, never fatal.
+          }
+          return undefined;
+        }
+        sBackend = "flp";
+        var oPersonalizer = getPersonalizer(sKey, oPersService);
+        return oPersonalizer.setPersData(vValue);
+      });
+    },
+
+    deleteAsync: function (sKey) {
+      return getPersonalizationService().then(function (oPersService) {
+        if (!oPersService) {
+          sBackend = sBackend || "localStorage";
+          try {
+            window.localStorage.removeItem("cdc.vaccreq.pers." + sKey);
+          } catch (e) {
+            // best-effort, never fatal.
+          }
+          return undefined;
+        }
+        sBackend = "flp";
+        return getPersonalizer(sKey, oPersService).delPersData();
+      });
+    },
+
+    // Diagnostics only (e.g. manual live-verification, support questions) —
+    // null until the first loadAsync/saveAsync/deleteAsync call resolves.
+    getPersonalizationBackend: function () {
+      return sBackend;
     }
   };
 
