@@ -154,9 +154,9 @@ sap.ui.define([
       // as the orders-side fragment.
       noOfBoxes: "CustomerPurchaseOrderSuplmnt",
       labelAddress: null,
-      // 2026-11-05: "Description" confirmed real (live-verified, newer than
-      // the saved metadata dump) - supersedes the prior "ZOrdDesc absent" note.
-      description: "Description",
+      // 2026-11-06: remapped Description -> ZZ1_Description_SDH per code-owner
+      // instruction (custom header field, same class as the ZZ1_*_SDI item remap).
+      description: "ZZ1_Description_SDH",
       // ret-10-28 #7 metadata re-audit: CustomerPurchaseOrderType IS real on
       // CustomerReturnManageType (previous comment wrongly claimed no category
       // concept existed) - raw code only here (categoryValueHelp above resolves
@@ -642,9 +642,8 @@ sap.ui.define([
       salesOffice: null,
       salesGroup: null,
       priority: null,
-      // 2026-11-05: live-verified real (newer than the saved metadata dump,
-      // same class of field as the ZZ1_*_SDI remap) - matches headerProperties.description above.
-      description: "Description",
+      // 2026-11-06: remapped per code-owner instruction - see headerProperties.description above.
+      description: "ZZ1_Description_SDH",
       category: null,
       returnType: null
     },
