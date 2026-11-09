@@ -85,7 +85,16 @@ sap.ui.define([
       // sap.m.Table (documented UI5 behavior), same mechanism as brand/
       // orderIntention/fundType/poReference above.
       optOut: { visible: false },
-      deliveryStatus: { visible: false }
+      deliveryStatus: { visible: false },
+      // 2026-11-06: ExpirationDate confirmed GONE from the live $metadata
+      // (present in so_C_SALESORDERMANAGE_2026-10-23.xml, absent in the
+      // 2026-11-06 re-fetch - backend regression, not a rename) - was
+      // visible for the _RET-category order types here (ZISL/ZXFR/ZWST/ZKR,
+      // via RETURNS_UI_HIDDEN below, which is seeded from this same object)
+      // and threw a 404/auto-$expand error storm on every item add/edit.
+      // Hidden universally until the backend restores it; see
+      // OrdersSchema.js#itemProperties.expirationDate (left null).
+      expirationDate: { visible: false }
       // exisId column UN-HIDDEN (2026-10-27 metadata re-audit): ExisItemNumber
       // IS real on CustomerReturnItemManageType - the prior "5th literal-binding
       // hazard" hide was based on the OLDER 2026-10-26 metadata, which omitted

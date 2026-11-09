@@ -128,11 +128,19 @@
             change=".onBatchChange"
             modelContextChange=".onBatchModelContextChange" />
           <!-- Return Orders session prompt 3.2: ExpirationDate, Edm.Date, no FieldControl
-               annotation - a plain two-way binding like the new ExIS Date header field. -->
-          <DatePicker
-            value="{path: 'ExpirationDate', type: 'sap.ui.model.odata.type.Date'}"
-            visible="{itemsColumns>/expirationDate}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/expirationDate/editable} !== false }" />
+               annotation - a plain two-way binding like the new ExIS Date header field.
+               2026-11-06: ExpirationDate confirmed GONE from the live $metadata (present
+               in so_C_SALESORDERMANAGE_2026-10-23.xml, absent in a fresh 2026-11-06
+               re-fetch - backend regression). Hiding the Column via itemsColumns alone
+               is NOT enough here - confirmed live (and reproducible against the local
+               mock, independent of backend) that UI5 V4 still evaluates a bound
+               DatePicker's `value` path for auto-$expand/$select even while its `visible`
+               binding is currently false, throwing the same error storm this fix is for.
+               Swapped to the same static em-dash placeholder already used for
+               poReference/orderIntention above - no live path at all - until the
+               property is restored. See OrdersSchema.js#itemProperties.expirationDate
+               (null) and OrderModeConfig.js (column hidden app-wide). -->
+          <Text text="{= '\u2014'}" visible="{itemsColumns>/expirationDate}" />
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
           <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
                gets a promise to await before refreshing the list for recalculated
