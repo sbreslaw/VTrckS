@@ -153,8 +153,8 @@ sap.ui.define([
       exisDate: "CustomerPurchaseOrderDate",
       // 2026-11-09: remapped per code-owner instruction from
       // CustomerPurchaseOrderSuplmnt (the orders-side field) to this
-      // service's own custom extension property ZZ1_NoofBoxes.
-      noOfBoxes: "ZZ1_NoofBoxes",
+      // service's own custom extension property ZZ1_NoofBoxes_SDH.
+      noOfBoxes: "ZZ1_NoofBoxes_SDH",
       labelAddress: null,
       // 2026-11-06: remapped Description -> ZZ1_Description_SDH per code-owner
       // instruction (custom header field, same class as the ZZ1_*_SDI item remap).
@@ -663,7 +663,7 @@ sap.ui.define([
       category: "CustomerPurchaseOrderType",
       returnType: "SpecialProcessingCode",
       exisDate: "CustomerPurchaseOrderDate",
-      noOfBoxes: "ZZ1_NoofBoxes"
+      noOfBoxes: "ZZ1_NoofBoxes_SDH"
     },
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw

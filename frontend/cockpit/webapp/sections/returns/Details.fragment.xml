@@ -547,7 +547,7 @@
 					<!-- SPACER -->
 
 					<!-- 2026-11-09: remapped per code-owner instruction to this service's own
-						ZZ1_NoofBoxes custom extension property, replacing CustomerPurchaseOrderSuplmnt
+						ZZ1_NoofBoxes_SDH custom extension property, replacing CustomerPurchaseOrderSuplmnt
 						(the orders-side field) - same Edm.String(4)->StepInput OneWay+formatter+
 						explicit-change-handler pattern as the orders-side Details.fragment.xml. -->
 					<f:FormElement visible="{orderUi>/fields/detailsNoOfBoxes/visible}">
@@ -564,10 +564,10 @@
 								<layoutData>
 									<l:GridData span="XL3 L3 M3 S12"/>
 								</layoutData>
-								<Text text="{ZZ1_NoofBoxes}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Text text="{ZZ1_NoofBoxes_SDH}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<StepInput
 									width="100%"
-									value="{path: 'ZZ1_NoofBoxes', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
+									value="{path: 'ZZ1_NoofBoxes_SDH', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
 									min="1"
 									max="25"
 									step="1"
