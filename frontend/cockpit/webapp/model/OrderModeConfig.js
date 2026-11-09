@@ -1,6 +1,7 @@
 sap.ui.define([
-  "sap/base/Log"
-], function (Log) {
+  "sap/base/Log",
+  "cdc/vaccreq/sections/SectionCatalog"
+], function (Log, SectionCatalog) {
   "use strict";
 
   // Carries an order CATEGORY (CR-1014-001 §0); legacy FLP mappings may still pass an order type.
@@ -11,7 +12,8 @@ sap.ui.define([
   // differences here. `ui` is the single UI-config source, exposed to the
   // Detail view as the `orderUi` model (Detail.controller.js#_applyOrderUi):
   //   kinds  - fields, fieldGroups (Details.fragment.xml), columns (Items
-  //            table, ITEMS_COLUMN_KEYS), sections (SectionConfig.js ids)
+  //            table, ITEMS_COLUMN_KEYS), sections (SectionCatalog.js ids,
+  //            resolved through resolveSections() below — NOT read via uiFlag)
   //   flags  - visible, editable; both default to true when absent
   //   XML    - visible="{= ${orderUi>/<kind>/<id>/visible} !== false }"
   //            (editable: append "&& ${orderUi>/<kind>/<id>/editable} !== false")
@@ -53,6 +55,16 @@ sap.ui.define([
 
   };
 
+  // Sections Catalog PR1: sections hidden here are also `locked` — not
+  // offerable in the (PR2) personalization dialog either, since the hide
+  // reflects "this concept does not exist for this category", not a mere
+  // display preference.
+  function lockedHidden(aIds) {
+    var oOut = {};
+    aIds.forEach(function (sId) { oOut[sId] = { visible: false, locked: true }; });
+    return oOut;
+  }
+
   var PROVIDER_ORDER_UI_HIDDEN = {
     fields: {
       grossValue: { visible: false },
@@ -79,20 +91,11 @@ sap.ui.define([
       // hazard" hide was based on the OLDER 2026-10-26 metadata, which omitted
       // it. Items.fragment.xml's exisId Input is bound to it directly again.
     },
-    sections: {
-      inventory: { visible: false },
-      shipping: { visible: false },
-      shippingTransactions: { visible: false },
-      transactionHistory: { visible: false },
-      orgData: { visible: false },
-      priceTotals: { visible: false },
-      paymentMethod: { visible: false },
-      scheduledActions: { visible: false },
-      status: { visible: false },
-      dates: { visible: false },
-      partiesInvolved: { visible: false },
-      attachments: { visible: false }
-    }
+    sections: lockedHidden([
+      "inventory", "shipping", "shippingTransactions", "transactionHistory",
+      "orgData", "priceTotals", "paymentMethod", "scheduledActions",
+      "status", "dates", "partiesInvolved", "attachments"
+    ])
   };
 
   // ADR-002 (Returns_Single_App_Service_Profile) PR1: ONE consistent hide set
@@ -132,7 +135,7 @@ sap.ui.define([
     // does not exist on this service). Every other PROVIDER_ORDER_UI_HIDDEN
     // section stays hidden for _RET.
     sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections, {
-      shipping: { visible: true }
+      shipping: { visible: true, locked: false }
     })
   };
 
@@ -304,6 +307,17 @@ sap.ui.define([
     });
   });
 
+  // Sections Catalog PR1 load-time assertion: every section id this module
+  // references must exist in SectionCatalog.js — catches a typo/rename the
+  // instant the app boots instead of a silently-ignored (never resolved) id.
+  Object.keys(ORDER_TYPES).forEach(function (sOrderType) {
+    Object.keys(ORDER_TYPES[sOrderType].ui.sections || {}).forEach(function (sSectionId) {
+      if (!SectionCatalog.get(sSectionId)) {
+        throw new Error("OrderModeConfig: order type " + sOrderType + " references unknown section id " + sSectionId);
+      }
+    });
+  });
+
   var DEFAULT_ORDER_TYPE = ORDER_CATEGORIES[DEFAULT_CATEGORY].orderTypes[0];
 
   function normalizeValue(vValue) {
@@ -369,6 +383,54 @@ sap.ui.define([
     return bDefault !== false;
   }
 
+  // Sections Catalog PR1 — the two facts that used to live as flat booleans
+  // on each SectionConfig.js entry (`expanded`, `createVisible`) are GLOBAL
+  // (same for every order type), so they live here once rather than being
+  // repeated inside every ORDER_TYPES entry's `ui.sections`. Per-type/per-
+  // section differences (visible/locked/editable) still come from each
+  // type's own `ui.sections` map above.
+  var SECTION_BASELINE_EXPANDED = { details: true, items: true };
+  // Migrated from SectionConfig.js `createVisible` (the sections that used to
+  // auto-expand+load eagerly on createMode entry); unlike the old mechanism,
+  // a section's create-mode visibility is still governed solely by its
+  // per-type `visible`/`locked` state — this list only controls whether an
+  // ALREADY-visible section starts expanded. `partiesInvolved` is deliberately
+  // absent (CreatePartner needs a persisted context, see SectionCatalog.js
+  // `createCapable`).
+  var SECTION_CREATE_EXPANDED = { inventory: true, shipping: true, orgData: true, priceTotals: true, attachments: true };
+
+  // Single resolver for the Detail panel stack (Sections Catalog PR1):
+  // merges SectionCatalog.all() (structure) with the order type's `ui.sections`
+  // (per-type visible/locked/editable) and the mode-global expand state above.
+  // Returns an ordered array (catalog order; PR1 introduces no reordering)
+  // of `{ id, visible, editable, expanded, locked }`. `sMode` is
+  // "create"|"edit"|"display" (Detail.controller.js#_currentSectionMode) —
+  // "edit" and "display" resolve identically UNLESS a section's per-type
+  // entry declares a `byMode` override (escape hatch for a mode-only
+  // difference, e.g. `{ byMode: { edit: { editable: false } } }` to hide a
+  // section's Edit button only while another section has an active edit
+  // session — on top of, not instead of, the existing per-button
+  // `editEnabled` serialization in onSectionEditPress/_endEditSession).
+  function resolveSections(vOrderType, sMode) {
+    var oConfig = ORDER_TYPES[normalizeOrderType(vOrderType)];
+    var oPerType = (oConfig.ui && oConfig.ui.sections) || {};
+    return SectionCatalog.all().map(function (oCatalogEntry) {
+      var oOverride = oPerType[oCatalogEntry.id] || {};
+      var oModeOverride = (oOverride.byMode && oOverride.byMode[sMode]) || {};
+      var bExpanded = !!SECTION_BASELINE_EXPANDED[oCatalogEntry.id];
+      if (sMode === "create" && SECTION_CREATE_EXPANDED[oCatalogEntry.id]) {
+        bExpanded = true;
+      }
+      return {
+        id: oCatalogEntry.id,
+        visible: (oModeOverride.visible !== undefined ? oModeOverride.visible : oOverride.visible) !== false,
+        editable: (oModeOverride.editable !== undefined ? oModeOverride.editable : oOverride.editable) !== false,
+        locked: !!oOverride.locked,
+        expanded: bExpanded
+      };
+    });
+  }
+
   // Item Details view (ItemDetail route) sections have no per-order-type config
   // like the header `ui.sections` above - ADR-002's service profile
   // (ServiceSchema.profileId: "orders"/"returns") is 1:1 with order category
@@ -403,6 +465,7 @@ sap.ui.define([
     resolveOrderType: resolveOrderType,
     resolve: resolve,
     uiFlag: uiFlag,
+    resolveSections: resolveSections,
     getItemUi: getItemUi
   };
 });

@@ -40,7 +40,7 @@ sap.ui.define([
   "sap/ui/model/Sorter",
   "sap/ui/export/Spreadsheet",
   "cdc/vaccreq/sections/SectionFactory",
-  "cdc/vaccreq/sections/SectionConfig",
+  "cdc/vaccreq/sections/SectionCatalog",
   "cdc/vaccreq/model/formatter",
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/OrderModeConfig",
@@ -60,7 +60,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionConfig, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter
 ) {
@@ -126,11 +126,13 @@ sap.ui.define([
       // Prompt v3.md).
       this._oRouter.getRoute("create").attachPatternMatched(this._onCreateMatched, this);
       this._oRouter.getRoute("master").attachPatternMatched(this._onMasterMatched, this);
-      // Single source of truth for the panel stack: SectionConfig.js. The anchor
-      // strip (sectionsNav model, below) and the sectionFlags model are both
+      // Single source of truth for the panel stack STRUCTURE: SectionCatalog.js
+      // (Sections Catalog PR1 — replaces SectionConfig.js). The anchor strip
+      // (sectionsNav model, below) and the sectionFlags model are both
       // derived from this same array, so a new section added there appears in
-      // both automatically (Phase 2 Prompt v2, P1 item 2).
-      this._aSectionMeta = SectionConfig;
+      // both automatically. Per-order-type/per-mode visible/editable/expanded
+      // state is resolved separately per call — see _applySectionResolution.
+      this._aSectionMeta = SectionCatalog.all();
       this._oSectionFactory = new SectionFactory(this.getView(), this._aSectionMeta, this._onSectionContentLoaded.bind(this));
       this.getView().setModel(this._createSectionFlagsModel(), "sectionFlags");
       this.getView().setModel(this._createSectionsNavModel(), "sectionsNav");
@@ -533,7 +535,7 @@ sap.ui.define([
     },
 
     // --- CRUD Task 2 (Change Mode): per-section edit sessions (Details/Items
-    // only \u2014 SectionConfig.js `editLive`). One section in edit at a time;
+    // only \u2014 SectionCatalog.js `editLive`). One section in edit at a time;
     // Edit/Save/Cancel buttons live in that section's headerToolbar
     // (SectionFactory.js). No draft: Save = submitBatch("vrEdit"), Cancel =
     // resetChanges("vrEdit") \u2014 see EditRequestService.js. ---
@@ -552,6 +554,7 @@ sap.ui.define([
       });
       EditRequestService.beginEdit(oContext, sSectionId);
       oFlags.setProperty("/" + sSectionId + "/editing", true);
+      this._reapplySectionMode();
       if (sSectionId === "items") {
         var oItemsTable = this._byIdInSection("items", "itemsTable");
         var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
@@ -2390,6 +2393,7 @@ sap.ui.define([
           oFlags.setProperty("/" + oMeta.id + "/editEnabled", true);
         }
       });
+      this._reapplySectionMode();
     },
 
     _showConflictDialog: function (oContext, sSectionId) {
@@ -4663,7 +4667,7 @@ sap.ui.define([
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), createVisible: !!oMeta.createVisible, visible: true };
+        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true };
       });
       return new JSONModel({ list: aList });
     },
@@ -4875,13 +4879,63 @@ sap.ui.define([
       // All createMode-visible sections are expanded/loaded simultaneously —
       // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
       // Prompt v3.md "Sections in edit simultaneously"). Order-type-hidden
-      // sections are skipped.
-      var oOrderUi = this.getView().getModel("orderUi").getData();
-      this._aSectionMeta.forEach(function (oMeta) {
-        if (oMeta.createVisible && OrderModeConfig.uiFlag(oOrderUi, "sections", oMeta.id, "visible")) {
-          this._oSectionFactory.expandSection(oMeta.id);
+      // sections are skipped; which visible sections start expanded is the
+      // resolved "create" mode's `expanded` flag (OrderModeConfig.js
+      // SECTION_CREATE_EXPANDED, migrated from the old SectionConfig.js
+      // `createVisible`). _applyOrderUi above already resolved this (createMode
+      // is already true at this point) and cached it on _aResolvedSections.
+      (this._aResolvedSections || []).forEach(function (oResolved) {
+        if (oResolved.visible && oResolved.expanded) {
+          this._oSectionFactory.expandSection(oResolved.id);
         }
       }, this);
+    },
+
+    // "create" while the createMode flag is on; "edit" while any editLive
+    // section has an active per-section edit session; "display" otherwise.
+    // Section resolution (_applySectionResolution) always goes through this —
+    // never reads sectionFlags directly for mode purposes.
+    _currentSectionMode: function () {
+      var oFlags = this.getView().getModel("sectionFlags");
+      if (oFlags.getProperty("/createMode")) {
+        return "create";
+      }
+      var bEditing = this._aSectionMeta.some(function (oMeta) {
+        return oMeta.editLive && oFlags.getProperty("/" + oMeta.id + "/editing");
+      });
+      return bEditing ? "edit" : "display";
+    },
+
+    // Writes the resolved per-section visible/editVisible state (sectionsNav,
+    // sectionFlags) for the given order type + mode; does NOT touch anything
+    // else _applyOrderUi also refreshes (status VH, category options, items
+    // columns) — safe/cheap to call every time a section edit session starts
+    // or ends (_reapplySectionMode), unlike a full _applyOrderUi re-run.
+    _applySectionResolution: function (sOrderType, sMode) {
+      var oView = this.getView();
+      var oNav = oView.getModel("sectionsNav");
+      var oFlags = oView.getModel("sectionFlags");
+      var aResolved = OrderModeConfig.resolveSections(sOrderType, sMode);
+      this._aResolvedSections = aResolved;
+      aResolved.forEach(function (oResolved, iIndex) {
+        oNav.setProperty("/list/" + iIndex + "/visible", oResolved.visible);
+        var oMeta = this._aSectionMeta[iIndex];
+        if (oMeta.editable) {
+          oFlags.setProperty("/" + oMeta.id + "/editVisible", oResolved.editable);
+        }
+      }, this);
+      return aResolved;
+    },
+
+    // Re-derives section visible/editVisible for the CURRENT order type when
+    // only the mode changed (a section edit session started/ended) — called
+    // from onSectionEditPress/_endEditSession so e.g. a `byMode` edit-only
+    // override (OrderModeConfig.js resolveSections) takes effect immediately.
+    _reapplySectionMode: function () {
+      if (!this._sOrderType) {
+        return;
+      }
+      this._applySectionResolution(this._sOrderType, this._currentSectionMode());
     },
 
     // The only place `orderUi` is set. Create mode applies the route's type,
@@ -4891,15 +4945,8 @@ sap.ui.define([
       var oMode = OrderModeConfig.resolveOrderType(sOrderType);
       var oView = this.getView();
       this._sOrderType = oMode.orderType;
-      var oFlags = oView.getModel("sectionFlags");
-      var oNav = oView.getModel("sectionsNav");
       oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui));
-      this._aSectionMeta.forEach(function (oMeta, iIndex) {
-        oNav.setProperty("/list/" + iIndex + "/visible", OrderModeConfig.uiFlag(oMode.ui, "sections", oMeta.id, "visible"));
-        if (oMeta.editable) {
-          oFlags.setProperty("/" + oMeta.id + "/editVisible", OrderModeConfig.uiFlag(oMode.ui, "sections", oMeta.id, "editable"));
-        }
-      });
+      this._applySectionResolution(oMode.orderType, this._currentSectionMode());
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
       this._loadOrderStatusVH(oMode.orderType);
       this._loadCategoryOptions(oMode);
