@@ -175,6 +175,16 @@ sap.ui.define([
       if (oError) {
         // Not-found target for stale/direct links (session prompt 3.1).
         this._oRouter.getTargets().display("itemNotFound");
+        return;
+      }
+      // Accessibility remediation (2026-11-06 review, package D): once the
+      // item's own data has arrived, move focus to its title so AT users
+      // land on the new page context after navigating in from the Items table.
+      var oTitle = this.byId("itemDetailTitle");
+      var oDomRef = oTitle && oTitle.getDomRef();
+      if (oDomRef) {
+        oDomRef.setAttribute("tabindex", "-1");
+        oDomRef.focus();
       }
     },
 

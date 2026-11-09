@@ -102,12 +102,12 @@
 
           <f:FormElement>
             <f:label>
-              <Label text="{i18n>itemDetailCombineOrders}">
+              <Label id="itemShippingCombineOrdersLabel" text="{i18n>itemDetailCombineOrders}">
                 <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
               </Label>
             </f:label>
             <f:fields>
-              <CheckBox selected="{OrderCombinationIsAllowed}" enabled="false">
+              <CheckBox selected="{OrderCombinationIsAllowed}" enabled="false" ariaLabelledBy="itemShippingCombineOrdersLabel">
                 <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
               </CheckBox>
             </f:fields>

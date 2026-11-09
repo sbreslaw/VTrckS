@@ -8,7 +8,7 @@
     <f:title>
       <f:DynamicPageTitle>
         <f:heading>
-          <Title id="itemDetailTitle" />
+          <Title id="itemDetailTitle" level="H1" />
         </f:heading>
         <f:snappedContent>
           <Text id="itemDetailSubtitle" />
@@ -19,7 +19,7 @@
 
         <f:content>
           <OverflowToolbar>
-            <GenericTag id="itemDetailStatus" design="StatusIconHidden" />
+            <GenericTag id="itemDetailStatus" design="Full" />
           </OverflowToolbar>
         </f:content>
 

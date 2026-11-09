@@ -26,7 +26,7 @@
       <Column><Text text="{i18n>colPartnerId}" /></Column>
       <Column><Text text="{i18n>colPartnerName}" /></Column>
       <Column><Text text="{i18n>colPartnerAddress}" /></Column>
-      <Column hAlign="Center"><Text text="{i18n>colMainPartner}" /></Column>
+      <Column hAlign="Center"><Text id="partiesMainPartnerColHeader" text="{i18n>colMainPartner}" /></Column>
     </columns>
     <items>
       <ColumnListItem>
@@ -55,14 +55,14 @@
                  uses) to PATCH this row's own Customer property - gated by
                  the row's own dynamic __EntityControl/Updatable and never
                  shown for the mandatory Sold-To row (see TODO-VERIFY above). -->
-            <Button icon="sap-icon://value-help" type="Transparent" press=".onPartiesChangeName"
+            <Button icon="sap-icon://value-help" type="Transparent" tooltip="{i18n>partiesSelectPartner}" press=".onPartiesChangeName"
               enabled="{__EntityControl/Updatable}" visible="{:= ${PartnerFunction} !== 'AG' }" />
           </HBox>
           <Text text="{FormattedPostalAddressDesc}" />
           <!-- TODO(main-partner): no "is main partner" flag exists anywhere
                on HeaderPartnerType (confirmed absent from so.xml) - always
                disabled/unselected, see OPEN_QUESTIONS.md. -->
-          <CheckBox enabled="false" selected="false" />
+          <CheckBox enabled="false" selected="false" ariaLabelledBy="partiesMainPartnerColHeader" />
         </cells>
       </ColumnListItem>
     </items>
