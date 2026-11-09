@@ -412,9 +412,11 @@ sap.ui.define([
 
     // No "category" (direct-entry) concept exists on this service.
     defaultCategory: null,
-    // TODO-VERIFY: a valid default ShippingCondition code for returns create
-    // was not independently confirmed this session - left null rather than
-    // reusing orders' "01" (PR2 concern).
+    // Confirmed per customer (2026-11-09): Shipping Condition should default
+    // to blank for Returns create, not orders' "01" - left unset on purpose,
+    // not an open gap. See CreateOrderService.js#_replayHeaderProperties,
+    // which never PATCHes a null scratch value onto the non-nullable
+    // backend field (would otherwise 400 and cascade-fail the whole batch).
     defaultShippingCondition: null,
     defaultDeliveryStatus: null,
     defaultDeliveryBlockStatus: null,
