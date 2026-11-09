@@ -757,7 +757,13 @@ sap.ui.define([
     // session context, before SaveChanges (see save() above).
     _replayHeaderProperties: function (oNewContext, oScratchData, oCreateOptions) {
       ServiceSchema.createReplayHeaderProperties.forEach(function (sProperty) {
-        if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "") {
+        // 2026-11-09 (live-reproduced, Returns): a scratch value can be
+        // explicitly null (e.g. ShippingCondition when defaultShippingCondition
+        // is null and the user never picks one, ReturnsSchema.js) - PATCHing
+        // null onto a Nullable="false" field is a genuine backend reject that
+        // cascades and fails every other PATCH riding the same changeset.
+        // Never replay null here - there is nothing to clear on a brand-new order.
+        if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "" && oScratchData[sProperty] !== null) {
           oNewContext.setProperty(sProperty, oScratchData[sProperty]);
         }
       });
