@@ -42,7 +42,10 @@ sap.ui.define([
       // property on CustomerReturnManageType (see headerProperties below).
       deliveryBlockReason: null,
       deliveryPriority: null,
-      orderReason: "ReturnsOrderReason",
+      // 2026-11-09: remapped per code-owner instruction - SDDocumentReason is a
+      // direct property on CustomerReturnManageType (same convention as orders,
+      // OrdersSchema.js), not the separate ReturnsOrderReason navigation/entity.
+      orderReason: "SDDocumentReason",
       shipToParty: "HeaderShipToParty",
       // ret-10-28 #2: F4 c_soldtosalesareavh is confirmed triad-less live
       // (no SalesOrganization/DistributionChannel/Division - just
@@ -82,7 +85,7 @@ sap.ui.define([
       headerToShipToParty: "_ShipToParty",
       headerToContactInfo: null,
       headerToCreatedByUser: "_CreatedByUser",
-      headerToOrderReason: "_ReturnsOrderReason",
+      headerToOrderReason: "_SDDocumentReason",
       headerToPaymentMethod: null,
       itemToRejectionReason: "_SalesDocumentRjcnReason",
       itemToDeliveryStatus: null,
@@ -136,7 +139,7 @@ sap.ui.define([
       billingStatus: null,
       paymentTerms: "CustomerPaymentTerms",
       priority: null,
-      orderReason: "ReturnsOrderReason",
+      orderReason: "SDDocumentReason",
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
       // 2026-10-27 metadata re-audit: SpecialProcessingCode IS real on
@@ -531,8 +534,8 @@ sap.ui.define([
       deliveryPriorityText: null,
       salesOrderTypeCode: "CustomerReturnType",
       salesOrderTypeText: "CustomerReturnType_Text",
-      orderReasonCode: "ReturnsOrderReason",
-      orderReasonText: "ReturnsOrderReason_Text",
+      orderReasonCode: "SDDocumentReason",
+      orderReasonText: "SDDocumentReason_Text",
       shippingConditionCode: "ShippingCondition",
       shippingConditionText: "ShippingCondition_Text",
       paymentTermsCode: null,
@@ -633,11 +636,12 @@ sap.ui.define([
     },
 
     // Confirmed PATCHable together after CreateWithCustomerReturnType's header
-    // PATCH unlocks (NOTES.md "Returns MVP-2 Step-0", 2026-10-26): ReturnsOrderReason,
+    // PATCH unlocks (NOTES.md "Returns MVP-2 Step-0", 2026-10-26): order reason
+    // (now SDDocumentReason, 2026-11-09 remap - see headerProperties.orderReason),
     // PurchaseOrderByCustomer, ShippingCondition (RequestedDeliveryDate also accepted
     // but has no orders-side key to mirror - PR2 can add one if needed).
     updatableHeaderProperties: {
-      orderReason: "ReturnsOrderReason",
+      orderReason: "SDDocumentReason",
       exisId: "PurchaseOrderByCustomer",
       shippingCondition: "ShippingCondition",
       paymentTerms: null,

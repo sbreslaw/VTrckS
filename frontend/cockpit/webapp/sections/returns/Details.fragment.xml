@@ -446,25 +446,24 @@
 						</f:label>
 
 						<f:fields>
-							<!-- ADR-002 hazard #2: order reason is ReturnsOrderReason /
-								_ReturnsOrderReason / entity set ReturnsOrderReason on this
-								service (ReturnsSchema.headerProperties.orderReasonCode/
-								orderReasonText, navigation.headerToOrderReason,
-								entitySets.orderReason), not SDDocumentReason. -->
+							<!-- 2026-11-09: remapped to SDDocumentReason / _SDDocumentReason / entity
+								set SDDocumentReason (ReturnsSchema.headerProperties.orderReasonCode/
+								orderReasonText, navigation.headerToOrderReason, entitySets.orderReason) -
+								same convention as orders now (ADR-002 hazard #2 resolved). -->
 							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
 								unaffected outside createMode (normal Change-Mode editing). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_ReturnsOrderReason/ReturnsOrderReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<ComboBox
 									width="100%"
-									selectedKey="{ReturnsOrderReason}"
+									selectedKey="{SDDocumentReason}"
 									visible="{sectionFlags>/details/editing}"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									items="{path: '/ReturnsOrderReason'}">
-									<core:Item key="{ReturnsOrderReason}" text="{ReturnsOrderReason_Text}" />
+									items="{path: '/SDDocumentReason'}">
+									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
 								</ComboBox>
 							</VBox>
 						</f:fields>
