@@ -187,10 +187,10 @@
 								standalone query). Locked until a Provider is picked;
 								prefilled from the current IsStandardRelationship contact
 								when the Provider changes and still overridable through the
-								value help. Contact
-								persistence back to the order is still pending (no
-								confirmed write path this session) - see
-								OPEN_QUESTIONS.md. -->
+								value help. Contact now persists via the header-bound
+								CreatePartner action (2026-11-09 metadata re-audit,
+								ReturnsSchema.js createPartnerAction), same mechanism as
+								orders. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>

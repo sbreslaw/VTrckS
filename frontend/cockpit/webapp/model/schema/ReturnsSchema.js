@@ -445,8 +445,14 @@ sap.ui.define([
 
     enrichmentAction: null,
 
-    // No CreatePartner-equivalent action documented; Parties section hidden anyway.
-    createPartnerAction: null,
+    // 2026-11-09 metadata re-audit (ui_customerreturnmanage_2026-11-04.xml):
+    // a header-bound CreatePartner action (EntitySetPath "_it/_Partner",
+    // _it: CustomerReturnManageType, Parameter PartnerFunction, ReturnType
+    // HeaderPartnerType) IS real on this service - absent from the older
+    // 2026-10-27/28 dumps this session's prior "no equivalent" conclusion was
+    // based on. Same shape as OrdersSchema.js's own CreatePartner - Contact
+    // now persists via CreateOrderService.js#_replayContact same as orders.
+    createPartnerAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreatePartner",
 
     statusProperties: {
       code: "OverallSDProcessStatus",
