@@ -1,10 +1,9 @@
 // Single source of truth for "status code -> text" option lists (ADR-002
 // issue ret-10-28 #3): both Master's filterStatus dropdown and Detail's
 // Status field Select consume options through this one helper, driven by
-// ServiceSchema.statusValueHelp (profile-declared: orders -> po>/OrderStatus
-// filtered by OrderType; returns -> the default model's own
-// /OverallSDProcessStatus, unfiltered - no per-type status profile concept
-// exists on that service).
+// ServiceSchema.statusValueHelp (both profiles: po>/OrderStatus filtered by
+// OrderType, 2026-11-09 remap - returns previously used its own default
+// model's /OverallSDProcessStatus, unfiltered).
 sap.ui.define([
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator"
@@ -12,9 +11,8 @@ sap.ui.define([
   "use strict";
 
   // aOrderTypes: used only when oStatusValueHelp.typeFilterProperty is set
-  // (orders); ignored when null (returns - no type-scoped status profile to
-  // filter by, every row is returned). Resolves to [] (not a rejection) on
-  // any request failure - callers already treat "no options" as non-fatal.
+  // (both profiles now); ignored when null. Resolves to [] (not a rejection)
+  // on any request failure - callers already treat "no options" as non-fatal.
   function load(oComponent, oStatusValueHelp, aOrderTypes) {
     var oModel = oComponent.getModel(oStatusValueHelp.model || undefined);
     var aFilters = [];

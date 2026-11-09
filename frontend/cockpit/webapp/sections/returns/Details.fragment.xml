@@ -331,14 +331,15 @@
 
 						<f:fields>
 							<!-- ret-10-28 #4: replaces the previous read-only-Text-only rendering
-								with the shared orders Text+Select layout, mapped to this service's
-								own OverallSDProcessStatus / OverallSDProcessStatus entity set VH
-								(ServiceSchema.statusValueHelp, model/StatusValueHelp.js) instead of
-								orders' UserStatusDerived/po>/OrderStatus. OverallSDProcessStatus is
-								CONFIRMED SAP__core.Computed (2026-10-28 metadata) - not writable -
-								so the Select stays enabled="false" with an explanatory tooltip
-								rather than faking a write path; exact status-mapping UX (if any)
-								is still being decided by the backend team (OPEN_QUESTIONS.md). -->
+								with the shared orders Text+Select layout. The Select's own options
+								(enums>/EDIT_STATUS) now come from the shared po>/OrderStatus VH
+								(ServiceSchema.statusValueHelp, 2026-11-09 remap), same as orders;
+								the displayed/bound value stays this service's own
+								OverallSDProcessStatus header property, CONFIRMED SAP__core.Computed
+								(2026-10-28 metadata) - not writable - so the Select stays
+								enabled="false" with an explanatory tooltip rather than faking a
+								write path; exact status-mapping UX (if any) is still being decided
+								by the backend team (OPEN_QUESTIONS.md). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
