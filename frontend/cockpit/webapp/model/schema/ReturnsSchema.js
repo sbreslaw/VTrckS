@@ -457,17 +457,17 @@ sap.ui.define([
     // this (no top-level Product entity set) service.
     productLookupModel: "f4ProductVH",
 
-    // ret-10-28 #3/#4: no per-order-type business status profile exists on
-    // this service (unlike orders' po>/OrderStatus) - OverallSDProcessStatus
-    // is the only "status" concept returns has, so it doubles as both the
-    // display/filter source (statusProperties above) and the VH options
-    // source here, unfiltered by order type (typeFilterProperty: null).
+    // 2026-11-09: remapped per code-owner instruction - VH options now source
+    // from po>/OrderStatus (zui_providerorder_srv), same shared service/entity
+    // set already used by orders' own statusValueHelp, instead of this
+    // service's own OverallSDProcessStatus. statusProperties above (the real
+    // header display/filter field) is unchanged.
     statusValueHelp: {
-      model: "",
-      entitySet: "OverallSDProcessStatus",
-      codeProperty: "OverallSDProcessStatus",
-      textProperty: "OverallSDProcessStatus_Text",
-      typeFilterProperty: null
+      model: "po",
+      entitySet: "OrderStatus",
+      codeProperty: "Status",
+      textProperty: "StatusTextDescription",
+      typeFilterProperty: "OrderType"
     },
 
     // ret-10-28 #7: CustomerPurchaseOrderType is real on CustomerReturnManageType

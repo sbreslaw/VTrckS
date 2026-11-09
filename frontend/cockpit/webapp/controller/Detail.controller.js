@@ -5038,10 +5038,9 @@ sap.ui.define([
 
     // Status field (Details.fragment.xml, mapped to ServiceSchema.headerProperties.
     // userStatus) - options come from the one shared source declared by
-    // ServiceSchema.statusValueHelp (model/StatusValueHelp.js), filtered to the
-    // current order type when the profile declares a typeFilterProperty
-    // (orders: po>/OrderStatus by OrderType; returns: this service's own
-    // /OverallSDProcessStatus, unfiltered - no per-type status profile exists).
+    // ServiceSchema.statusValueHelp (model/StatusValueHelp.js): po>/OrderStatus
+    // filtered by OrderType, same shared entity set for both profiles
+    // (2026-11-09 remap - returns previously used its own /OverallSDProcessStatus).
     // Request-token guarded like _loadCategoryOptions, since an order-type
     // switch can fire this more than once.
     _loadOrderStatusVH: function (sOrderType) {
