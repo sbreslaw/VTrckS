@@ -7,8 +7,9 @@
 			selected sub-fragment variant - loaded instead of the plain
 			Details.fragment.xml by SectionFactory.js when ServiceSchema.profileId
 			is "returns". Keep this file IDENTICAL to Details.fragment.xml except
-			for the 2 literal OData-name hazards (header key, order reason) -
-			diff it against that file whenever Details.fragment.xml changes. -->
+			for the 3 literal OData-name hazards (header key, order reason,
+			description) - diff it against that file whenever Details.fragment.xml
+			changes. -->
 	<!-- v5 Required Fix 4 (design/E008_CRUD1_v5_Sticky_Amendment.md): adding a
 			new editable createMode field to this fragment requires adding its
 			property name to ServiceSchema.updatableHeaderProperties -
@@ -71,20 +72,18 @@
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{Description}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<Input id="headerDescInput" value="{path: 'Description', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
+								<Text text="{ZZ1_Description_SDH}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Input id="headerDescInput" value="{path: 'ZZ1_Description_SDH', type: 'sap.ui.model.odata.type.String', constraints: {nullable: true}}"
 									maxLength="40" visible="{sectionFlags>/details/editing}"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
 
-					<!-- Live-test (exceptions.txt 2026-10-27): ZOrdDesc removed - confirmed
-						genuinely absent on CustomerReturnManageType (ReturnsSchema.js
-						headerProperties.description: null, "no free-text header description
-						field"), no Returns equivalent exists. This literal was copied
-						unchanged from the shared Orders fragment and crashed
-						autoExpandSelect on every Returns Detail navigation. -->
+					<!-- ADR-002 hazard #3: description is ZZ1_Description_SDH on this
+						service (ReturnsSchema.js headerProperties/updatableHeaderProperties.
+						description), not ZOrdDesc as on the Orders fragment - remapped from
+						plain "Description" per code-owner instruction, 2026-11-06. -->
 
 					<f:FormElement>
 						<f:label>
