@@ -399,9 +399,11 @@ sap.ui.define([
       // deliberately uses po>/BatchValueHelp (Matnr/Batch) instead, filtered by the row's
       // Product, per the request.
       batch: "Batch",
-      // Return Orders session prompt 3.2 (so_C_SALESORDERMANAGE_2026-10-23.xml, Edm.Date,
-      // nullable, no FieldControl/Computed annotation - a plain writable item field).
-      expirationDate: "ExpirationDate"
+      // 2026-11-09: confirmed GONE from the live $metadata (present in
+      // so_C_SALESORDERMANAGE_2026-10-23.xml, absent as of a 2026-11-06
+      // re-fetch - backend regression, not a rename). Left null so any
+      // binding degrades instead of reading an invented path.
+      expirationDate: null
     },
 
     // Items paste validation limits (SalesOrderItemType): ExisItemNumber
@@ -963,12 +965,14 @@ sap.ui.define([
 
     // Item Quantity is the only Step-0-confirmed editable item property
     // (SAP__common.FieldControl-governed, no Immutable/Computed annotation).
-    // Return Orders session prompt 3.1/3.2: Batch (dynamic FieldControl, TODO-VERIFY PATCHable
-    // live) and ExpirationDate (no FieldControl/Computed annotation) added the same way.
+    // Return Orders session prompt 3.1: Batch (dynamic FieldControl, TODO-VERIFY
+    // PATCHable live) added the same way. ExpirationDate removed 2026-11-09 -
+    // see itemProperties.expirationDate above (confirmed gone from the live
+    // backend).
     updatableItemProperties: {
       quantity: "RequestedQuantity",
       batch: "Batch",
-      expirationDate: "ExpirationDate"
+      expirationDate: null
     },
 
     // Update group for all edit-session PATCHes/creates (EditRequestService.js

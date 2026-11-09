@@ -127,12 +127,15 @@
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/lotNumber/editable} !== false }"
             change=".onBatchChange"
             modelContextChange=".onBatchModelContextChange" />
-          <!-- Return Orders session prompt 3.2: ExpirationDate, Edm.Date, no FieldControl
-               annotation - a plain two-way binding like the new ExIS Date header field. -->
-          <DatePicker
-            value="{path: 'ExpirationDate', type: 'sap.ui.model.odata.type.Date'}"
-            visible="{itemsColumns>/expirationDate}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/expirationDate/editable} !== false }" />
+          <!-- 2026-11-09: ExpirationDate confirmed gone from the live $metadata
+               (backend regression, not a rename). Hiding this Column via
+               itemsColumns alone is not enough - UI5 V4 still evaluates a bound
+               DatePicker's `value` path for auto-$expand/$select even while its
+               own `visible` binding is false, throwing "does not point to a
+               property" on every item row. Static placeholder, no live binding,
+               until the property is restored - see OrdersSchema.js
+               itemProperties.expirationDate (null). -->
+          <Text text="{= '\u2014'}" visible="{itemsColumns>/expirationDate}" />
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${SalesOrderItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
           <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
                gets a promise to await before refreshing the list for recalculated
