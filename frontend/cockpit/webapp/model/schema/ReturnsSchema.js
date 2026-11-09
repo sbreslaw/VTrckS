@@ -99,15 +99,15 @@ sap.ui.define([
     headerProperties: {
       providerId: "SoldToParty",
       providerName: "SoldToPartyName",
-      status: "OverallSDProcessStatus",
-      // ret-10-28 #4: no separate writable business-status field exists on
-      // CustomerReturnManageType (unlike orders' UserStatusDerived) -
-      // OverallSDProcessStatus is CONFIRMED SAP__core.Computed (2026-10-28
-      // metadata), i.e. not writable either way. Reusing this same key (not a
-      // new one) lets onDetailStatusChange keep a single branch-free lookup
-      // (ServiceSchema.headerProperties.userStatus); the Details Status Select
-      // stays enabled=false for _RET so this write path never actually fires.
-      userStatus: "OverallSDProcessStatus",
+      // 2026-11-09: remapped per code-owner instruction from OverallSDProcessStatus
+      // (CONFIRMED SAP__core.Computed, 2026-10-28 metadata - never actually
+      // writable) to ZZ1_Headerstatus_SDH, a genuine writable Edm.String(20)
+      // on CustomerReturnManageType (confirmed real, no Computed annotation,
+      // 2026-11-09 metadata - absent from every earlier dump). Reusing this
+      // same key for both (ret-10-28 #4 convention) keeps onDetailStatusChange's
+      // lookup branch-free.
+      status: "ZZ1_Headerstatus_SDH",
+      userStatus: "ZZ1_Headerstatus_SDH",
       createdOn: "CreationDate",
       createdBy: "CreatedByUser",
       netValue: "TotalNetAmount",
@@ -419,6 +419,9 @@ sap.ui.define([
     // same code/convention as orders (OrdersSchema.js), so the Category field
     // displays correctly immediately at create instead of only after Save.
     defaultCategory: "UI",
+    // 2026-11-09 per code-owner instruction - seeded the same way as
+    // defaultCategory above (CreateOrderService.js#enter()).
+    defaultStatus: "E0001",
     // TODO-VERIFY: a valid default ShippingCondition code for returns create
     // was not independently confirmed this session - left null rather than
     // reusing orders' "01" (PR2 concern).
@@ -671,7 +674,9 @@ sap.ui.define([
       category: "CustomerPurchaseOrderType",
       returnType: "ZZ1_VaccineReturnType_SDH",
       exisDate: "CustomerPurchaseOrderDate",
-      noOfBoxes: "ZZ1_NoofBoxes_SDH"
+      noOfBoxes: "ZZ1_NoofBoxes_SDH",
+      // 2026-11-09: lets the defaultStatus seed above replay/persist at create.
+      status: "ZZ1_Headerstatus_SDH"
     },
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw

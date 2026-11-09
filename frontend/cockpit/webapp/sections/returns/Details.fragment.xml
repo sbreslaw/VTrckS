@@ -330,35 +330,25 @@
 						</f:label>
 
 						<f:fields>
-							<!-- ret-10-28 #4: replaces the previous read-only-Text-only rendering
-								with the shared orders Text+Select layout. The Select's own options
-								(enums>/EDIT_STATUS) now come from the shared po>/OrderStatus VH
-								(ServiceSchema.statusValueHelp, 2026-11-09 remap), same as orders;
-								the displayed/bound value stays this service's own
-								OverallSDProcessStatus header property, CONFIRMED SAP__core.Computed
-								(2026-10-28 metadata) - not writable - so the Select stays
-								enabled="false" with an explanatory tooltip rather than faking a
-								write path; exact status-mapping UX (if any) is still being decided
-								by the backend team (OPEN_QUESTIONS.md). -->
+							<!-- 2026-11-09: remapped per code-owner instruction from
+								OverallSDProcessStatus (CONFIRMED SAP__core.Computed,
+								2026-10-28 metadata - never writable) to ZZ1_Headerstatus_SDH,
+								a genuine writable Edm.String(20) (no Computed annotation,
+								no ValueListReferences/fixed-value domain - confirmed real,
+								2026-11-09 metadata). No confirmed code/description table
+								exists for this field (unlike orders' UserStatusDerived,
+								enums>/EDIT_STATUS) - plain Input on the raw code rather than
+								reusing that unrelated domain's Select. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<!-- OverallSDProcessStatus_Text lives on the separate OverallSDProcessStatusType,
-									 reached only via _OverallSDProcessStatus (not a direct header property). -->
-								<Text text="{_OverallSDProcessStatus/OverallSDProcessStatus_Text}"
+								<Text text="{ZZ1_Headerstatus_SDH}"
 									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
-								<Select
-									selectedKey="{OverallSDProcessStatus}"
+								<Input
+									value="{ZZ1_Headerstatus_SDH}"
 									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
-									width="100%"
-									enabled="false"
-									forceSelection="false"
-									tooltip="{i18n>statusDerivedByBackend}"
-									change=".onDetailStatusChange"
-									items="{enums>/EDIT_STATUS}">
-									<core:Item key="{enums>key}" text="{enums>text}" />
-								</Select>
+									width="100%"/>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
