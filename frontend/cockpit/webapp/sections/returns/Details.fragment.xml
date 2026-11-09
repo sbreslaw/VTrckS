@@ -546,12 +546,10 @@
 					</f:FormElement>
 					<!-- SPACER -->
 
-					<!-- RESTORED (2026-10-27 metadata re-audit): CustomerPurchaseOrderSuplmnt
-						IS real on CustomerReturnManageType - a prior round this session wrongly
-						removed this FormElement assuming the property was absent (based on the
-						OLDER 2026-10-26 metadata, which omitted it). Same Edm.String(4)->StepInput
-						OneWay+formatter+explicit-change-handler pattern as the orders-side
-						Details.fragment.xml (Return Orders session prompt 1.3). -->
+					<!-- 2026-11-09: remapped per code-owner instruction to this service's own
+						ZZ1_NoofBoxes custom extension property, replacing CustomerPurchaseOrderSuplmnt
+						(the orders-side field) - same Edm.String(4)->StepInput OneWay+formatter+
+						explicit-change-handler pattern as the orders-side Details.fragment.xml. -->
 					<f:FormElement visible="{orderUi>/fields/detailsNoOfBoxes/visible}">
 						<f:label>
 							<Label text="{i18n>detailsNoOfBoxes}" required="false">
@@ -566,10 +564,10 @@
 								<layoutData>
 									<l:GridData span="XL3 L3 M3 S12"/>
 								</layoutData>
-								<Text text="{CustomerPurchaseOrderSuplmnt}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Text text="{ZZ1_NoofBoxes}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<StepInput
 									width="100%"
-									value="{path: 'CustomerPurchaseOrderSuplmnt', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
+									value="{path: 'ZZ1_NoofBoxes', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
 									min="1"
 									max="25"
 									step="1"

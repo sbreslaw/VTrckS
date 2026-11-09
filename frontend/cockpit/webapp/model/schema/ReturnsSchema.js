@@ -151,11 +151,10 @@ sap.ui.define([
       // (previous comment wrongly claimed it was absent) - Details.fragment.xml's
       // detailsExisDate FormElement was already correctly bound, just hidden.
       exisDate: "CustomerPurchaseOrderDate",
-      // 2026-10-27 metadata re-audit: CustomerPurchaseOrderSuplmnt IS real
-      // (previous comment wrongly claimed it was absent) - FormElement restored
-      // in Details.fragment.xml (returns copy), same StepInput+formatter pattern
-      // as the orders-side fragment.
-      noOfBoxes: "CustomerPurchaseOrderSuplmnt",
+      // 2026-11-09: remapped per code-owner instruction from
+      // CustomerPurchaseOrderSuplmnt (the orders-side field) to this
+      // service's own custom extension property ZZ1_NoofBoxes.
+      noOfBoxes: "ZZ1_NoofBoxes",
       labelAddress: null,
       // 2026-11-06: remapped Description -> ZZ1_Description_SDH per code-owner
       // instruction (custom header field, same class as the ZZ1_*_SDI item remap).
@@ -413,13 +412,14 @@ sap.ui.define([
     fixedOrderTypes: OrderModeConfig.supportedOrderTypes,
     defaultOrderType: OrderModeConfig.defaultOrderType,
 
-    // No "category" (direct-entry) concept exists on this service.
-    defaultCategory: null,
-    // Confirmed per customer (2026-11-09): Shipping Condition should default
-    // to blank for Returns create, not orders' "01" - left unset on purpose,
-    // not an open gap. See CreateOrderService.js#_replayHeaderProperties,
-    // which never PATCHes a null scratch value onto the non-nullable
-    // backend field (would otherwise 400 and cascade-fail the whole batch).
+    // CustomerPurchaseOrderType is real on this service (see categoryValueHelp
+    // below, same BSARK domain/VH as orders) - defaults to "UI" (Direct Entry),
+    // same code/convention as orders (OrdersSchema.js), so the Category field
+    // displays correctly immediately at create instead of only after Save.
+    defaultCategory: "UI",
+    // TODO-VERIFY: a valid default ShippingCondition code for returns create
+    // was not independently confirmed this session - left null rather than
+    // reusing orders' "01" (PR2 concern).
     defaultShippingCondition: null,
     defaultDeliveryStatus: null,
     defaultDeliveryBlockStatus: null,
@@ -640,6 +640,16 @@ sap.ui.define([
     // (now SDDocumentReason, 2026-11-09 remap - see headerProperties.orderReason),
     // PurchaseOrderByCustomer, ShippingCondition (RequestedDeliveryDate also accepted
     // but has no orders-side key to mirror - PR2 can add one if needed).
+    // 2026-11-09: category/returnType/exisDate/noOfBoxes restored/added to match
+    // OrdersSchema.js's own list - these were previously null/missing here,
+    // which silently excluded them from CreateOrderService.js's create-time
+    // replay (live-reported: SpecialProcessingCode/CustomerPurchaseOrderDate
+    // entered during create were never sent/persisted). returnType's earlier
+    // ASSERTION_FAILED crash was from PATCHing it on an EXISTING order in
+    // change-mode - that risk is unrelated to create-time replay (which only
+    // ever runs once, immediately after this same order's own SaveChanges)
+    // and is already independently blocked at the UI level (the ComboBox is
+    // only ever rendered editable in createMode, Details.fragment.xml).
     updatableHeaderProperties: {
       orderReason: "SDDocumentReason",
       exisId: "PurchaseOrderByCustomer",
@@ -650,8 +660,10 @@ sap.ui.define([
       priority: null,
       // 2026-11-06: remapped per code-owner instruction - see headerProperties.description above.
       description: "ZZ1_Description_SDH",
-      category: null,
-      returnType: null
+      category: "CustomerPurchaseOrderType",
+      returnType: "SpecialProcessingCode",
+      exisDate: "CustomerPurchaseOrderDate",
+      noOfBoxes: "ZZ1_NoofBoxes"
     },
 
     // RequestedQuantity confirmed editable (NOTES.md - must be sent as a raw
