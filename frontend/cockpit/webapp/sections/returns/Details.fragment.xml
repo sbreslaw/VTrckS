@@ -413,16 +413,17 @@
 									mirroring _loadRejectionReasonVH) rather than bound live, both to
 									avoid autoExpandSelect $select pollution risk on the header's own
 									default-model binding and to avoid a second live request per field. -->
-								<!-- Live-test 2026-11-06: PATCHing SpecialProcessingCode on an EXISTING
-									order throws a real ABAP ASSERTION_FAILED dump (500), which also
-									corrupts the rest of that changeset - matches updatableHeaderProperties.
-									returnType being intentionally null. Create-only editable now, same
-									locked-after-create convention as the Provider field above. -->
-								<Text text="{parts: [{path: 'SpecialProcessingCode'}, {path: 'returnTypes>/list'}], formatter: '.formatter.categoryText'}"
+								<!-- 2026-11-09: remapped per code-owner instruction to this service's own
+									ZZ1_VaccineReturnType_SDH custom extension property, replacing
+									SpecialProcessingCode (the orders-side/shared-VH field) - the live-test
+									ASSERTION_FAILED risk that field's PATCH carried on an EXISTING order
+									does not apply here, but this stays create-only editable regardless,
+									same locked-after-create convention as the Provider field above. -->
+								<Text text="{parts: [{path: 'ZZ1_VaccineReturnType_SDH'}, {path: 'returnTypes>/list'}], formatter: '.formatter.categoryText'}"
 									visible="{= !${sectionFlags>/details/editing} || !${sectionFlags>/createMode} }"/>
 								<ComboBox
 									width="100%"
-									selectedKey="{SpecialProcessingCode}"
+									selectedKey="{ZZ1_VaccineReturnType_SDH}"
 									visible="{= ${sectionFlags>/details/editing} &amp;&amp; ${sectionFlags>/createMode} }"
 									editable="{= ${orderUi>/fields/detailsReturnType/editable} !== false }"
 									enabled="{createState>/providerChosen}"

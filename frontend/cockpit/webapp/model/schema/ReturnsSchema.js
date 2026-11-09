@@ -142,11 +142,13 @@ sap.ui.define([
       orderReason: "SDDocumentReason",
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
-      // 2026-10-27 metadata re-audit: SpecialProcessingCode IS real on
-      // CustomerReturnManageType (previous comment wrongly claimed it didn't
-      // exist) - Details.fragment.xml's detailsReturnType FormElement was
-      // already correctly bound to it all along, just hidden via orderUi.
-      returnType: "SpecialProcessingCode",
+      // 2026-11-09: remapped per code-owner instruction from SpecialProcessingCode
+      // (the orders-side/shared-VH field) to this service's own custom extension
+      // property ZZ1_VaccineReturnType_SDH, same class as the ZZ1_*_SDH header remaps
+      // above. Value domain unchanged - still matched against the shared
+      // vaccineReturnTypeProperties VH list below (its own key stays SpecialProcessingCode,
+      // that's the VaccineReturnType entity set's own property, unrelated to this header field).
+      returnType: "ZZ1_VaccineReturnType_SDH",
       // 2026-10-27 metadata re-audit: CustomerPurchaseOrderDate IS real
       // (previous comment wrongly claimed it was absent) - Details.fragment.xml's
       // detailsExisDate FormElement was already correctly bound, just hidden.
@@ -661,7 +663,7 @@ sap.ui.define([
       // 2026-11-06: remapped per code-owner instruction - see headerProperties.description above.
       description: "ZZ1_Description_SDH",
       category: "CustomerPurchaseOrderType",
-      returnType: "SpecialProcessingCode",
+      returnType: "ZZ1_VaccineReturnType_SDH",
       exisDate: "CustomerPurchaseOrderDate",
       noOfBoxes: "ZZ1_NoofBoxes_SDH"
     },
