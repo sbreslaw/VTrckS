@@ -330,25 +330,33 @@
 						</f:label>
 
 						<f:fields>
-							<!-- 2026-11-09: remapped per code-owner instruction from
-								OverallSDProcessStatus (CONFIRMED SAP__core.Computed,
-								2026-10-28 metadata - never writable) to ZZ1_Headerstatus_SDH,
-								a genuine writable Edm.String(20) (no Computed annotation,
-								no ValueListReferences/fixed-value domain - confirmed real,
-								2026-11-09 metadata). No confirmed code/description table
-								exists for this field (unlike orders' UserStatusDerived,
-								enums>/EDIT_STATUS) - plain Input on the raw code rather than
-								reusing that unrelated domain's Select. -->
+							<!-- 2026-11-09: ZZ1_Headerstatus_SDH confirmed writable (replaces
+								OverallSDProcessStatus, CONFIRMED SAP__core.Computed) - re-enables
+								the shared orders Text+Select layout (left disabled/enabled="false"
+								since ret-10-28 #4, when only the read-only OverallSDProcessStatus
+								existed). Options list (enums>/EDIT_STATUS) is the shared
+								po>/OrderStatus VH (ServiceSchema.statusValueHelp), same source
+								orders uses. Bound directly to selectedKey (not orders'
+								createEnrich>/status + onDetailStatusChange buffer, which exists
+								only to work around Orders' not-yet-built create-time
+								status-derivation action, ADDENDUM-001) - ZZ1_Headerstatus_SDH
+								already persists at create and edit like every other writable
+								field on this fragment, same pattern as ZZ1_VaccineReturnType_SDH
+								below. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{ZZ1_Headerstatus_SDH}"
+								<Text text="{path: 'ZZ1_Headerstatus_SDH', formatter: '.formatter.detailStatusText'}"
 									visible="{= !${sectionFlags>/createMode} &amp;&amp; !${sectionFlags>/details/editing} }"/>
-								<Input
-									value="{ZZ1_Headerstatus_SDH}"
+								<Select
+									selectedKey="{ZZ1_Headerstatus_SDH}"
 									visible="{= ${sectionFlags>/createMode} || ${sectionFlags>/details/editing} }"
-									width="100%"/>
+									width="100%"
+									forceSelection="false"
+									items="{enums>/EDIT_STATUS}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
