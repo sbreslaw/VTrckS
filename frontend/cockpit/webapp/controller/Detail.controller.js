@@ -1940,6 +1940,11 @@ sap.ui.define([
         oEvent.preventDefault();
         return;
       }
+      if (ServiceSchema.profileId === "returns" && this._bItemsSessionBound) {
+        oEvent.preventDefault();
+        this._postInactiveSessionRow(oRowContext);
+        return;
+      }
       // Row 1 gets a free full-list refresh from _bindItemsTableToSession's
       // rebindItems() (which is how it happens to pick up any ancillary
       // child row the backend injects alongside it) - row 2+ never rebinds,
@@ -1983,6 +1988,55 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           that._openMessagePopover();
+        });
+    },
+
+    // Returns (_RET) only: letting a completed inactive session row activate
+    // sends ONE combined item POST (Product + RequestedQuantity + Unit + the
+    // rest), which the Returns backend rejects (CreateOrderService.postItem's
+    // CONFIRMED BUG note - live: 500 BEHAVIOR_ILLEGAL_STATEMENT, after which
+    // the sticky session is gone). Row 1 never hit this because it goes
+    // through postItem's incremental create; rows 2+ now do too: the
+    // inactive row stays local, its data is posted via postItem, then the
+    // local row is dropped and the list refreshed to show the server's row.
+    _postInactiveSessionRow: function (oRowContext) {
+      this._oPostingInactiveRows = this._oPostingInactiveRows || new Set();
+      if (this._oPostingInactiveRows.has(oRowContext)) {
+        return;
+      }
+      this._oPostingInactiveRows.add(oRowContext);
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oHeaderContext = this.getView().getBindingContext();
+      if (oTable) {
+        oTable.setBusy(true);
+      }
+      // Activation fires on the FIRST of several synchronous setProperty
+      // calls (e.g. _applyNdcPick: Product, then text/unit/return reason) -
+      // read the row only once that synchronous sequence has finished.
+      Promise.resolve()
+        .then(function () {
+          return CreateOrderService.postItem(that._oCreateSession, oHeaderContext, oRowContext.getObject());
+        })
+        .then(function () {
+          return oRowContext.delete();
+        })
+        .then(function () {
+          return that._refreshItemsBinding();
+        })
+        .catch(function (oError) {
+          var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
+        })
+        .then(function () {
+          that._oPostingInactiveRows.delete(oRowContext);
+          if (oTable) {
+            oTable.setBusy(false);
+          }
         });
     },
 
@@ -2089,7 +2143,7 @@ sap.ui.define([
           var oPendingData = Object.assign({}, oCtx.getObject());
           // Client-only scratch numbering (_computeNextItemNumber) - the real
           // session list assigns its own key, never reuse this placeholder.
-          delete oPendingData.SalesOrderItem;
+          delete oPendingData[ServiceSchema.itemProperties.itemNumber];
           that._aPendingIncompleteRows.push(oPendingData);
           return oCtx.delete().catch(function () {});
         });
