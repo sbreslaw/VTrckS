@@ -415,11 +415,22 @@ sap.ui.define([
     // them).
     postItem: function (oSession, oScratchContext, oItemData) {
       var oModel = oScratchContext.getModel();
+      var bReturns = ServiceSchema.profileId === "returns";
       return CreateOrderService._ensureSession(oSession, oScratchContext).then(function (oStickyContext) {
-        var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyContext, undefined, undefined, {
-          $$updateGroupId: ITEM_GROUP,
-          $select: "SAP__Messages"
-        });
+        var mItemsParameters = { $$updateGroupId: ITEM_GROUP };
+        // Returns: no SAP__Messages opt-in on this scaffolding binding - it
+        // makes the model re-read messages right after the empty POST below
+        // (live: "Enter a material for item 0000x0", V1/351), and those are
+        // reported under the model's canonical "<header>('')/_Item(...)"
+        // path, which no later read through the Items table's
+        // "(CustomerReturn='')" path ever clears (stale error per item).
+        // The Items table selects SAP__Messages itself and is refreshed
+        // right after this resolves; failures still report via the error
+        // response.
+        if (!bReturns) {
+          mItemsParameters.$select = "SAP__Messages";
+        }
+        var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyContext, undefined, undefined, mItemsParameters);
         // CONFIRMED BUG (live-tested, Returns, 2026-11-02): a single
         // _Item POST carrying Product+RequestedQuantity+RequestedQuantityUnit
         // all at once still 422s (/IWBEP/CM_V4S_RUN/000
@@ -434,7 +445,7 @@ sap.ui.define([
         // the single combined create() Orders (_ORD) still uses below
         // (never observed to need this, left unchanged to avoid regressing
         // a working flow).
-        if (ServiceSchema.profileId === "returns") {
+        if (bReturns) {
           var oClean = cleanItemPayload(oItemData);
           var sMaterialKey = ServiceSchema.itemProperties.material;
           var sUnitKey = ServiceSchema.itemProperties.unit;
