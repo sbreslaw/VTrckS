@@ -49,6 +49,7 @@ sap.ui.define([
   "cdc/vaccreq/model/MessageExtractor",
   "cdc/vaccreq/model/PricingColumns",
   "cdc/vaccreq/model/StatusValueHelp",
+  "cdc/vaccreq/model/ReturnReasonLogic",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/ProviderInventoryService",
@@ -61,7 +62,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp, ReturnReasonLogic,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter, UserFeedback
 ) {
@@ -1132,11 +1133,10 @@ sap.ui.define([
       // E008_Returns_ItemReturnReason_Session_Prompt §5.3: default Return Reason
       // on NDC entry (rule 2.1.1) - only for _RET (returnReason is null on _ORD).
       if (ServiceSchema.itemProperties.returnReason && !oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) {
-        var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
         var oHeaderContext = this.getView().getBindingContext();
         var sHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
         var aExistingReasons = this._getItemReasonsArray();
-        var sDefaultReason = oReturnReasonLogic.defaultForNewItem(sHeaderReason, aExistingReasons);
+        var sDefaultReason = ReturnReasonLogic.defaultForNewItem(sHeaderReason, aExistingReasons);
         if (sDefaultReason) {
           oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sDefaultReason);
         }
