@@ -288,6 +288,11 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.shippingCondition] = ServiceSchema.defaultShippingCondition;
       oInitialData[ServiceSchema.headerProperties.deliveryStatus] = ServiceSchema.defaultDeliveryStatus;
       oInitialData[ServiceSchema.headerProperties.deliveryBlockStatus] = ServiceSchema.defaultDeliveryBlockStatus;
+      // defaultStatus is Returns-only (ReturnsSchema.js) - guarded so an
+      // undefined value (Orders, no such key) never sets a literal "undefined".
+      if (ServiceSchema.defaultStatus !== undefined) {
+        oInitialData[ServiceSchema.headerProperties.status] = ServiceSchema.defaultStatus;
+      }
       Object.keys(oModeDefaults || {}).forEach(function (sDefaultKey) {
         var sProperty = ServiceSchema.headerProperties[sDefaultKey];
         if (sProperty && oModeDefaults[sDefaultKey] !== undefined) {

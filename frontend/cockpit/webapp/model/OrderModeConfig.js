@@ -136,7 +136,14 @@ sap.ui.define([
       // CustomerReturnManageType - the prior hide ("absent on this service")
       // was based on the OLDER 2026-10-26 metadata, which omitted them.
     }),
-    columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns),
+    // expirationDate UN-HIDDEN for _RET (2026-11-09): PROVIDER_ORDER_UI_HIDDEN's
+    // hide is Orders-specific (ExpirationDate regression on c_salesordermanage_srv,
+    // see comment above) - Returns' own field is the separate, confirmed-real
+    // ZZ1_ExpirationDate_SDI (itemProperties.expirationDate, remapped 2026-11-04),
+    // already wired in sections/returns/Items.fragment.xml.
+    columns: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.columns, {
+      expirationDate: { visible: true }
+    }),
     // ret-10-28 #1: shipping UN-HIDDEN for _RET - DeliveryBlockReason is a
     // real, raw-code-only property on CustomerReturnManageType (confirmed
     // live, 2026-10-28 metadata); sections/returns/Shipping.fragment.xml maps
