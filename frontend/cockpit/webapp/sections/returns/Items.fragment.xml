@@ -23,6 +23,7 @@
     </OverflowToolbar>
     <VBox id="itemsViewport" class="detailItemsViewport">
     <Table id="itemsTable" width="100%" items="{_Item}" class="detailItemsTable" fixedLayout="true"
+      enabled="{= ${createState>/providerChosen} &amp;&amp; ${createState>/returnTypeChosen} &amp;&amp; ${createState>/returnReasonChosen} }"
       updateFinished=".onItemsTableUpdateFinished">
     <!-- Column widths are % (sum 100) so the table fits its container; hidden columns' share is redistributed. -->
     <columns>

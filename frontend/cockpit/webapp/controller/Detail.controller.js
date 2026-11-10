@@ -164,7 +164,7 @@ sap.ui.define([
       // since the header's own _OverallDeliveryStatus/
       // _OverallDeliveryBlockStatus navigation cannot resolve against the
       // transient createMode scratch context (client requirement 2026-10-01).
-      this.getView().setModel(new JSONModel({ providerChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
+      this.getView().setModel(new JSONModel({ providerChosen: false, returnTypeChosen: false, returnReasonChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       // 3.3: client-side-only SUM of item TaxAmount - never a real header
       // property, see _computeHeaderTaxAmount.
@@ -708,6 +708,29 @@ sap.ui.define([
       if (pUpdate && pUpdate.catch) {
         pUpdate.catch(function () {});
       }
+    },
+
+    // Gate the Items section: Return Type (ZZ1_VaccineReturnType_SDH) must be
+    // selected before items can be added. Set createState>/returnTypeChosen
+    // when a valid type is selected, permitting further item entry and the
+    // Return Reason gate to become active.
+    onReturnTypeChange: function (oEvent) {
+      var oCombo = oEvent.getSource();
+      var oSelectedItem = oCombo.getSelectedItem();
+      var sReturnTypeChosen = !!(oSelectedItem && oSelectedItem.getKey());
+      this.getView().getModel("createState").setProperty("/returnTypeChosen", sReturnTypeChosen);
+    },
+
+    // Gate the Items section: Return Reason (SDDocumentReason) must be
+    // selected before items can be added. Set createState>/returnReasonChosen
+    // when a valid reason is selected, permitting the Items section to be
+    // enabled (gated on all three mandatory header fields:
+    // createState>/providerChosen && /returnTypeChosen && /returnReasonChosen).
+    onReturnReasonChange: function (oEvent) {
+      var oCombo = oEvent.getSource();
+      var oSelectedItem = oCombo.getSelectedItem();
+      var sReturnReasonChosen = !!(oSelectedItem && oSelectedItem.getKey());
+      this.getView().getModel("createState").setProperty("/returnReasonChosen", sReturnReasonChosen);
     },
 
     // Sections whose display Text reads a code's expanded to-one nav-property
@@ -2619,6 +2642,8 @@ sap.ui.define([
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
+        this.getView().getModel("createState").setProperty("/returnTypeChosen", false);
+        this.getView().getModel("createState").setProperty("/returnReasonChosen", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
         this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
         this._lookupCreateModeStatusTexts();

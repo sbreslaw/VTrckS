@@ -426,6 +426,7 @@
 									editable="{= ${orderUi>/fields/detailsReturnType/editable} !== false }"
 									enabled="{createState>/providerChosen}"
 									tooltip="{i18n>returnTypeLockedTooltip}"
+									change=".onReturnTypeChange"
 									items="{returnTypes>/list}">
 									<core:Item key="{returnTypes>key}" text="{returnTypes>text}" />
 								</ComboBox>
@@ -461,7 +462,8 @@
 									width="100%"
 									selectedKey="{SDDocumentReason}"
 									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; ${createState>/returnTypeChosen}) }"
+									change=".onReturnReasonChange"
 									items="{path: '/SDDocumentReason'}">
 									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
 								</ComboBox>
