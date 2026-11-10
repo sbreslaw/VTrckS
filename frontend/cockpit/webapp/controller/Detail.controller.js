@@ -2471,7 +2471,7 @@ sap.ui.define([
       if (!oTable) {
         return aReasons;
       }
-      var oItemsBinding = oTable.getBinding("rows");
+      var oItemsBinding = oTable.getBinding("items");
       if (!oItemsBinding) {
         return aReasons;
       }
@@ -2589,10 +2589,10 @@ sap.ui.define([
               // E008_Returns_ItemReturnReason_Session_Prompt §5.3: Recompute header
               // Return Reason after item deletion (completion (b)).
               if (ServiceSchema.itemProperties.returnReason) {
-                var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
                 var aRemainingReasons = that._getItemReasonsArray();
-                var sCurrentHeaderReason = oRowContext.getModel().getProperty("/" + ServiceSchema.headerProperties.orderReason);
-                var sNewHeaderReason = oReturnReasonLogic.headerAfterItemDelete(aRemainingReasons, sCurrentHeaderReason);
+                var oHeaderContext = that.getView().getBindingContext();
+                var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+                var sNewHeaderReason = ReturnReasonLogic.headerAfterItemDelete(aRemainingReasons, sCurrentHeaderReason);
                 if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
                   that._updateHeaderReturnReason(sNewHeaderReason);
                 }
