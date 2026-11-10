@@ -177,17 +177,13 @@
                SDDocumentReason VH as the header Return Reason. Display shows text via
                the shared /SDDocumentReason map (loaded for the header Select).
                In create/edit mode, Select with change handler for rule 2.1.2. -->
-          <VBox visible="{itemsColumns>/returnReason}">
-            <Text text="{path: '_SDDocumentReason/SDDocumentReason_Text', mode: 'sap.ui.model.BindingMode.OneWay'}"
-              visible="{= !${sectionFlags>/items/editing} }" />
-            <Select selectedKey="{ReasonCode}" forceSelection="false" width="100%"
-              visible="{= ${sectionFlags>/items/editing} }"
-              items="{/SDDocumentReason}"
-              editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
-              change=".onItemReturnReasonChange">
-              <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-            </Select>
-          </VBox>
+          <Select selectedKey="{path: 'ReasonCode', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
+            visible="{itemsColumns>/returnReason}"
+            items="{/SDDocumentReason}"
+            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
+            change=".onItemReturnReasonChange">
+            <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+          </Select>
           <!-- DF-1025: SalesDocumentRjcnReason is Computed - selectedKey is OneWay (display
                only); writes go through the bound SetRejectionReason/RemoveRejectionReason
                actions in onItemRejectionReasonChange. Items come from the JSON
