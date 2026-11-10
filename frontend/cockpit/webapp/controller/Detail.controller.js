@@ -2151,10 +2151,13 @@ sap.ui.define([
       if (!oBinding || !aPending.length) {
         return;
       }
+      // Returns profile: pending rows must also POST immediately with empty body (incremental PATCH pattern),
+      // matching the logic in _addItemRows.
+      var bInactive = ServiceSchema.profileId !== "returns";
       aPending.forEach(function (oRowData) {
         // Edm.Decimal values must remain strings.
         oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
-        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, true));
+        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, bInactive));
       }, this);
     },
 
