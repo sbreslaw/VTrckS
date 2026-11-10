@@ -1105,6 +1105,19 @@ sap.ui.define([
       // modelContextChange (onBatchModelContextChange) only fires once, when the row's
       // context is first set - a later NDC pick on the same row needs this explicit rebind.
       this._bindBatchValueHelp(this._getRowSelect(this._getRowForContext(oRowContext), ServiceSchema.itemProperties.batch));
+      
+      // E008_Returns_ItemReturnReason_Session_Prompt §5.3: default Return Reason
+      // on NDC entry (rule 2.1.1) - only for _RET (returnReason is null on _ORD).
+      if (ServiceSchema.itemProperties.returnReason && !oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) {
+        var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
+        var sHeaderReason = oRowContext.getModel().getProperty("/" + ServiceSchema.headerProperties.orderReason);
+        var aExistingReasons = this._getItemReasonsArray();
+        var sDefaultReason = oReturnReasonLogic.defaultForNewItem(sHeaderReason, aExistingReasons);
+        if (sDefaultReason) {
+          oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sDefaultReason);
+        }
+      }
+      
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -2310,6 +2323,102 @@ sap.ui.define([
         });
     },
 
+    // E008_Returns_ItemReturnReason_Session_Prompt §5.3: Item Return Reason change
+    // (Rule 2.1.2). Apply the new value to the item, then compute the new header
+    // reason using ReturnReasonLogic. Both writes (item + header) go in the same
+    // group. On failure, the Select reverts via a full refresh.
+    onItemReturnReasonChange: function (oEvent) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oSelect = oEvent.getSource();
+      var oRowContext = oSelect.getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var sNewValue = oSelectedItem ? oSelectedItem.getKey() : "";
+      
+      // Validate the code (no empty codes, check against the VH list)
+      if (!sNewValue) {
+        sap.ui.core.MessageBox.warning(oBundle.getText("itemReturnReasonInvalid"));
+        oSelect.setSelectedKey((oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) || "");
+        return;
+      }
+      
+      // Apply the new value to the item row
+      this._applyReturnReasonValue(oRowContext, sNewValue);
+      
+      // Compute the new header reason using ReturnReasonLogic
+      var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
+      var aAllItemReasons = this._getItemReasonsArray();
+      var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
+      
+      // Write header only if it changed
+      var sCurrentHeaderReason = oRowContext.getModel().getProperty("/" + ServiceSchema.headerProperties.orderReason);
+      if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+        this._updateHeaderReturnReason(sNewHeaderReason);
+      }
+    },
+
+    // Helper: write a header property in the same group as the items section
+    // (part of §5.3 wiring for return reason interdependency - completion (b)).
+    // The header context shares the same model and update group.
+    _updateHeaderReturnReason: function (sNewValue) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return;
+      }
+      var oBinding = oTable.getBinding("rows");
+      var aContexts = oBinding && oBinding.getCurrentContexts && oBinding.getCurrentContexts();
+      if (!aContexts || aContexts.length === 0) {
+        return;
+      }
+      // All items share the same header via their model
+      var oFirstItemContext = aContexts[0];
+      var oModel = oFirstItemContext.getModel();
+      var sOrderId = oFirstItemContext.getProperty(ServiceSchema.keys.orderId);
+      if (!oModel || !sOrderId) {
+        return;
+      }
+      // Create a binding to the header entity by its key and patch it
+      var sHeaderPath = "/" + ServiceSchema.entitySets.header + "('" + sOrderId + "')";
+      var oHeaderContext = oModel.bindContext(sHeaderPath);
+      oHeaderContext.requestProperty(ServiceSchema.headerProperties.orderReason);
+      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
+    },
+    // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
+    _applyReturnReasonValue: function (oRowContext, sValue) {
+      if (!oRowContext) {
+        return;
+      }
+      oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sValue);
+    },
+
+    // Helper: get array of all item ReasonCode values (for _RET only, null on _ORD).
+    // Filters to rows with Product (completed items), excludes child rows.
+    _getItemReasonsArray: function () {
+      var aReasons = [];
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return aReasons;
+      }
+      var oItemsBinding = oTable.getBinding("rows");
+      if (!oItemsBinding) {
+        return aReasons;
+      }
+      var aContexts = oItemsBinding.getCurrentContexts();
+      aContexts.forEach(function (oCtx) {
+        // Only include items with Product (completed), skip child rows
+        if (oCtx.getProperty(ServiceSchema.itemProperties.material) && !oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem)) {
+          var sReason = oCtx.getProperty(ServiceSchema.itemProperties.returnReason);
+          if (sReason) {
+            aReasons.push(sReason);
+          }
+        }
+      });
+      return aReasons;
+    },
+
     // Item Details view session prompt, 3.4: Items row Action menu "Edit" ->
     // FCL end column, always full screen (session prompt 3.1). Row context
     // supplies the SalesOrder/SalesOrderItem keys for the new route.
@@ -2407,6 +2516,19 @@ sap.ui.define([
               if (bReleasesNdcAddGate) {
                 that._releaseNdcAddGate();
               }
+              
+              // E008_Returns_ItemReturnReason_Session_Prompt §5.3: Recompute header
+              // Return Reason after item deletion (completion (b)).
+              if (ServiceSchema.itemProperties.returnReason) {
+                var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
+                var aRemainingReasons = that._getItemReasonsArray();
+                var sCurrentHeaderReason = oRowContext.getModel().getProperty("/" + ServiceSchema.headerProperties.orderReason);
+                var sNewHeaderReason = oReturnReasonLogic.headerAfterItemDelete(aRemainingReasons, sCurrentHeaderReason);
+                if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+                  that._updateHeaderReturnReason(sNewHeaderReason);
+                }
+              }
+              
               MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
             })
             .catch(function (oError) {
