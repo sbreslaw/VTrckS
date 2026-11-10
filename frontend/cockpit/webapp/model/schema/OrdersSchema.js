@@ -981,7 +981,8 @@ sap.ui.define([
     updatableItemProperties: {
       quantity: "RequestedQuantity",
       batch: "Batch",
-      expirationDate: null
+      expirationDate: null,
+      returnReason: null
     },
 
     // Update group for all edit-session PATCHes/creates (EditRequestService.js

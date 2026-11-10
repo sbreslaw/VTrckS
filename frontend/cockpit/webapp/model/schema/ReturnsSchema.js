@@ -694,7 +694,8 @@ sap.ui.define([
     updatableItemProperties: {
       quantity: "RequestedQuantity",
       batch: "ZZ1_LotNumber_SDI",
-      expirationDate: "ZZ1_ExpirationDate_SDI"
+      expirationDate: "ZZ1_ExpirationDate_SDI",
+      returnReason: "ReasonCode"
     },
 
     editUpdateGroup: "vrEdit",
