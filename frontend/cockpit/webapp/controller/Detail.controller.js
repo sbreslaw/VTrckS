@@ -2378,11 +2378,14 @@ sap.ui.define([
         var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
         var aAllItemReasons = that._getItemReasonsArray();
         var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
+        console.log("DEBUG: Item reason changed - new header reason computed:", sNewHeaderReason, "item reasons array:", aAllItemReasons);
         
         // Write header only if it changed
         var oHeaderContext = that.getView().getBindingContext();
         var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+        console.log("DEBUG: Header context exists:", !!oHeaderContext, "current header reason:", sCurrentHeaderReason, "new header reason:", sNewHeaderReason);
         if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+          console.log("DEBUG: Writing header reason to model");
           that._updateHeaderReturnReason(sNewHeaderReason);
         }
       }, 0);
@@ -2393,10 +2396,20 @@ sap.ui.define([
     // Uses the header context from the view binding, which is already in the correct update group.
     _updateHeaderReturnReason: function (sNewValue) {
       var oHeaderContext = this.getView().getBindingContext();
+      console.log("DEBUG: _updateHeaderReturnReason called, context exists:", !!oHeaderContext, "new value:", sNewValue);
       if (!oHeaderContext) {
+        console.log("DEBUG: No header context - aborting header update");
         return;
       }
-      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
+      var pResult = oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
+      console.log("DEBUG: setProperty result promise:", !!pResult);
+      if (pResult && pResult.then) {
+        pResult.then(function () {
+          console.log("DEBUG: setProperty promise resolved");
+        }).catch(function (oError) {
+          console.log("DEBUG: setProperty promise rejected:", oError);
+        });
+      }
     },
     // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
     _applyReturnReasonValue: function (oRowContext, sValue) {
