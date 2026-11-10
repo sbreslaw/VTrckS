@@ -1133,7 +1133,8 @@ sap.ui.define([
       // on NDC entry (rule 2.1.1) - only for _RET (returnReason is null on _ORD).
       if (ServiceSchema.itemProperties.returnReason && !oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) {
         var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
-        var sHeaderReason = oRowContext.getModel().getProperty("/" + ServiceSchema.headerProperties.orderReason);
+        var oHeaderContext = this.getView().getBindingContext();
+        var sHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
         var aExistingReasons = this._getItemReasonsArray();
         var sDefaultReason = oReturnReasonLogic.defaultForNewItem(sHeaderReason, aExistingReasons);
         if (sDefaultReason) {
