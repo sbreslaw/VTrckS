@@ -184,6 +184,7 @@
             change=".onItemReturnReasonChange">
             <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
           </Select>
+
           <!-- DF-1025: SalesDocumentRjcnReason is Computed - selectedKey is OneWay (display
                only); writes go through the bound SetRejectionReason/RemoveRejectionReason
                actions in onItemRejectionReasonChange. Items come from the JSON
