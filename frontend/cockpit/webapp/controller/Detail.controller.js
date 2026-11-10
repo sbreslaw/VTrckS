@@ -2378,7 +2378,8 @@ sap.ui.define([
       var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
       
       // Write header only if it changed
-      var sCurrentHeaderReason = oRowContext.getModel().getProperty("/" + ServiceSchema.headerProperties.orderReason);
+      var oHeaderContext = this.getView().getBindingContext();
+      var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
       if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
         this._updateHeaderReturnReason(sNewHeaderReason);
       }
