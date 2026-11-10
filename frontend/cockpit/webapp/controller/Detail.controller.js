@@ -2406,8 +2406,11 @@ sap.ui.define([
         return;
       }
       // Create a binding to the header entity by its key and patch it
+      // Use the same update group as the items (vrCreate in create mode, vrEdit in edit mode)
       var sHeaderPath = "/" + ServiceSchema.entitySets.header + "('" + sOrderId + "')";
-      var oHeaderContext = oModel.bindContext(sHeaderPath);
+      var oHeaderContext = oModel.bindContext(sHeaderPath, undefined, {
+        $$updateGroupId: this._sItemsUpdateGroup
+      });
       oHeaderContext.requestProperty(ServiceSchema.headerProperties.orderReason);
       oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
     },
