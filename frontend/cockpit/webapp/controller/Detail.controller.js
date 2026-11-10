@@ -2377,13 +2377,19 @@ sap.ui.define([
       setTimeout(function () {
         var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
         var aAllItemReasons = that._getItemReasonsArray();
+        console.log("DEBUG onItemReturnReasonChange: item reasons array = " + JSON.stringify(aAllItemReasons));
         var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
+        console.log("DEBUG onItemReturnReasonChange: computed new header reason = " + sNewHeaderReason);
         
         // Write header only if it changed
         var oHeaderContext = that.getView().getBindingContext();
         var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+        console.log("DEBUG onItemReturnReasonChange: current header reason = " + sCurrentHeaderReason);
         if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+          console.log("DEBUG onItemReturnReasonChange: calling _updateHeaderReturnReason");
           that._updateHeaderReturnReason(sNewHeaderReason);
+        } else {
+          console.log("DEBUG onItemReturnReasonChange: header reason unchanged, skipping update");
         }
       }, 0);
     },
@@ -2396,7 +2402,12 @@ sap.ui.define([
       if (!oHeaderContext) {
         return;
       }
-      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
+      var sPropertyKey = ServiceSchema.headerProperties.orderReason;
+      var sCurValue = oHeaderContext.getProperty(sPropertyKey);
+      console.log("DEBUG _updateHeaderReturnReason: property=" + sPropertyKey + ", curValue=" + sCurValue + ", newValue=" + sNewValue);
+      oHeaderContext.setProperty(sPropertyKey, sNewValue);
+      var sNewVal = oHeaderContext.getProperty(sPropertyKey);
+      console.log("DEBUG _updateHeaderReturnReason after setProperty: " + sNewVal);
     },
     // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
     _applyReturnReasonValue: function (oRowContext, sValue) {

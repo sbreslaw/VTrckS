@@ -460,7 +460,7 @@
 								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<ComboBox
 									width="100%"
-									selectedKey="{SDDocumentReason}"
+									selectedKey="{path: 'SDDocumentReason', mode: 'TwoWay'}"
 									visible="{sectionFlags>/details/editing}"
 									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; ${createState>/returnTypeChosen}) }"
 									change=".onReturnReasonChange"
