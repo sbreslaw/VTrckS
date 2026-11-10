@@ -140,6 +140,9 @@ sap.ui.define([
       paymentTerms: "CustomerPaymentTerms",
       priority: null,
       orderReason: "SDDocumentReason",
+      // SDDocumentReason 'Multiple Values' code per §5.2 of E008_Returns_
+      // ItemReturnReason_Session_Prompt - marks header when items differ.
+      orderReasonMultiple: "G99",
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
       // 2026-11-09: remapped per code-owner instruction from SpecialProcessingCode
@@ -278,6 +281,7 @@ sap.ui.define([
       deliveryStatusText: null,
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReason: "ReasonCode",
       fundType: null,
       orderIntention: null,
       poReference: null,
@@ -343,6 +347,7 @@ sap.ui.define([
       quantityUnitText: null,
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text",
+      returnReason: "ReasonCode",
       status: null,
       statusText: null,
       orderIntention: null,
@@ -560,7 +565,9 @@ sap.ui.define([
       partnerFunctionCode: "PartnerFunction",
       partnerFunctionText: "PartnerFunction_Text",
       rejectionReasonCode: "SalesDocumentRjcnReason",
-      rejectionReasonText: "SalesDocumentRjcnReason_Text"
+      rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReasonCode: "SDDocumentReason",
+      returnReasonText: "SDDocumentReason_Text"
     },
 
     // Shared custom service (zui_providerorder_srv) - identical for both

@@ -91,6 +91,19 @@
 
           <f:FormElement>
             <f:label>
+              <Label text="{i18n>colReturnReason}">
+                <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
+              </Label>
+            </f:label>
+            <f:fields>
+              <Text text="{path: '_SDDocumentReason/SDDocumentReason_Text', formatter: '.formatter.orDash'}">
+                <layoutData><l:GridData span="XL8 L8 M8 S12"/></layoutData>
+              </Text>
+            </f:fields>
+          </f:FormElement>
+
+          <f:FormElement>
+            <f:label>
               <Label text="{i18n>colStatus}">
                 <layoutData><l:GridData span="XL4 L4 M4 S12" linebreak="true"/></layoutData>
               </Label>

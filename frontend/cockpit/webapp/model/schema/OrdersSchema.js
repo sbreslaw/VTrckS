@@ -156,6 +156,7 @@ sap.ui.define([
       // Header "Priority" field = SD shipping type (VSARTTR, so_C_SALESORDERMANAGE_2026-09-30.xml).
       priority: "ShippingType",
       orderReason: "SDDocumentReason",
+      orderReasonMultiple: null,
       // No header-level "Partner" property exists either — Ship-To-Party ID/name
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
@@ -350,6 +351,7 @@ sap.ui.define([
       deliveryStatusText: "DeliveryStatus_Text",
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReason: null,
       // MVGR2 - real field (MaterialGroup2), client requirement (2026-08-31):
       // Fund Type (VFC/317/S/L/CHP/SPL/PAN/ARR/N/A - see Enums.js
       // FUND_TYPE/FUND_TYPE_BY_INTENTION), gated by Adult vs Pediatric.
@@ -462,6 +464,7 @@ sap.ui.define([
       // top-level fixed-values EntitySet confirmed (so.xml line 2538).
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text",
+      returnReason: null,
       // Item-level overall process status (SDProcessStatus, so.xml line 144) -
       // a DIFFERENT code set from the header's OverallSDProcessStatus/
       // UserStatusDerived (headerProperties.status/userStatus) - do not reuse
@@ -807,7 +810,9 @@ sap.ui.define([
       partnerFunctionCode: "PartnerFunction",
       partnerFunctionText: "PartnerFunction_Text",
       rejectionReasonCode: "SalesDocumentRjcnReason",
-      rejectionReasonText: "SalesDocumentRjcnReason_Text"
+      rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReasonCode: null,
+      returnReasonText: null
     },
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
