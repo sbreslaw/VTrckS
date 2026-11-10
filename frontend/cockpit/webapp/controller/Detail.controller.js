@@ -1138,7 +1138,9 @@ sap.ui.define([
         var aExistingReasons = this._getItemReasonsArray();
         var sDefaultReason = ReturnReasonLogic.defaultForNewItem(sHeaderReason, aExistingReasons);
         if (sDefaultReason) {
+          console.log("DEBUG _applyNdcPick: Setting ReasonCode to", sDefaultReason, "on item", oRowContext.getProperty(ServiceSchema.itemProperties.material));
           oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sDefaultReason);
+          console.log("DEBUG _applyNdcPick: After setProperty, ReasonCode is", oRowContext.getProperty(ServiceSchema.itemProperties.returnReason));
         }
       }
       
@@ -2361,6 +2363,7 @@ sap.ui.define([
       }
       var oSelectedItem = oEvent.getParameter("selectedItem");
       var sNewValue = oSelectedItem ? oSelectedItem.getKey() : "";
+      console.log("DEBUG onItemReturnReasonChange: Selected", sNewValue, "on item", oRowContext.getProperty(ServiceSchema.itemProperties.material));
       
       // Validate the code (no empty codes, check against the VH list)
       if (!sNewValue) {
@@ -2371,6 +2374,7 @@ sap.ui.define([
       
       // Apply the new value to the item row
       this._applyReturnReasonValue(oRowContext, sNewValue);
+      console.log("DEBUG onItemReturnReasonChange: After _applyReturnReasonValue, ReasonCode is", oRowContext.getProperty(ServiceSchema.itemProperties.returnReason));
       
       // Compute the new header reason using ReturnReasonLogic
       var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
