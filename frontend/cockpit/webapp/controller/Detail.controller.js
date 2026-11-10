@@ -2378,7 +2378,12 @@ sap.ui.define([
         var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
         var aAllItemReasons = that._getItemReasonsArray();
         console.log("DEBUG onItemReturnReasonChange: item reasons array = " + JSON.stringify(aAllItemReasons));
-        var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
+        
+        // If array is empty (e.g. item not in table yet), use the new value directly
+        var aReasonsForComputation = aAllItemReasons && aAllItemReasons.length > 0 ? aAllItemReasons : [sNewValue];
+        console.log("DEBUG onItemReturnReasonChange: reasons for computation = " + JSON.stringify(aReasonsForComputation));
+        
+        var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aReasonsForComputation);
         console.log("DEBUG onItemReturnReasonChange: computed new header reason = " + sNewHeaderReason);
         
         // Write header only if it changed
