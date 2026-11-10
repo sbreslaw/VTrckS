@@ -997,7 +997,9 @@ sap.ui.define([
       var aRows = [];
       var oProps = ServiceSchema.itemProperties;
       var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
-      var bInactive = this._bItemsSessionBound || !bCreateMode;
+      // Returns profile: items on session binding must POST with empty body first (incremental PATCH pattern),
+      // so set bInactive=false to force immediate POST. Orders profile uses bInactive=true to defer submission.
+      var bInactive = (this._bItemsSessionBound || !bCreateMode) && ServiceSchema.profileId !== "returns";
       var iNextItemNumber = parseInt(this._computeNextItemNumber(oBinding), 10);
       for (var iIndex = 0; iIndex < iCount; iIndex += 1) {
         var oNewRowData = {};
