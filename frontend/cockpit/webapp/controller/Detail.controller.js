@@ -2373,16 +2373,19 @@ sap.ui.define([
       this._applyReturnReasonValue(oRowContext, sNewValue);
       
       // Compute the new header reason using ReturnReasonLogic
-      var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
-      var aAllItemReasons = this._getItemReasonsArray();
-      var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
-      
-      // Write header only if it changed
-      var oHeaderContext = this.getView().getBindingContext();
-      var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
-      if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
-        this._updateHeaderReturnReason(sNewHeaderReason);
-      }
+      // Must defer to allow the binding to update with the new value
+      setTimeout(function () {
+        var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
+        var aAllItemReasons = that._getItemReasonsArray();
+        var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aAllItemReasons);
+        
+        // Write header only if it changed
+        var oHeaderContext = that.getView().getBindingContext();
+        var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+        if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+          that._updateHeaderReturnReason(sNewHeaderReason);
+        }
+      }, 0);
     },
 
     // Helper: write a header property in the same group as the items section
