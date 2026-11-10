@@ -997,9 +997,7 @@ sap.ui.define([
       var aRows = [];
       var oProps = ServiceSchema.itemProperties;
       var bCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
-      // Returns profile: items on session binding must POST with empty body first (incremental PATCH pattern),
-      // so set bInactive=false to force immediate POST. Orders profile uses bInactive=true to defer submission.
-      var bInactive = (this._bItemsSessionBound || !bCreateMode) && ServiceSchema.profileId !== "returns";
+      var bInactive = this._bItemsSessionBound || !bCreateMode;
       var iNextItemNumber = parseInt(this._computeNextItemNumber(oBinding), 10);
       for (var iIndex = 0; iIndex < iCount; iIndex += 1) {
         var oNewRowData = {};
@@ -2151,13 +2149,10 @@ sap.ui.define([
       if (!oBinding || !aPending.length) {
         return;
       }
-      // Returns profile: pending rows must also POST immediately with empty body (incremental PATCH pattern),
-      // matching the logic in _addItemRows.
-      var bInactive = ServiceSchema.profileId !== "returns";
       aPending.forEach(function (oRowData) {
         // Edm.Decimal values must remain strings.
         oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
-        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, bInactive));
+        this._handleItemCreatePromise(oBinding.create(oRowData, false, true, true));
       }, this);
     },
 
