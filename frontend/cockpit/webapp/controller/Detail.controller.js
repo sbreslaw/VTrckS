@@ -1,5 +1,4 @@
 sap.ui.define([
-  "sap/base/Log",
   "sap/ui/core/mvc/Controller",
   "sap/m/MessageToast",
   "sap/m/MessageBox",
@@ -60,7 +59,7 @@ sap.ui.define([
   "cdc/vaccreq/util/ValueHelpTableFitter",
   "cdc/vaccreq/util/UserFeedback"
 ], function (
-  Log, Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
+  Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
   Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp, ReturnReasonLogic,
@@ -2392,30 +2391,12 @@ sap.ui.define([
     // Helper: write a header property in the same group as the items section
     // (part of §5.3 wiring for return reason interdependency - completion (b)).
     // Uses the header context from the view binding, which is already in the correct update group.
-    // In create mode, submit the header change immediately via the same $auto group as items,
-    // rather than batching on Save (vrCreate), so it's included in the same batch as the item change.
     _updateHeaderReturnReason: function (sNewValue) {
-      var that = this;
       var oHeaderContext = this.getView().getBindingContext();
       if (!oHeaderContext) {
         return;
       }
-      var oModel = oHeaderContext.getModel();
-      var sCreateMode = this.getView().getModel("sectionFlags").getProperty("/createMode");
-      
       oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
-      
-      // In create mode, submit the header change immediately via the itemInteractiveGroup
-      // (same as item changes) so it batches together with the item PATCH
-      if (sCreateMode && oModel && oModel.submitBatch) {
-        // Use itemInteractiveGroup ($auto) to send the header PATCH immediately,
-        // matching the item PATCH's submission timing
-        oModel.submitBatch(ServiceSchema.itemInteractiveGroup)
-          .catch(function (oError) {
-            // Log but don't fail - the header update is a side effect of item change
-            Log.warning("Header reason update failed (item change succeeded)", oError);
-          });
-      }
     },
     // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
     _applyReturnReasonValue: function (oRowContext, sValue) {
