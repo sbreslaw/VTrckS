@@ -2423,22 +2423,30 @@ sap.ui.define([
       var aReasons = [];
       var oTable = this._byIdInSection("items", "itemsTable");
       if (!oTable) {
+        console.log("DEBUG _getItemReasonsArray: no table found");
         return aReasons;
       }
       var oItemsBinding = oTable.getBinding("rows");
       if (!oItemsBinding) {
+        console.log("DEBUG _getItemReasonsArray: no binding found");
         return aReasons;
       }
       var aContexts = oItemsBinding.getCurrentContexts();
+      console.log("DEBUG _getItemReasonsArray: found " + aContexts.length + " contexts");
       aContexts.forEach(function (oCtx) {
+        var sMaterial = oCtx.getProperty(ServiceSchema.itemProperties.material);
+        var bIsChild = oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem);
+        console.log("DEBUG _getItemReasonsArray: material=" + sMaterial + ", isChild=" + bIsChild);
         // Only include items with Product (completed), skip child rows
-        if (oCtx.getProperty(ServiceSchema.itemProperties.material) && !oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem)) {
+        if (sMaterial && !bIsChild) {
           var sReason = oCtx.getProperty(ServiceSchema.itemProperties.returnReason);
+          console.log("DEBUG _getItemReasonsArray: reason=" + sReason);
           if (sReason) {
             aReasons.push(sReason);
           }
         }
       });
+      console.log("DEBUG _getItemReasonsArray: returning reasons " + JSON.stringify(aReasons));
       return aReasons;
     },
 
