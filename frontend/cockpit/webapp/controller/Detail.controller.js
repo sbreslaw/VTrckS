@@ -2387,31 +2387,12 @@ sap.ui.define([
 
     // Helper: write a header property in the same group as the items section
     // (part of §5.3 wiring for return reason interdependency - completion (b)).
-    // The header context shares the same model and update group.
+    // Uses the header context from the view binding, which is already in the correct update group.
     _updateHeaderReturnReason: function (sNewValue) {
-      var oTable = this._byIdInSection("items", "itemsTable");
-      if (!oTable) {
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext) {
         return;
       }
-      var oBinding = oTable.getBinding("rows");
-      var aContexts = oBinding && oBinding.getCurrentContexts && oBinding.getCurrentContexts();
-      if (!aContexts || aContexts.length === 0) {
-        return;
-      }
-      // All items share the same header via their model
-      var oFirstItemContext = aContexts[0];
-      var oModel = oFirstItemContext.getModel();
-      var sOrderId = oFirstItemContext.getProperty(ServiceSchema.keys.orderId);
-      if (!oModel || !sOrderId) {
-        return;
-      }
-      // Create a binding to the header entity by its key and patch it
-      // Use the same update group as the items (vrCreate in create mode, vrEdit in edit mode)
-      var sHeaderPath = "/" + ServiceSchema.entitySets.header + "('" + sOrderId + "')";
-      var oHeaderContext = oModel.bindContext(sHeaderPath, undefined, {
-        $$updateGroupId: this._sItemsUpdateGroup
-      });
-      oHeaderContext.requestProperty(ServiceSchema.headerProperties.orderReason);
       oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
     },
     // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
