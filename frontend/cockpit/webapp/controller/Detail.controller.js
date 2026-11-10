@@ -2377,24 +2377,16 @@ sap.ui.define([
       setTimeout(function () {
         var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
         var aAllItemReasons = that._getItemReasonsArray();
-        console.log("DEBUG onItemReturnReasonChange: item reasons array = " + JSON.stringify(aAllItemReasons));
         
         // If array is empty (e.g. item not in table yet), use the new value directly
         var aReasonsForComputation = aAllItemReasons && aAllItemReasons.length > 0 ? aAllItemReasons : [sNewValue];
-        console.log("DEBUG onItemReturnReasonChange: reasons for computation = " + JSON.stringify(aReasonsForComputation));
-        
         var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aReasonsForComputation);
-        console.log("DEBUG onItemReturnReasonChange: computed new header reason = " + sNewHeaderReason);
         
         // Write header only if it changed
         var oHeaderContext = that.getView().getBindingContext();
         var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
-        console.log("DEBUG onItemReturnReasonChange: current header reason = " + sCurrentHeaderReason);
         if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
-          console.log("DEBUG onItemReturnReasonChange: calling _updateHeaderReturnReason");
           that._updateHeaderReturnReason(sNewHeaderReason);
-        } else {
-          console.log("DEBUG onItemReturnReasonChange: header reason unchanged, skipping update");
         }
       }, 0);
     },
@@ -2407,12 +2399,7 @@ sap.ui.define([
       if (!oHeaderContext) {
         return;
       }
-      var sPropertyKey = ServiceSchema.headerProperties.orderReason;
-      var sCurValue = oHeaderContext.getProperty(sPropertyKey);
-      console.log("DEBUG _updateHeaderReturnReason: property=" + sPropertyKey + ", curValue=" + sCurValue + ", newValue=" + sNewValue);
-      oHeaderContext.setProperty(sPropertyKey, sNewValue);
-      var sNewVal = oHeaderContext.getProperty(sPropertyKey);
-      console.log("DEBUG _updateHeaderReturnReason after setProperty: " + sNewVal);
+      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
     },
     // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
     _applyReturnReasonValue: function (oRowContext, sValue) {
@@ -2428,30 +2415,22 @@ sap.ui.define([
       var aReasons = [];
       var oTable = this._byIdInSection("items", "itemsTable");
       if (!oTable) {
-        console.log("DEBUG _getItemReasonsArray: no table found");
         return aReasons;
       }
       var oItemsBinding = oTable.getBinding("rows");
       if (!oItemsBinding) {
-        console.log("DEBUG _getItemReasonsArray: no binding found");
         return aReasons;
       }
       var aContexts = oItemsBinding.getCurrentContexts();
-      console.log("DEBUG _getItemReasonsArray: found " + aContexts.length + " contexts");
       aContexts.forEach(function (oCtx) {
-        var sMaterial = oCtx.getProperty(ServiceSchema.itemProperties.material);
-        var bIsChild = oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem);
-        console.log("DEBUG _getItemReasonsArray: material=" + sMaterial + ", isChild=" + bIsChild);
         // Only include items with Product (completed), skip child rows
-        if (sMaterial && !bIsChild) {
+        if (oCtx.getProperty(ServiceSchema.itemProperties.material) && !oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem)) {
           var sReason = oCtx.getProperty(ServiceSchema.itemProperties.returnReason);
-          console.log("DEBUG _getItemReasonsArray: reason=" + sReason);
           if (sReason) {
             aReasons.push(sReason);
           }
         }
       });
-      console.log("DEBUG _getItemReasonsArray: returning reasons " + JSON.stringify(aReasons));
       return aReasons;
     },
 
