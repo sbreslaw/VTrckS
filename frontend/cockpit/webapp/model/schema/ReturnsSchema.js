@@ -96,6 +96,17 @@ sap.ui.define([
       orderId: "CustomerReturn"
     },
 
+    // Create mode: header fields that must have a value before any section
+    // other than Details is shown (code-owner requirement, Returns: Provider,
+    // Return Type, Return Reason). `field` is a headerProperties key; `uiField`
+    // is the orderUi>/fields/<id> entry that can hide it per order type - a
+    // field hidden for the type (e.g. Return Type on ZXFR/ZWST) is not required.
+    createMandatoryHeaderFields: [
+      { field: "providerId" },
+      { field: "returnType", uiField: "detailsReturnType" },
+      { field: "orderReason", uiField: "orderReason" }
+    ],
+
     headerProperties: {
       providerId: "SoldToParty",
       providerName: "SoldToPartyName",
@@ -140,6 +151,9 @@ sap.ui.define([
       paymentTerms: "CustomerPaymentTerms",
       priority: null,
       orderReason: "SDDocumentReason",
+      // SDDocumentReason 'Multiple Values' code per §5.2 of E008_Returns_
+      // ItemReturnReason_Session_Prompt - marks header when items differ.
+      orderReasonMultiple: "G99",
       customerReference: "PurchaseOrderByCustomer",
       exisId: "PurchaseOrderByCustomer",
       // 2026-11-09: remapped per code-owner instruction from SpecialProcessingCode
@@ -278,6 +292,7 @@ sap.ui.define([
       deliveryStatusText: null,
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReason: "ReasonCode",
       fundType: null,
       orderIntention: null,
       poReference: null,
@@ -343,6 +358,7 @@ sap.ui.define([
       quantityUnitText: null,
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text",
+      returnReason: "ReasonCode",
       status: null,
       statusText: null,
       orderIntention: null,
@@ -453,8 +469,9 @@ sap.ui.define([
     // _it: CustomerReturnManageType, Parameter PartnerFunction, ReturnType
     // HeaderPartnerType) IS real on this service - absent from the older
     // 2026-10-27/28 dumps this session's prior "no equivalent" conclusion was
-    // based on. Same shape as OrdersSchema.js's own CreatePartner - Contact
-    // now persists via CreateOrderService.js#_replayContact same as orders.
+    // based on. Same shape as OrdersSchema.js's own CreatePartner - not used
+    // for the create-mode Contact (CreateOrderService.js#_patchSessionContact:
+    // only one Contact Person row is allowed and the backend pre-creates it).
     createPartnerAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreatePartner",
 
     statusProperties: {
@@ -560,7 +577,9 @@ sap.ui.define([
       partnerFunctionCode: "PartnerFunction",
       partnerFunctionText: "PartnerFunction_Text",
       rejectionReasonCode: "SalesDocumentRjcnReason",
-      rejectionReasonText: "SalesDocumentRjcnReason_Text"
+      rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReasonCode: "SDDocumentReason",
+      returnReasonText: "SDDocumentReason_Text"
     },
 
     // Shared custom service (zui_providerorder_srv) - identical for both
@@ -687,7 +706,8 @@ sap.ui.define([
     updatableItemProperties: {
       quantity: "RequestedQuantity",
       batch: "ZZ1_LotNumber_SDI",
-      expirationDate: "ZZ1_ExpirationDate_SDI"
+      expirationDate: "ZZ1_ExpirationDate_SDI",
+      returnReason: "ReasonCode"
     },
 
     editUpdateGroup: "vrEdit",
@@ -744,6 +764,13 @@ sap.ui.define([
 
     buildHeaderPath: function (sOrderId) {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";
+    },
+
+    // HeaderPartnerType key (ui_customerreturnmanage_2026-11-09.xml):
+    // CustomerReturn + PartnerFunction; "" for the order inside a create session.
+    buildHeaderPartnerPath: function (sOrderId, sPartnerFunction) {
+      return "/" + this.entitySets.headerPartner + "(" + this.headerPartnerProperties.salesOrder + "='" + sOrderId + "',"
+        + this.headerPartnerProperties.partnerFunction + "='" + sPartnerFunction + "')";
     },
 
     buildItemPath: function (sOrderId, sItemNumber) {

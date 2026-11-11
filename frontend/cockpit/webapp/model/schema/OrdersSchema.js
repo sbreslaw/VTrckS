@@ -122,6 +122,14 @@ sap.ui.define([
       // is NOT draft-enabled. See NOTES.md "P1 Draft-Key Check" and PHASE2_AUDIT.md.
     },
 
+    // Create mode: header fields that must have a value before any section
+    // other than Details is shown (code-owner requirement, Provider Orders:
+    // Provider, Reason). Same shape as ReturnsSchema.createMandatoryHeaderFields.
+    createMandatoryHeaderFields: [
+      { field: "providerId" },
+      { field: "orderReason", uiField: "orderReason" }
+    ],
+
     headerProperties: {
       providerId: "SoldToParty",
       providerName: "CustomerName",
@@ -156,6 +164,7 @@ sap.ui.define([
       // Header "Priority" field = SD shipping type (VSARTTR, so_C_SALESORDERMANAGE_2026-09-30.xml).
       priority: "ShippingType",
       orderReason: "SDDocumentReason",
+      orderReasonMultiple: null,
       // No header-level "Partner" property exists either — Ship-To-Party ID/name
       // are only reachable via the _ShipToParty navigation (HeaderShipToPartyType).
       customerReference: "PurchaseOrderByCustomer",
@@ -350,6 +359,7 @@ sap.ui.define([
       deliveryStatusText: "DeliveryStatus_Text",
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReason: null,
       // MVGR2 - real field (MaterialGroup2), client requirement (2026-08-31):
       // Fund Type (VFC/317/S/L/CHP/SPL/PAN/ARR/N/A - see Enums.js
       // FUND_TYPE/FUND_TYPE_BY_INTENTION), gated by Adult vs Pediatric.
@@ -462,6 +472,7 @@ sap.ui.define([
       // top-level fixed-values EntitySet confirmed (so.xml line 2538).
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "_SalesDocumentRjcnReason/SalesDocumentRjcnReason_Text",
+      returnReason: null,
       // Item-level overall process status (SDProcessStatus, so.xml line 144) -
       // a DIFFERENT code set from the header's OverallSDProcessStatus/
       // UserStatusDerived (headerProperties.status/userStatus) - do not reuse
@@ -695,7 +706,8 @@ sap.ui.define([
     // parameter and returns the new HeaderPartnerType row (Customer is NOT a
     // parameter - set via a follow-up PATCH, since UpdateRestrictions.
     // NonUpdatableProperties only lists PartnerFunction, not Customer - so.xml
-    // same block). See Detail.controller.js#onPartiesAddConfirm.
+    // same block). See Detail.controller.js#onPartiesAddConfirm. Not used for
+    // the create-mode Contact (CreateOrderService.js#_patchSessionContact).
     createPartnerAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.CreatePartner",
 
     // Org Data fields confirmed creatable-only (writable at document creation,
@@ -750,9 +762,9 @@ sap.ui.define([
       salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
       // Customer is the real, settable partner-number field (set via a PATCH
-      // after CreatePartner, see createPartnerAction above); Partner
-      // (Computed, Label "Customer" in so.xml) is a generic display-only
-      // mirror used for RO rendering of already-created rows.
+      // after CreatePartner in the Parties Add flow, see createPartnerAction
+      // above); Partner (Computed, Label "Customer" in so.xml) is a generic
+      // display-only mirror used for RO rendering of already-created rows.
       customer: "Customer",
       partner: "Partner",
       contactPerson: "ContactPerson",
@@ -807,7 +819,9 @@ sap.ui.define([
       partnerFunctionCode: "PartnerFunction",
       partnerFunctionText: "PartnerFunction_Text",
       rejectionReasonCode: "SalesDocumentRjcnReason",
-      rejectionReasonText: "SalesDocumentRjcnReason_Text"
+      rejectionReasonText: "SalesDocumentRjcnReason_Text",
+      returnReasonCode: null,
+      returnReasonText: null
     },
 
     // Session Prompt (Detail View Adjustments) 3.5, AUTHORITY block: the new
@@ -976,7 +990,8 @@ sap.ui.define([
     updatableItemProperties: {
       quantity: "RequestedQuantity",
       batch: "Batch",
-      expirationDate: null
+      expirationDate: null,
+      returnReason: null
     },
 
     // Update group for all edit-session PATCHes/creates (EditRequestService.js
@@ -1015,6 +1030,13 @@ sap.ui.define([
 
     buildHeaderPath: function (sOrderId) {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";
+    },
+
+    // HeaderPartnerType key (so_C_SALESORDERMANAGE_2026-11-06.xml):
+    // SalesOrder + PartnerFunction; "" for the order inside a create session.
+    buildHeaderPartnerPath: function (sOrderId, sPartnerFunction) {
+      return "/" + this.entitySets.headerPartner + "(" + this.headerPartnerProperties.salesOrder + "='" + sOrderId + "',"
+        + this.headerPartnerProperties.partnerFunction + "='" + sPartnerFunction + "')";
     },
 
     // Item Detail view (FCL end column) - canonical path for the top-level

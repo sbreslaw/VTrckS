@@ -49,6 +49,7 @@ sap.ui.define([
   "cdc/vaccreq/model/MessageExtractor",
   "cdc/vaccreq/model/PricingColumns",
   "cdc/vaccreq/model/StatusValueHelp",
+  "cdc/vaccreq/model/ReturnReasonLogic",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/ProviderInventoryService",
@@ -61,7 +62,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp, ReturnReasonLogic,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter, UserFeedback
 ) {
@@ -164,7 +165,7 @@ sap.ui.define([
       // since the header's own _OverallDeliveryStatus/
       // _OverallDeliveryBlockStatus navigation cannot resolve against the
       // transient createMode scratch context (client requirement 2026-10-01).
-      this.getView().setModel(new JSONModel({ providerChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
+      this.getView().setModel(new JSONModel({ providerChosen: false, returnTypeChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       // 3.3: client-side-only SUM of item TaxAmount - never a real header
       // property, see _computeHeaderTaxAmount.
@@ -710,6 +711,127 @@ sap.ui.define([
       }
     },
 
+    // Return Type (ZZ1_VaccineReturnType_SDH, TwoWay) is a mandatory header
+    // field on Returns: createState>/returnTypeChosen enables the Return
+    // Reason ComboBox, and the section gate is re-evaluated.
+    onReturnTypeChange: function (oEvent) {
+      var oCombo = oEvent.getSource();
+      var oSelectedItem = oCombo.getSelectedItem();
+      var sReturnTypeChosen = !!(oSelectedItem && oSelectedItem.getKey());
+      this.getView().getModel("createState").setProperty("/returnTypeChosen", sReturnTypeChosen);
+      this._updateSectionsGate();
+    },
+
+    // Return Reason (SDDocumentReason) is a mandatory header field on Returns
+    // - _applyHeaderReturnReason re-evaluates the section gate after writing.
+    //
+    // E008_Returns_ItemReturnReason completion (c), broadcast variant (user
+    // decision 2026-11-11): a header reason the user picks overwrites every
+    // item's ReasonCode (ReturnReasonLogic.itemReasonAfterHeaderChange - never
+    // for G99), behind an explicit confirmation whenever at least one item
+    // would actually change. selectedKey is OneWay (returns/Details.fragment
+    // .xml), so nothing is written before that; Cancel just puts the control
+    // back on the unchanged model value.
+    onReturnReasonChange: function (oEvent) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oCombo = oEvent.getSource();
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext) {
+        return;
+      }
+      var oSelectedItem = oCombo.getSelectedItem();
+      var sNewReason = oSelectedItem ? oSelectedItem.getKey() : "";
+      var sCurrentReason = oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason) || "";
+      if (sNewReason === sCurrentReason) {
+        return;
+      }
+      var sItemReason = ServiceSchema.itemProperties.returnReason
+        ? ReturnReasonLogic.itemReasonAfterHeaderChange(sNewReason)
+        : undefined;
+      var pItems = sItemReason ? this._requestReturnReasonItemContexts() : Promise.resolve([]);
+      pItems.then(function (aContexts) {
+        var aOverwrite = aContexts.filter(function (oRowContext) {
+          return oRowContext.getProperty(ServiceSchema.itemProperties.returnReason) !== sItemReason;
+        });
+        if (!aOverwrite.length) {
+          that._applyHeaderReturnReason(sNewReason, []);
+          return;
+        }
+        MessageBox.warning(oBundle.getText("headerReturnReasonOverwriteConfirm", [aOverwrite.length, oSelectedItem.getText()]), {
+          title: oBundle.getText("headerReturnReasonOverwriteTitle"),
+          actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+          emphasizedAction: MessageBox.Action.OK,
+          onClose: function (sAction) {
+            if (sAction === MessageBox.Action.OK) {
+              that._applyHeaderReturnReason(sNewReason, aOverwrite);
+            } else {
+              oCombo.setSelectedKey(sCurrentReason);
+            }
+          }
+        });
+      }).catch(function (oError) {
+        oCombo.setSelectedKey(sCurrentReason);
+        var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
+        aSectionIds.forEach(function (sId) {
+          that._oSectionFactory.expandSection(sId);
+        });
+        that._openMessagePopover();
+      });
+    },
+
+    // Writes the confirmed header reason plus the item overwrites, each item
+    // through the shared _applyReturnReasonValue in its own row's group
+    // ($auto session / scratch in create mode, "vrEdit" in change mode).
+    _applyHeaderReturnReason: function (sNewReason, aItemContexts) {
+      var that = this;
+      this._updateHeaderReturnReason(sNewReason);
+      aItemContexts.forEach(function (oRowContext) {
+        var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+        that._applyReturnReasonValue(oRowContext, sNewReason).catch(function (oError) {
+          // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
+          if (oError && oError.canceled) {
+            return;
+          }
+          that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+        });
+      });
+      this._updateSectionsGate();
+    },
+
+    // Rows a header broadcast rewrites - same filter as _getItemReasonsArray
+    // (has a Product, not an ancillary child). In change mode the Details
+    // edit can run while the Items section was never expanded (no table
+    // binding yet): read the items then through the header's own update
+    // group, so Details Save/Cancel commits/reverts them with the header.
+    _requestReturnReasonItemContexts: function () {
+      var oProps = ServiceSchema.itemProperties;
+      var fnIsReasonItem = function (oRowContext) {
+        return !!oRowContext.getProperty(oProps.material) && !oRowContext.getProperty(oProps.higherLevelItem);
+      };
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oTableBinding = oTable && oTable.getBinding("items");
+      if (oTableBinding) {
+        return Promise.resolve(oTableBinding.getCurrentContexts().filter(fnIsReasonItem));
+      }
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext || this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return Promise.resolve([]);
+      }
+      if (!this._oReturnReasonItemsBinding || this._oReturnReasonItemsBinding.getContext() !== oHeaderContext) {
+        if (this._oReturnReasonItemsBinding) {
+          this._oReturnReasonItemsBinding.destroy();
+        }
+        this._oReturnReasonItemsBinding = oHeaderContext.getModel().bindList(ServiceSchema.navigation.headerToItems, oHeaderContext, undefined, undefined, {
+          $$updateGroupId: ServiceSchema.editUpdateGroup,
+          $select: [oProps.material, oProps.higherLevelItem, oProps.returnReason].filter(Boolean).join(",")
+        });
+      }
+      return this._oReturnReasonItemsBinding.requestContexts(0, Infinity).then(function (aContexts) {
+        return aContexts.filter(fnIsReasonItem);
+      });
+    },
+
     // Sections whose display Text reads a code's expanded to-one nav-property
     // text (e.g. Order Reason code -> _SDDocumentReason/SDDocumentReason_Text):
     // changing the code points that nav at a *different* entity, and
@@ -1105,6 +1227,19 @@ sap.ui.define([
       // modelContextChange (onBatchModelContextChange) only fires once, when the row's
       // context is first set - a later NDC pick on the same row needs this explicit rebind.
       this._bindBatchValueHelp(this._getRowSelect(this._getRowForContext(oRowContext), ServiceSchema.itemProperties.batch));
+      
+      // E008_Returns_ItemReturnReason_Session_Prompt §5.3: default Return Reason
+      // on NDC entry (rule 2.1.1) - only for _RET (returnReason is null on _ORD).
+      if (ServiceSchema.itemProperties.returnReason && !oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) {
+        var oHeaderContext = this.getView().getBindingContext();
+        var sHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+        var aExistingReasons = this._getItemReasonsArray();
+        var sDefaultReason = ReturnReasonLogic.defaultForNewItem(sHeaderReason, aExistingReasons);
+        if (sDefaultReason) {
+          oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sDefaultReason);
+        }
+      }
+      
       this._checkItemRowComplete(oRowContext);
     },
 
@@ -1903,6 +2038,11 @@ sap.ui.define([
         oEvent.preventDefault();
         return;
       }
+      if (ServiceSchema.profileId === "returns" && this._bItemsSessionBound) {
+        oEvent.preventDefault();
+        this._postInactiveSessionRow(oRowContext);
+        return;
+      }
       // Row 1 gets a free full-list refresh from _bindItemsTableToSession's
       // rebindItems() (which is how it happens to pick up any ancillary
       // child row the backend injects alongside it) - row 2+ never rebinds,
@@ -1946,6 +2086,55 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           that._openMessagePopover();
+        });
+    },
+
+    // Returns (_RET) only: letting a completed inactive session row activate
+    // sends ONE combined item POST (Product + RequestedQuantity + Unit + the
+    // rest), which the Returns backend rejects (CreateOrderService.postItem's
+    // CONFIRMED BUG note - live: 500 BEHAVIOR_ILLEGAL_STATEMENT, after which
+    // the sticky session is gone). Row 1 never hit this because it goes
+    // through postItem's incremental create; rows 2+ now do too: the
+    // inactive row stays local, its data is posted via postItem, then the
+    // local row is dropped and the list refreshed to show the server's row.
+    _postInactiveSessionRow: function (oRowContext) {
+      this._oPostingInactiveRows = this._oPostingInactiveRows || new Set();
+      if (this._oPostingInactiveRows.has(oRowContext)) {
+        return;
+      }
+      this._oPostingInactiveRows.add(oRowContext);
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oHeaderContext = this.getView().getBindingContext();
+      if (oTable) {
+        oTable.setBusy(true);
+      }
+      // Activation fires on the FIRST of several synchronous setProperty
+      // calls (e.g. _applyNdcPick: Product, then text/unit/return reason) -
+      // read the row only once that synchronous sequence has finished.
+      Promise.resolve()
+        .then(function () {
+          return CreateOrderService.postItem(that._oCreateSession, oHeaderContext, oRowContext.getObject());
+        })
+        .then(function () {
+          return oRowContext.delete();
+        })
+        .then(function () {
+          return that._refreshItemsBinding();
+        })
+        .catch(function (oError) {
+          var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
+        })
+        .then(function () {
+          that._oPostingInactiveRows.delete(oRowContext);
+          if (oTable) {
+            oTable.setBusy(false);
+          }
         });
     },
 
@@ -2052,7 +2241,7 @@ sap.ui.define([
           var oPendingData = Object.assign({}, oCtx.getObject());
           // Client-only scratch numbering (_computeNextItemNumber) - the real
           // session list assigns its own key, never reuse this placeholder.
-          delete oPendingData.SalesOrderItem;
+          delete oPendingData[ServiceSchema.itemProperties.itemNumber];
           that._aPendingIncompleteRows.push(oPendingData);
           return oCtx.delete().catch(function () {});
         });
@@ -2310,6 +2499,110 @@ sap.ui.define([
         });
     },
 
+    // E008_Returns_ItemReturnReason_Session_Prompt §5.3: Item Return Reason change
+    // (Rule 2.1.2). Apply the new value to the item, then compute the new header
+    // reason using ReturnReasonLogic. Both writes (item + header) go in the same
+    // group. On failure, the Select reverts via a full refresh.
+    onItemReturnReasonChange: function (oEvent) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      var oSelect = oEvent.getSource();
+      var oRowContext = oSelect.getBindingContext();
+      if (!oRowContext) {
+        return;
+      }
+      var oSelectedItem = oEvent.getParameter("selectedItem");
+      var sNewValue = oSelectedItem ? oSelectedItem.getKey() : "";
+      
+      // Validate the code (no empty codes, check against the VH list)
+      if (!sNewValue) {
+        MessageBox.warning(oBundle.getText("itemReturnReasonInvalid"));
+        oSelect.setSelectedKey((oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) || "");
+        return;
+      }
+      
+      // Apply the new value to the item row
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+      this._applyReturnReasonValue(oRowContext, sNewValue).catch(function (oError) {
+        if (oError && oError.canceled) {
+          return;
+        }
+        that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      });
+      
+      // Compute the new header reason using ReturnReasonLogic
+      // Must defer to allow the binding to update with the new value
+      setTimeout(function () {
+        var oReturnReasonLogic = sap.ui.require("cdc/vaccreq/model/ReturnReasonLogic");
+        var aAllItemReasons = that._getItemReasonsArray();
+        
+        // If array is empty (e.g. item not in table yet), use the new value directly
+        var aReasonsForComputation = aAllItemReasons && aAllItemReasons.length > 0 ? aAllItemReasons : [sNewValue];
+        var sNewHeaderReason = oReturnReasonLogic.headerAfterItemChange(aReasonsForComputation);
+        
+        // Write header only if it changed
+        var oHeaderContext = that.getView().getBindingContext();
+        var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+        if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+          that._updateHeaderReturnReason(sNewHeaderReason);
+        }
+      }, 0);
+    },
+
+    // Helper: write a header property in the same group as the items section
+    // (part of §5.3 wiring for return reason interdependency - completion (b)).
+    // Uses the header context from the view binding, which is already in the correct update group.
+    _updateHeaderReturnReason: function (sNewValue) {
+      var that = this;
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext) {
+        return;
+      }
+      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue).catch(function (oError) {
+        // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
+        if (oError && oError.canceled) {
+          return;
+        }
+        var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), that.getResourceBundle());
+        aSectionIds.forEach(function (sId) {
+          that._oSectionFactory.expandSection(sId);
+        });
+        that._openMessagePopover();
+      });
+    },
+    // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
+    _applyReturnReasonValue: function (oRowContext, sValue) {
+      if (!oRowContext) {
+        return Promise.resolve();
+      }
+      return oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sValue);
+    },
+
+    // Helper: get array of all item ReasonCode values (for _RET only, null on _ORD).
+    // Filters to rows with Product (completed items), excludes child rows.
+    _getItemReasonsArray: function () {
+      var aReasons = [];
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return aReasons;
+      }
+      var oItemsBinding = oTable.getBinding("items");
+      if (!oItemsBinding) {
+        return aReasons;
+      }
+      var aContexts = oItemsBinding.getCurrentContexts();
+      aContexts.forEach(function (oCtx) {
+        // Only include items with Product (completed), skip child rows
+        if (oCtx.getProperty(ServiceSchema.itemProperties.material) && !oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem)) {
+          var sReason = oCtx.getProperty(ServiceSchema.itemProperties.returnReason);
+          if (sReason) {
+            aReasons.push(sReason);
+          }
+        }
+      });
+      return aReasons;
+    },
+
     // Item Details view session prompt, 3.4: Items row Action menu "Edit" ->
     // FCL end column, always full screen (session prompt 3.1). Row context
     // supplies the SalesOrder/SalesOrderItem keys for the new route.
@@ -2381,7 +2674,6 @@ sap.ui.define([
           // refresh, then delete the row itself - whatever ancillary rows
           // still remain are the backend's own to reconcile when the parent
           // line goes, not ours to delete client-side.
-          var bReleasesNdcAddGate = that._ownsNdcAddGate(oRowContext);
           var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
           var bHasChildren = that._getAncillaryChildContexts(sItemNumber).length > 0;
           var pChain = bHasChildren
@@ -2404,9 +2696,18 @@ sap.ui.define([
             : oRowContext.delete();
           pChain
             .then(function () {
-              if (bReleasesNdcAddGate) {
-                that._releaseNdcAddGate();
+              // E008_Returns_ItemReturnReason_Session_Prompt §5.3: Recompute header
+              // Return Reason after item deletion (completion (b)).
+              if (ServiceSchema.itemProperties.returnReason) {
+                var aRemainingReasons = that._getItemReasonsArray();
+                var oHeaderContext = that.getView().getBindingContext();
+                var sCurrentHeaderReason = oHeaderContext && oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason);
+                var sNewHeaderReason = ReturnReasonLogic.headerAfterItemDelete(aRemainingReasons, sCurrentHeaderReason);
+                if (sNewHeaderReason !== undefined && sNewHeaderReason !== sCurrentHeaderReason) {
+                  that._updateHeaderReturnReason(sNewHeaderReason);
+                }
               }
+              
               MessageToast.show(oBundle.getText("itemsDeleteSuccess"));
             })
             .catch(function (oError) {
@@ -2485,6 +2786,9 @@ sap.ui.define([
     _setCreateMode: function (bOn) {
       var oFlags = this.getView().getModel("sectionFlags");
       oFlags.setProperty("/createMode", bOn);
+      // Closed for a fresh create until _updateSectionsGate finds every
+      // mandatory header field filled; always open outside create mode.
+      oFlags.setProperty("/sectionsGateOpen", !bOn);
       this._resetProviderInventoryState();
       // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): all createMode
       // sections are editable immediately — there is no separate
@@ -2497,6 +2801,7 @@ sap.ui.define([
         this.getView().getModel("createEnrich").setData(this._createEnrichDefaults());
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
+        this.getView().getModel("createState").setProperty("/returnTypeChosen", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
         this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
         this._lookupCreateModeStatusTexts();
@@ -3505,6 +3810,7 @@ sap.ui.define([
         }
       });
       this.getView().getModel("createState").setProperty("/providerChosen", true);
+      this._updateSectionsGate();
       this._prefillMainContact(oItem.id);
       this._resetProviderInventoryState();
       this._setProviderValueState(true);
@@ -4629,10 +4935,10 @@ sap.ui.define([
           sNewId = oResult.orderId;
           var oEnrich = that.getView().getModel("createEnrich").getData();
           return CreateOrderService.saveNotes(oNewContext, oEnrich.notes).then(function () {
-            // contactId is no longer part of this payload - it's now a real,
-            // persisted HeaderPartner row (CreateOrderService.js#_replayContact,
-            // run earlier as part of save()), not pending on this still-blocked
-            // enrichment action.
+            // contactId is no longer part of this payload - it's written to
+            // the session's Contact Person row before SaveChanges
+            // (CreateOrderService.js#_patchSessionContact), not pending on
+            // this still-blocked enrichment action.
             return CreateOrderService.enrich(oNewContext, {
               employeeResponsibleId: oEnrich.employeeResponsibleId,
               status: oEnrich.status,
@@ -4678,13 +4984,18 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           if (oError && oError.orderCreatedId) {
+            // SaveChanges' own messages plus the model's and the extractor's
+            // copy of the failing step's message - same collapse the
+            // success path runs (CreateOrderService.js#_commitStickySession).
+            MessageExtractor.dedupeMessages();
             // Enrichment failed but the order + its edits ARE committed —
             // exit createMode into the saved order; user completes the rest
             // via Change Mode (no compensating deletes). Message Accuracy &
             // Hygiene task: a tracked Messaging note, not a MessageToast, so
             // it shows in the same popover alongside the real backend
             // messages instead of a separate, easy-to-miss channel.
-            MessageExtractor.addNote(oBundle.getText("createPartialFailure", [oError.orderCreatedId]), "Information");
+            MessageExtractor.addNote(oBundle.getText("createPartialFailure",
+              [that.getView().getModel("orderUi").getProperty("/title"), oError.orderCreatedId]), "Information");
             that._openMessagePopover();
             that._completeCreate(oError.orderCreatedId);
           } else {
@@ -4726,7 +5037,7 @@ sap.ui.define([
       // true only for the lifetime of the "create" route; SectionFactory.js and
       // the fragments both read it directly (design/prompts/CRUD Task 1 Prompt v3.md
       // "sectionFlags gains a createMode dimension").
-      var oData = { createMode: false };
+      var oData = { createMode: false, sectionsGateOpen: true };
       this._aSectionMeta.forEach(function (oMeta) {
         if (oMeta.editable) {
           oData[oMeta.id] = { editVisible: true, editEnabled: !!oMeta.editLive };
@@ -4741,7 +5052,8 @@ sap.ui.define([
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true };
+        // `gated`: hidden with its panel while sectionFlags>/sectionsGateOpen is false.
+        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true, gated: !oMeta.mandatoryHeader };
       });
       return new JSONModel({ list: aList });
     },
@@ -4958,19 +5270,60 @@ sap.ui.define([
       this._resetItemsTableForCreate();
       this._addInitialCreateItemRows();
       this._bindDetailHeader();
-      // All createMode-visible sections are expanded/loaded simultaneously —
-      // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
-      // Prompt v3.md "Sections in edit simultaneously"). Order-type-hidden
-      // sections are skipped; which visible sections start expanded is the
-      // resolved "create" mode's `expanded` flag (OrderModeConfig.js
-      // SECTION_CREATE_EXPANDED, migrated from the old SectionConfig.js
-      // `createVisible`). _applyOrderUi above already resolved this (createMode
-      // is already true at this point) and cached it on _aResolvedSections.
+      this._expandCreateSections();
+      this._updateSectionsGate();
+    },
+
+    // All createMode-visible sections are expanded/loaded simultaneously —
+    // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
+    // Prompt v3.md "Sections in edit simultaneously"). Order-type-hidden
+    // sections are skipped; which visible sections start expanded is the
+    // resolved "create" mode's `expanded` flag (OrderModeConfig.js
+    // SECTION_CREATE_EXPANDED, migrated from the old SectionConfig.js
+    // `createVisible`). _applyOrderUi already resolved this (createMode is
+    // already true at that point) and cached it on _aResolvedSections.
+    // Sections still hidden by the mandatory-header gate are skipped here
+    // (expandSection ignores hidden panels) and expanded by
+    // _updateSectionsGate once it opens.
+    _expandCreateSections: function () {
       (this._aResolvedSections || []).forEach(function (oResolved) {
         if (oResolved.visible && oResolved.expanded) {
           this._oSectionFactory.expandSection(oResolved.id);
         }
       }, this);
+    },
+
+    // Create-mode section gate (code-owner requirement): every section but
+    // Details (SectionCatalog `mandatoryHeader`) stays hidden - panel and
+    // anchor link - until each of the profile's mandatory header fields
+    // (ServiceSchema.createMandatoryHeaderFields) has a value on the header
+    // context; a field the order type hides (orderUi>/fields/<uiField>) is
+    // not required. Called after every write to one of those fields.
+    _updateSectionsGate: function () {
+      var oFlags = this.getView().getModel("sectionFlags");
+      var bWasOpen = oFlags.getProperty("/sectionsGateOpen") !== false;
+      var bOpen = !oFlags.getProperty("/createMode") || this._hasMandatoryHeaderFields();
+      oFlags.setProperty("/sectionsGateOpen", bOpen);
+      if (bOpen && !bWasOpen) {
+        this._expandCreateSections();
+      }
+    },
+
+    _hasMandatoryHeaderFields: function () {
+      var oContext = this.getView().getBindingContext();
+      var oOrderUi = this.getView().getModel("orderUi").getData();
+      return !!oContext && (ServiceSchema.createMandatoryHeaderFields || []).every(function (oField) {
+        if (oField.uiField && !OrderModeConfig.uiFlag(oOrderUi, "fields", oField.uiField, "visible")) {
+          return true;
+        }
+        return !!oContext.getProperty(ServiceSchema.headerProperties[oField.field]);
+      });
+    },
+
+    // Orders' header Reason ComboBox (TwoWay, no other handler) - the model
+    // already holds the new value when this fires.
+    onMandatoryHeaderFieldChange: function () {
+      this._updateSectionsGate();
     },
 
     // "create" while the createMode flag is on; "edit" while any editLive

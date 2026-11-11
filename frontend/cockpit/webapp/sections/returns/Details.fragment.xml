@@ -187,10 +187,11 @@
 								standalone query). Locked until a Provider is picked;
 								prefilled from the current IsStandardRelationship contact
 								when the Provider changes and still overridable through the
-								value help. Contact now persists via the header-bound
-								CreatePartner action (2026-11-09 metadata re-audit,
-								ReturnsSchema.js createPartnerAction), same mechanism as
-								orders. -->
+								value help. Contact persists by PATCHing the backend-determined
+								Contact Person (HeaderPartner PartnerFunction AP) row inside the
+								create session before SaveChanges, like the standard Manage
+								Customer Returns app (CreateOrderService.js#_patchSessionContact) -
+								never via CreatePartner (only one CP allowed, VPD/012). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
@@ -426,6 +427,7 @@
 									editable="{= ${orderUi>/fields/detailsReturnType/editable} !== false }"
 									enabled="{createState>/providerChosen}"
 									tooltip="{i18n>returnTypeLockedTooltip}"
+									change=".onReturnTypeChange"
 									items="{returnTypes>/list}">
 									<core:Item key="{returnTypes>key}" text="{returnTypes>text}" />
 								</ComboBox>
@@ -450,7 +452,8 @@
 								set SDDocumentReason (ReturnsSchema.headerProperties.orderReasonCode/
 								orderReasonText, navigation.headerToOrderReason, entitySets.orderReason) -
 								same convention as orders now (ADR-002 hazard #2 resolved). -->
-							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen
+								and, where the order type shows Return Type, on createState>/returnTypeChosen;
 								unaffected outside createMode (normal Change-Mode editing). -->
 							<VBox>
 								<layoutData>
@@ -459,9 +462,10 @@
 								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
 								<ComboBox
 									width="100%"
-									selectedKey="{SDDocumentReason}"
+									selectedKey="{path: 'SDDocumentReason', mode: 'OneWay'}"
 									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; (${createState>/returnTypeChosen} || ${orderUi>/fields/detailsReturnType/visible} === false)) }"
+									change=".onReturnReasonChange"
 									items="{path: '/SDDocumentReason'}">
 									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
 								</ComboBox>

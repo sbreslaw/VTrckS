@@ -22,6 +22,11 @@ sap.ui.define([], function () {
   // that must not be bypassed by personalization). Re-verify against a fresh
   // metadata dump before ever widening one of these, per AGENT_ONBOARDING §0.
   //
+  // `mandatoryHeader: true` marks the section that hosts the create-mode
+  // mandatory header fields (ServiceSchema.createMandatoryHeaderFields) - the
+  // only section SectionFactory.js keeps visible while that gate is closed
+  // (sectionFlags>/sectionsGateOpen === false).
+  //
   // `createCapable: false` marks a section that cannot bind against the
   // transient create-mode scratch context at all (today: partiesInvolved —
   // CreatePartner requires an already-persisted SalesOrderManageType
@@ -30,7 +35,7 @@ sap.ui.define([], function () {
   // (that is `expanded` under OrderModeConfig's `create` mode override, a
   // separate concern from "can it exist at all").
   var mSections = {
-    details: { id: "details", titleKey: "sectionDetails", fragment: "cdc.vaccreq.sections.Details", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
+    details: { id: "details", titleKey: "sectionDetails", fragment: "cdc.vaccreq.sections.Details", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true, mandatoryHeader: true },
     items: { id: "items", titleKey: "sectionItems", fragment: "cdc.vaccreq.sections.Items", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
     inventory: {
       id: "inventory",

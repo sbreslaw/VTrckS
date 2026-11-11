@@ -38,6 +38,15 @@ sap.ui.define([
       if (sUsedProfileId && sUsedProfileId !== oProfile.profileId) {
         Log.warning("ServiceSchema.use(): re-selecting profile '" + oProfile.profileId + "' over previously-used '" + sUsedProfileId + "' in the same browser session - only safe across a fresh Component re-launch, never within one running instance");
       }
+      // Drop the previous profile's keys first - a key only that profile
+      // defines would otherwise survive a cross-category relaunch (live:
+      // ReturnsSchema's f4Product leaked into Orders and put SalesOrganization
+      // filters on the Orders /Product lookup; defaultStatus seeded Orders creates).
+      Object.keys(ServiceSchema).forEach(function (sKey) {
+        if (sKey !== "use") {
+          delete ServiceSchema[sKey];
+        }
+      });
       Object.keys(oProfile).forEach(function (sKey) {
         ServiceSchema[sKey] = oProfile[sKey];
       });

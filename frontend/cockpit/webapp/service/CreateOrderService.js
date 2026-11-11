@@ -56,25 +56,30 @@ sap.ui.define([
   // Sales Order" app) ever sends on create. This whitelist is the ONLY
   // fields actually harvested onto the create payload (cleanItemPayload
   // below) - the six ZZ*QTY mirrors are Nullable="false" Int32s and must
-  // always be present (_addItemRows seeds them to 0).
-  var ITEM_PROPERTIES = [
-    ServiceSchema.itemProperties.material,
-    ServiceSchema.itemProperties.quantity,
-    ServiceSchema.itemProperties.unit,
-    ServiceSchema.itemProperties.exisId,
-    ServiceSchema.itemProperties.orderIntention,
-    ServiceSchema.itemProperties.fundType,
-    ServiceSchema.itemProperties.deliveryPriority,
-    ServiceSchema.itemProperties.vfcQty,
-    ServiceSchema.itemProperties.stateQty,
-    ServiceSchema.itemProperties.qty317,
-    ServiceSchema.itemProperties.chipQty,
-    ServiceSchema.itemProperties.panQty,
-    ServiceSchema.itemProperties.resQty,
-    // Return Orders session prompt 3.1/3.2.
-    ServiceSchema.itemProperties.batch,
-    ServiceSchema.itemProperties.expirationDate
-  ];
+  // always be present (_addItemRows seeds them to 0). Built per call, never
+  // captured at module load - the names differ per profile (same same-tab
+  // relaunch staleness as the header list above).
+  function getItemProperties() {
+    return [
+      ServiceSchema.itemProperties.material,
+      ServiceSchema.itemProperties.quantity,
+      ServiceSchema.itemProperties.unit,
+      ServiceSchema.itemProperties.exisId,
+      ServiceSchema.itemProperties.orderIntention,
+      ServiceSchema.itemProperties.fundType,
+      ServiceSchema.itemProperties.deliveryPriority,
+      ServiceSchema.itemProperties.vfcQty,
+      ServiceSchema.itemProperties.stateQty,
+      ServiceSchema.itemProperties.qty317,
+      ServiceSchema.itemProperties.chipQty,
+      ServiceSchema.itemProperties.panQty,
+      ServiceSchema.itemProperties.resQty,
+      // Return Orders session prompt 3.1/3.2.
+      ServiceSchema.itemProperties.batch,
+      ServiceSchema.itemProperties.expirationDate,
+      ServiceSchema.itemProperties.returnReason
+    ];
+  }
 
   // Never JSON.stringify the message model's data in a log statement —
   // sap.ui.core.message.Message#processor points back at this very model, so
@@ -168,15 +173,16 @@ sap.ui.define([
     return oParams;
   }
 
-  // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the ITEM_PROPERTIES
+  // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the getItemProperties()
   // whitelist above - replaces the old "strip OData annotation keys, keep
   // everything else" approach, which is what let SalesOrderItem/
   // SalesOrderItemText/ZZIndustryStandardName (plain property names, no
   // annotation characters to strip) leak into the create payload.
   function cleanItemPayload(oItemData) {
     var oClean = {};
+    var aItemProperties = getItemProperties();
     Object.keys(oItemData || {}).forEach(function (sProperty) {
-      if (ITEM_PROPERTIES.indexOf(sProperty) !== -1 && oItemData[sProperty] !== undefined) {
+      if (aItemProperties.indexOf(sProperty) !== -1 && oItemData[sProperty] !== undefined) {
         oClean[sProperty] = oItemData[sProperty];
       }
     });
@@ -253,7 +259,7 @@ sap.ui.define([
     // Exposed so Detail.controller.js can re-seed local scratch rows from
     // an orphaned session's row data (session-death recovery) with the
     // exact same whitelist this module itself replays - no second,
-    // drift-prone copy of ITEM_PROPERTIES.
+    // drift-prone copy of getItemProperties().
     cleanItemPayload: cleanItemPayload,
 
     // Enter create mode: a transient list-binding context bound to the whole
@@ -414,11 +420,22 @@ sap.ui.define([
     // them).
     postItem: function (oSession, oScratchContext, oItemData) {
       var oModel = oScratchContext.getModel();
+      var bReturns = ServiceSchema.profileId === "returns";
       return CreateOrderService._ensureSession(oSession, oScratchContext).then(function (oStickyContext) {
-        var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyContext, undefined, undefined, {
-          $$updateGroupId: ITEM_GROUP,
-          $select: "SAP__Messages"
-        });
+        var mItemsParameters = { $$updateGroupId: ITEM_GROUP };
+        // Returns: no SAP__Messages opt-in on this scaffolding binding - it
+        // makes the model re-read messages right after the empty POST below
+        // (live: "Enter a material for item 0000x0", V1/351), and those are
+        // reported under the model's canonical "<header>('')/_Item(...)"
+        // path, which no later read through the Items table's
+        // "(CustomerReturn='')" path ever clears (stale error per item).
+        // The Items table selects SAP__Messages itself and is refreshed
+        // right after this resolves; failures still report via the error
+        // response.
+        if (!bReturns) {
+          mItemsParameters.$select = "SAP__Messages";
+        }
+        var oItemsBinding = oModel.bindList(ServiceSchema.navigation.headerToItems, oStickyContext, undefined, undefined, mItemsParameters);
         // CONFIRMED BUG (live-tested, Returns, 2026-11-02): a single
         // _Item POST carrying Product+RequestedQuantity+RequestedQuantityUnit
         // all at once still 422s (/IWBEP/CM_V4S_RUN/000
@@ -433,7 +450,7 @@ sap.ui.define([
         // the single combined create() Orders (_ORD) still uses below
         // (never observed to need this, left unchanged to avoid regressing
         // a working flow).
-        if (ServiceSchema.profileId === "returns") {
+        if (bReturns) {
           var oClean = cleanItemPayload(oItemData);
           var sMaterialKey = ServiceSchema.itemProperties.material;
           var sUnitKey = ServiceSchema.itemProperties.unit;
@@ -655,7 +672,48 @@ sap.ui.define([
     // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
     // bound context - see the (still-applicable) v5 gotcha comment history
     // above for why a plain canonical-path context is required here instead.
+    // A failed in-session contact PATCH (_patchSessionContact) never blocks
+    // saving the order - it is reported as a partial failure after the commit.
     _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions) {
+      var oContactError = null;
+      return CreateOrderService._patchSessionContact(oModel, oCreateOptions).catch(function (oError) {
+        oContactError = oError;
+      }).then(function () {
+        return CreateOrderService._saveStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions, oContactError);
+      });
+    },
+
+    // Create-mode Contact, both profiles: as soon as the Sold-To is set the
+    // backend determines a blank Contact Person row (PartnerFunction "AP",
+    // shown as "CP" in English) and allows only one, so a CreatePartner after
+    // SaveChanges 400s (VPD/012, live 2026-11-11). Same as the standard
+    // Manage Customer Returns app: fill that row inside the sticky session,
+    // before SaveChanges (probed live on both services: GET/PATCH
+    // HeaderPartner(<order>='',PartnerFunction='AP') 200, ContactPerson "0"
+    // before). Read first (minimal $select): the V4 model only PATCHes an
+    // entity it has in its cache. ITEM_GROUP ($auto) keeps it out of
+    // SaveChanges' changeset ("Save not alone in changeset", see save() above).
+    _patchSessionContact: function (oModel, oCreateOptions) {
+      if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.contactPartnerFunction) {
+        return Promise.resolve();
+      }
+      var sProperty = ServiceSchema.headerPartnerProperties.contactPerson;
+      var oBinding = oModel.bindContext(ServiceSchema.buildHeaderPartnerPath("", ServiceSchema.contactPartnerFunction), undefined, {
+        $$updateGroupId: ITEM_GROUP,
+        $select: sProperty
+      });
+      var oContext = oBinding.getBoundContext();
+      return oContext.requestProperty(sProperty).then(function (sCurrent) {
+        if (sCurrent === oCreateOptions.contactId) {
+          return undefined;
+        }
+        return oContext.setProperty(sProperty, oCreateOptions.contactId);
+      }).finally(function () {
+        oBinding.destroy();
+      });
+    },
+
+    _saveStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions, oContactError) {
       // v5 gotcha, round 6 (live test, 2026-08-28): without an explicit
       // $$updateGroupId here (unlike its sibling contexts elsewhere in this
       // flow), this operation binding fell back to "$auto" instead of
@@ -734,25 +792,39 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
-            return CreateOrderService._replayContact(oNewContext, oCreateOptions);
+            if (oContactError) {
+              throw oContactError;
+            }
           }).then(function () {
             // Both SaveChanges above and this PATCH just succeeded,
             // each re-running the same backend validation - collapse
             // the resulting exact-duplicate messages (see
             // MessageExtractor.dedupeMessages doc comment).
             MessageExtractor.dedupeMessages();
-            // oScratchContext is a still-pending, never-submitted
-            // transient create (deferred "vrCreate" group, nothing
-            // was ever POSTed for it) - deleting it locally always
-            // rejects with "Request canceled", which is expected/
-            // benign here and must never surface as an uncaught error.
-            oScratchContext.delete().catch(function () {});
             // oNewContext was only ever bound to a path, never GET'd -
             // getProperty() on it is a synchronous cache read that
             // fails ("invalid segment") since nothing populated the
             // cache yet. Return the already-known sNewId alongside it
             // instead of making callers call getProperty() on it.
             return { context: oNewContext, orderId: sNewId };
+          }, function (oError) {
+            // SaveChanges above already committed sNewId - a failing
+            // follow-up step (header replay PATCH, CreatePartner) leaves a
+            // real, saved order behind (live, Returns: CreatePartner 400
+            // VPD/012 left the user on the create view of a saved order).
+            // Tag it so Detail.controller.js#onCreateSavePress takes its
+            // partial-failure path into that order instead of "nothing
+            // was created".
+            var oTagged = oError && typeof oError === "object" ? oError : new Error(String(oError));
+            oTagged.orderCreatedId = sNewId;
+            throw oTagged;
+          }).finally(function () {
+            // oScratchContext is a still-pending, never-submitted
+            // transient create (deferred "vrCreate" group, nothing
+            // was ever POSTed for it) - deleting it locally always
+            // rejects with "Request canceled", which is expected/
+            // benign here and must never surface as an uncaught error.
+            oScratchContext.delete().catch(function () {});
           });
         });
     },
@@ -780,35 +852,6 @@ sap.ui.define([
       }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
-    },
-
-    // Internal — persists the createMode Contact picker's selection
-    // (createEnrich>/contactId, Detail.controller.js#onContactValueHelpRequest)
-    // as a real "AP" HeaderPartner row. No header/item property for Contact
-    // exists (OPEN_QUESTIONS.md item 17 previously called this unconfirmed) -
-    // the only real write path is the same CreatePartner-bound-action-then-
-    // PATCH-Customer two-step already used by the Parties Involved section's
-    // own Add flow (Detail.controller.js#_onPartiesAddConfirm). Runs as its
-    // own batch (the action's response, with the new row's own key, must
-    // resolve before the follow-up PATCH can target it - unlike
-    // _replayHeaderProperties above, this can't be a single flat PATCH list).
-    _replayContact: function (oNewContext, oCreateOptions) {
-      if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.createPartnerAction || !ServiceSchema.contactPartnerFunction) {
-        return Promise.resolve();
-      }
-      var oModel = oNewContext.getModel();
-      var oActionBinding = oModel.bindContext(ServiceSchema.createPartnerAction + "(...)", oNewContext);
-      oActionBinding.setParameter("PartnerFunction", ServiceSchema.contactPartnerFunction);
-      // CREATE_REPLAY_GROUP is a manually-submitted ("API") group - execute()
-      // alone only queues the request; it never resolves without an explicit
-      // submitBatch, so that call must happen BEFORE awaiting the promise
-      // (awaiting first deadlocks the whole save chain forever).
-      var oExecutePromise = oActionBinding.execute(CREATE_REPLAY_GROUP);
-      oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via oExecutePromise below */ });
-      return oExecutePromise.then(function () {
-        oActionBinding.getBoundContext().setProperty(ServiceSchema.headerPartnerProperties.customer, oCreateOptions.contactId);
-        return oModel.submitBatch(CREATE_REPLAY_GROUP);
-      });
     },
 
     // Step ② — post-create enrichment action (description/status-if-changed/
