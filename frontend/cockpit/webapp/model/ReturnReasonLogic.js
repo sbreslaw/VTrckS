@@ -8,6 +8,7 @@
 // - Rule 2.1.2 (Item changed) + Completion (a) (if equal, revert from G99):
 //   headerAfterItemChange(aAllItemReasons)
 // - Completion (b) (Item deleted): headerAfterItemDelete(aRemainingItemReasons, sCurrentHeader)
+// - Completion (c) (Header changed by the user): itemReasonAfterHeaderChange(sNewHeaderReason)
 //
 // G99 ("Multiple Values") is the only code that appears in this module; it is injected
 // from ServiceSchema (never a literal) to keep it repo-searchable and centralized.
@@ -96,6 +97,23 @@ sap.ui.define([], function () {
       // Items differ → header = G99
       var oServiceSchema = sap.ui.require("cdc/vaccreq/model/ServiceSchema");
       return oServiceSchema && oServiceSchema.headerProperties && oServiceSchema.headerProperties.orderReasonMultiple;
+    },
+
+    // Completion (c), broadcast variant (user decision 2026-11-11): a header
+    // reason the user picks is written to every item - except G99, which only
+    // summarizes mixed items and is never an item value (session prompt §2
+    // "header change ≠ G99 → set every item to it").
+    // Inputs:
+    //   sNewHeaderReason: the header SDDocumentReason the user just selected
+    // Returns:
+    //   the ReasonCode to write on every item, or undefined (no item rewrite)
+    itemReasonAfterHeaderChange: function (sNewHeaderReason) {
+      var oServiceSchema = sap.ui.require("cdc/vaccreq/model/ServiceSchema");
+      var sG99 = oServiceSchema && oServiceSchema.headerProperties && oServiceSchema.headerProperties.orderReasonMultiple;
+      if (!sNewHeaderReason || sNewHeaderReason === sG99) {
+        return undefined;
+      }
+      return sNewHeaderReason;
     }
   };
 });

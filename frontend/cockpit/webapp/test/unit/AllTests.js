@@ -1,5 +1,6 @@
 sap.ui.define([
   "cdc/vaccreq/test/unit/model/ItemDetailBinding.qunit",
+  "cdc/vaccreq/test/unit/model/ReturnReasonLogic.qunit",
   "cdc/vaccreq/test/unit/model/SectionsCatalog.qunit"
 ], function () {
   "use strict";

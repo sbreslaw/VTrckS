@@ -727,11 +727,112 @@ sap.ui.define([
     // when a valid reason is selected, permitting the Items section to be
     // enabled (gated on all three mandatory header fields:
     // createState>/providerChosen && /returnTypeChosen && /returnReasonChosen).
+    //
+    // E008_Returns_ItemReturnReason completion (c), broadcast variant (user
+    // decision 2026-11-11): a header reason the user picks overwrites every
+    // item's ReasonCode (ReturnReasonLogic.itemReasonAfterHeaderChange - never
+    // for G99), behind an explicit confirmation whenever at least one item
+    // would actually change. selectedKey is OneWay (returns/Details.fragment
+    // .xml), so nothing is written before that; Cancel just puts the control
+    // back on the unchanged model value.
     onReturnReasonChange: function (oEvent) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
       var oCombo = oEvent.getSource();
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext) {
+        return;
+      }
       var oSelectedItem = oCombo.getSelectedItem();
-      var sReturnReasonChosen = !!(oSelectedItem && oSelectedItem.getKey());
-      this.getView().getModel("createState").setProperty("/returnReasonChosen", sReturnReasonChosen);
+      var sNewReason = oSelectedItem ? oSelectedItem.getKey() : "";
+      var sCurrentReason = oHeaderContext.getProperty(ServiceSchema.headerProperties.orderReason) || "";
+      if (sNewReason === sCurrentReason) {
+        return;
+      }
+      var sItemReason = ServiceSchema.itemProperties.returnReason
+        ? ReturnReasonLogic.itemReasonAfterHeaderChange(sNewReason)
+        : undefined;
+      var pItems = sItemReason ? this._requestReturnReasonItemContexts() : Promise.resolve([]);
+      pItems.then(function (aContexts) {
+        var aOverwrite = aContexts.filter(function (oRowContext) {
+          return oRowContext.getProperty(ServiceSchema.itemProperties.returnReason) !== sItemReason;
+        });
+        if (!aOverwrite.length) {
+          that._applyHeaderReturnReason(sNewReason, []);
+          return;
+        }
+        MessageBox.warning(oBundle.getText("headerReturnReasonOverwriteConfirm", [aOverwrite.length, oSelectedItem.getText()]), {
+          title: oBundle.getText("headerReturnReasonOverwriteTitle"),
+          actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+          emphasizedAction: MessageBox.Action.OK,
+          onClose: function (sAction) {
+            if (sAction === MessageBox.Action.OK) {
+              that._applyHeaderReturnReason(sNewReason, aOverwrite);
+            } else {
+              oCombo.setSelectedKey(sCurrentReason);
+            }
+          }
+        });
+      }).catch(function (oError) {
+        oCombo.setSelectedKey(sCurrentReason);
+        var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
+        aSectionIds.forEach(function (sId) {
+          that._oSectionFactory.expandSection(sId);
+        });
+        that._openMessagePopover();
+      });
+    },
+
+    // Writes the confirmed header reason plus the item overwrites, each item
+    // through the shared _applyReturnReasonValue in its own row's group
+    // ($auto session / scratch in create mode, "vrEdit" in change mode).
+    _applyHeaderReturnReason: function (sNewReason, aItemContexts) {
+      var that = this;
+      this._updateHeaderReturnReason(sNewReason);
+      aItemContexts.forEach(function (oRowContext) {
+        var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+        that._applyReturnReasonValue(oRowContext, sNewReason).catch(function (oError) {
+          // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
+          if (oError && oError.canceled) {
+            return;
+          }
+          that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+        });
+      });
+      this.getView().getModel("createState").setProperty("/returnReasonChosen", !!sNewReason);
+    },
+
+    // Rows a header broadcast rewrites - same filter as _getItemReasonsArray
+    // (has a Product, not an ancillary child). In change mode the Details
+    // edit can run while the Items section was never expanded (no table
+    // binding yet): read the items then through the header's own update
+    // group, so Details Save/Cancel commits/reverts them with the header.
+    _requestReturnReasonItemContexts: function () {
+      var oProps = ServiceSchema.itemProperties;
+      var fnIsReasonItem = function (oRowContext) {
+        return !!oRowContext.getProperty(oProps.material) && !oRowContext.getProperty(oProps.higherLevelItem);
+      };
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oTableBinding = oTable && oTable.getBinding("items");
+      if (oTableBinding) {
+        return Promise.resolve(oTableBinding.getCurrentContexts().filter(fnIsReasonItem));
+      }
+      var oHeaderContext = this.getView().getBindingContext();
+      if (!oHeaderContext || this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        return Promise.resolve([]);
+      }
+      if (!this._oReturnReasonItemsBinding || this._oReturnReasonItemsBinding.getContext() !== oHeaderContext) {
+        if (this._oReturnReasonItemsBinding) {
+          this._oReturnReasonItemsBinding.destroy();
+        }
+        this._oReturnReasonItemsBinding = oHeaderContext.getModel().bindList(ServiceSchema.navigation.headerToItems, oHeaderContext, undefined, undefined, {
+          $$updateGroupId: ServiceSchema.editUpdateGroup,
+          $select: [oProps.material, oProps.higherLevelItem, oProps.returnReason].filter(Boolean).join(",")
+        });
+      }
+      return this._oReturnReasonItemsBinding.requestContexts(0, Infinity).then(function (aContexts) {
+        return aContexts.filter(fnIsReasonItem);
+      });
     },
 
     // Sections whose display Text reads a code's expanded to-one nav-property
@@ -2418,13 +2519,19 @@ sap.ui.define([
       
       // Validate the code (no empty codes, check against the VH list)
       if (!sNewValue) {
-        sap.ui.core.MessageBox.warning(oBundle.getText("itemReturnReasonInvalid"));
+        MessageBox.warning(oBundle.getText("itemReturnReasonInvalid"));
         oSelect.setSelectedKey((oRowContext.getProperty(ServiceSchema.itemProperties.returnReason)) || "");
         return;
       }
       
       // Apply the new value to the item row
-      this._applyReturnReasonValue(oRowContext, sNewValue);
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+      this._applyReturnReasonValue(oRowContext, sNewValue).catch(function (oError) {
+        if (oError && oError.canceled) {
+          return;
+        }
+        that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      });
       
       // Compute the new header reason using ReturnReasonLogic
       // Must defer to allow the binding to update with the new value
@@ -2449,18 +2556,29 @@ sap.ui.define([
     // (part of §5.3 wiring for return reason interdependency - completion (b)).
     // Uses the header context from the view binding, which is already in the correct update group.
     _updateHeaderReturnReason: function (sNewValue) {
+      var that = this;
       var oHeaderContext = this.getView().getBindingContext();
       if (!oHeaderContext) {
         return;
       }
-      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue);
+      oHeaderContext.setProperty(ServiceSchema.headerProperties.orderReason, sNewValue).catch(function (oError) {
+        // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
+        if (oError && oError.canceled) {
+          return;
+        }
+        var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), that.getResourceBundle());
+        aSectionIds.forEach(function (sId) {
+          that._oSectionFactory.expandSection(sId);
+        });
+        that._openMessagePopover();
+      });
     },
     // Shared pattern with _applyQtyValue, _applyNdcValue, etc.
     _applyReturnReasonValue: function (oRowContext, sValue) {
       if (!oRowContext) {
-        return;
+        return Promise.resolve();
       }
-      oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sValue);
+      return oRowContext.setProperty(ServiceSchema.itemProperties.returnReason, sValue);
     },
 
     // Helper: get array of all item ReasonCode values (for _RET only, null on _ORD).
