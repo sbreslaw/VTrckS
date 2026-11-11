@@ -451,7 +451,8 @@
 								set SDDocumentReason (ReturnsSchema.headerProperties.orderReasonCode/
 								orderReasonText, navigation.headerToOrderReason, entitySets.orderReason) -
 								same convention as orders now (ADR-002 hazard #2 resolved). -->
-							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen;
+							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen
+								and, where the order type shows Return Type, on createState>/returnTypeChosen;
 								unaffected outside createMode (normal Change-Mode editing). -->
 							<VBox>
 								<layoutData>
@@ -462,7 +463,7 @@
 									width="100%"
 									selectedKey="{path: 'SDDocumentReason', mode: 'OneWay'}"
 									visible="{sectionFlags>/details/editing}"
-									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; ${createState>/returnTypeChosen}) }"
+									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; (${createState>/returnTypeChosen} || ${orderUi>/fields/detailsReturnType/visible} === false)) }"
 									change=".onReturnReasonChange"
 									items="{path: '/SDDocumentReason'}">
 									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />

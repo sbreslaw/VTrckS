@@ -96,6 +96,17 @@ sap.ui.define([
       orderId: "CustomerReturn"
     },
 
+    // Create mode: header fields that must have a value before any section
+    // other than Details is shown (code-owner requirement, Returns: Provider,
+    // Return Type, Return Reason). `field` is a headerProperties key; `uiField`
+    // is the orderUi>/fields/<id> entry that can hide it per order type - a
+    // field hidden for the type (e.g. Return Type on ZXFR/ZWST) is not required.
+    createMandatoryHeaderFields: [
+      { field: "providerId" },
+      { field: "returnType", uiField: "detailsReturnType" },
+      { field: "orderReason", uiField: "orderReason" }
+    ],
+
     headerProperties: {
       providerId: "SoldToParty",
       providerName: "SoldToPartyName",

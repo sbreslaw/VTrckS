@@ -430,6 +430,7 @@
 									selectedKey="{SDDocumentReason}"
 									visible="{sectionFlags>/details/editing}"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									change=".onMandatoryHeaderFieldChange"
 									items="{path: '/SDDocumentReason'}">
 									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
 								</ComboBox>

@@ -165,7 +165,7 @@ sap.ui.define([
       // since the header's own _OverallDeliveryStatus/
       // _OverallDeliveryBlockStatus navigation cannot resolve against the
       // transient createMode scratch context (client requirement 2026-10-01).
-      this.getView().setModel(new JSONModel({ providerChosen: false, returnTypeChosen: false, returnReasonChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
+      this.getView().setModel(new JSONModel({ providerChosen: false, returnTypeChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       // 3.3: client-side-only SUM of item TaxAmount - never a real header
       // property, see _computeHeaderTaxAmount.
@@ -711,22 +711,19 @@ sap.ui.define([
       }
     },
 
-    // Gate the Items section: Return Type (ZZ1_VaccineReturnType_SDH) must be
-    // selected before items can be added. Set createState>/returnTypeChosen
-    // when a valid type is selected, permitting further item entry and the
-    // Return Reason gate to become active.
+    // Return Type (ZZ1_VaccineReturnType_SDH, TwoWay) is a mandatory header
+    // field on Returns: createState>/returnTypeChosen enables the Return
+    // Reason ComboBox, and the section gate is re-evaluated.
     onReturnTypeChange: function (oEvent) {
       var oCombo = oEvent.getSource();
       var oSelectedItem = oCombo.getSelectedItem();
       var sReturnTypeChosen = !!(oSelectedItem && oSelectedItem.getKey());
       this.getView().getModel("createState").setProperty("/returnTypeChosen", sReturnTypeChosen);
+      this._updateSectionsGate();
     },
 
-    // Gate the Items section: Return Reason (SDDocumentReason) must be
-    // selected before items can be added. Set createState>/returnReasonChosen
-    // when a valid reason is selected, permitting the Items section to be
-    // enabled (gated on all three mandatory header fields:
-    // createState>/providerChosen && /returnTypeChosen && /returnReasonChosen).
+    // Return Reason (SDDocumentReason) is a mandatory header field on Returns
+    // - _applyHeaderReturnReason re-evaluates the section gate after writing.
     //
     // E008_Returns_ItemReturnReason completion (c), broadcast variant (user
     // decision 2026-11-11): a header reason the user picks overwrites every
@@ -799,7 +796,7 @@ sap.ui.define([
           that._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
         });
       });
-      this.getView().getModel("createState").setProperty("/returnReasonChosen", !!sNewReason);
+      this._updateSectionsGate();
     },
 
     // Rows a header broadcast rewrites - same filter as _getItemReasonsArray
@@ -2789,6 +2786,9 @@ sap.ui.define([
     _setCreateMode: function (bOn) {
       var oFlags = this.getView().getModel("sectionFlags");
       oFlags.setProperty("/createMode", bOn);
+      // Closed for a fresh create until _updateSectionsGate finds every
+      // mandatory header field filled; always open outside create mode.
+      oFlags.setProperty("/sectionsGateOpen", !bOn);
       this._resetProviderInventoryState();
       // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): all createMode
       // sections are editable immediately — there is no separate
@@ -2802,7 +2802,6 @@ sap.ui.define([
         this.getView().getModel("shippingEdit").setData({ providerName: "", addresses: [], createAddressKey: "", busy: false });
         this.getView().getModel("createState").setProperty("/providerChosen", false);
         this.getView().getModel("createState").setProperty("/returnTypeChosen", false);
-        this.getView().getModel("createState").setProperty("/returnReasonChosen", false);
         this.getView().getModel("createState").setProperty("/deliveryStatusText", "");
         this.getView().getModel("createState").setProperty("/deliveryBlockStatusText", "");
         this._lookupCreateModeStatusTexts();
@@ -3811,6 +3810,7 @@ sap.ui.define([
         }
       });
       this.getView().getModel("createState").setProperty("/providerChosen", true);
+      this._updateSectionsGate();
       this._prefillMainContact(oItem.id);
       this._resetProviderInventoryState();
       this._setProviderValueState(true);
@@ -5032,7 +5032,7 @@ sap.ui.define([
       // true only for the lifetime of the "create" route; SectionFactory.js and
       // the fragments both read it directly (design/prompts/CRUD Task 1 Prompt v3.md
       // "sectionFlags gains a createMode dimension").
-      var oData = { createMode: false };
+      var oData = { createMode: false, sectionsGateOpen: true };
       this._aSectionMeta.forEach(function (oMeta) {
         if (oMeta.editable) {
           oData[oMeta.id] = { editVisible: true, editEnabled: !!oMeta.editLive };
@@ -5047,7 +5047,8 @@ sap.ui.define([
     _createSectionsNavModel: function () {
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true };
+        // `gated`: hidden with its panel while sectionFlags>/sectionsGateOpen is false.
+        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true, gated: !oMeta.mandatoryHeader };
       });
       return new JSONModel({ list: aList });
     },
@@ -5264,19 +5265,60 @@ sap.ui.define([
       this._resetItemsTableForCreate();
       this._addInitialCreateItemRows();
       this._bindDetailHeader();
-      // All createMode-visible sections are expanded/loaded simultaneously —
-      // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
-      // Prompt v3.md "Sections in edit simultaneously"). Order-type-hidden
-      // sections are skipped; which visible sections start expanded is the
-      // resolved "create" mode's `expanded` flag (OrderModeConfig.js
-      // SECTION_CREATE_EXPANDED, migrated from the old SectionConfig.js
-      // `createVisible`). _applyOrderUi above already resolved this (createMode
-      // is already true at this point) and cached it on _aResolvedSections.
+      this._expandCreateSections();
+      this._updateSectionsGate();
+    },
+
+    // All createMode-visible sections are expanded/loaded simultaneously —
+    // no per-section Edit buttons in createMode (design/prompts/CRUD Task 1
+    // Prompt v3.md "Sections in edit simultaneously"). Order-type-hidden
+    // sections are skipped; which visible sections start expanded is the
+    // resolved "create" mode's `expanded` flag (OrderModeConfig.js
+    // SECTION_CREATE_EXPANDED, migrated from the old SectionConfig.js
+    // `createVisible`). _applyOrderUi already resolved this (createMode is
+    // already true at that point) and cached it on _aResolvedSections.
+    // Sections still hidden by the mandatory-header gate are skipped here
+    // (expandSection ignores hidden panels) and expanded by
+    // _updateSectionsGate once it opens.
+    _expandCreateSections: function () {
       (this._aResolvedSections || []).forEach(function (oResolved) {
         if (oResolved.visible && oResolved.expanded) {
           this._oSectionFactory.expandSection(oResolved.id);
         }
       }, this);
+    },
+
+    // Create-mode section gate (code-owner requirement): every section but
+    // Details (SectionCatalog `mandatoryHeader`) stays hidden - panel and
+    // anchor link - until each of the profile's mandatory header fields
+    // (ServiceSchema.createMandatoryHeaderFields) has a value on the header
+    // context; a field the order type hides (orderUi>/fields/<uiField>) is
+    // not required. Called after every write to one of those fields.
+    _updateSectionsGate: function () {
+      var oFlags = this.getView().getModel("sectionFlags");
+      var bWasOpen = oFlags.getProperty("/sectionsGateOpen") !== false;
+      var bOpen = !oFlags.getProperty("/createMode") || this._hasMandatoryHeaderFields();
+      oFlags.setProperty("/sectionsGateOpen", bOpen);
+      if (bOpen && !bWasOpen) {
+        this._expandCreateSections();
+      }
+    },
+
+    _hasMandatoryHeaderFields: function () {
+      var oContext = this.getView().getBindingContext();
+      var oOrderUi = this.getView().getModel("orderUi").getData();
+      return !!oContext && (ServiceSchema.createMandatoryHeaderFields || []).every(function (oField) {
+        if (oField.uiField && !OrderModeConfig.uiFlag(oOrderUi, "fields", oField.uiField, "visible")) {
+          return true;
+        }
+        return !!oContext.getProperty(ServiceSchema.headerProperties[oField.field]);
+      });
+    },
+
+    // Orders' header Reason ComboBox (TwoWay, no other handler) - the model
+    // already holds the new value when this fires.
+    onMandatoryHeaderFieldChange: function () {
+      this._updateSectionsGate();
     },
 
     // "create" while the createMode flag is on; "edit" while any editLive

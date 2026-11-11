@@ -138,9 +138,16 @@ sap.ui.define([
         headerToolbar: oToolbar,
         expandable: true,
         expanded: iIndex === 0 || !!oMeta.expanded,
+        // <flags>>/sectionsGateOpen (Detail.controller.js#_updateSectionsGate):
+        // false only in create mode until the mandatory header fields are
+        // filled - every section except the one hosting them (catalog
+        // `mandatoryHeader`) stays hidden, so it never loads its fragment.
+        // Undefined (e.g. ItemDetail's flags model) means open.
         visible: {
-          path: this._sOrderUiModel + ">/sections/" + oMeta.id + "/visible",
-          formatter: function (bVisible) { return bVisible !== false; }
+          parts: [this._sOrderUiModel + ">/sections/" + oMeta.id + "/visible", sFlags + ">/sectionsGateOpen"],
+          formatter: function (bVisible, bGateOpen) {
+            return bVisible !== false && (!!oMeta.mandatoryHeader || bGateOpen !== false);
+          }
         },
         expand: this._oView.getController().onExpandPanel.bind(this._oView.getController())
       });

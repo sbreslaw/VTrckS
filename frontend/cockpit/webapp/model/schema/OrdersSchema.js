@@ -122,6 +122,14 @@ sap.ui.define([
       // is NOT draft-enabled. See NOTES.md "P1 Draft-Key Check" and PHASE2_AUDIT.md.
     },
 
+    // Create mode: header fields that must have a value before any section
+    // other than Details is shown (code-owner requirement, Provider Orders:
+    // Provider, Reason). Same shape as ReturnsSchema.createMandatoryHeaderFields.
+    createMandatoryHeaderFields: [
+      { field: "providerId" },
+      { field: "orderReason", uiField: "orderReason" }
+    ],
+
     headerProperties: {
       providerId: "SoldToParty",
       providerName: "CustomerName",
