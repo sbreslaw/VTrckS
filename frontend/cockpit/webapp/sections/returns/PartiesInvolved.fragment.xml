@@ -1,7 +1,7 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
   <!-- ADR-002 returns variant of PartiesInvolved.fragment.xml (loaded by
-       SectionFactory.js#_loadFragment for profileId "returns"; shown on ZKR
-       only and not in create mode, OrderModeConfig.js). Read-only: no row
+       SectionFactory.js#_loadFragment for profileId "returns"; shown on every
+       return type but not in create mode, OrderModeConfig.js). Read-only: no row
        actions, no Add/Change/Delete, no createMode note. Rows = the header's
        `_Partner` navigation (HeaderPartnerType, ui_customerreturnmanage_2026-11-09.xml).
        Partner ID, Address and Main Partner are formatter.js rules

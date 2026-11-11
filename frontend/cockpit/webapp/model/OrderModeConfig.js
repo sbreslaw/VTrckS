@@ -149,10 +149,18 @@ sap.ui.define([
     // real, raw-code-only property on CustomerReturnManageType (confirmed
     // live, 2026-10-28 metadata); sections/returns/Shipping.fragment.xml maps
     // it instead of orders' _OverallDeliveryBlockStatus text lookup (which
-    // does not exist on this service). Every other PROVIDER_ORDER_UI_HIDDEN
-    // section stays hidden for _RET.
+    // does not exist on this service).
+    // prompts/E008_Returns_ZKR_Sections_Session_Prompt.md (widened to every
+    // return type, code owner 2026-11-11): read-only Price Totals, Org Data and
+    // Parties Involved from the sections/returns/* variants, collapsed on open
+    // and in create (expanded:false beats SECTION_CREATE_EXPANDED); Parties is
+    // hidden in create (createCapable:false in the catalog is informational only).
+    // Every other PROVIDER_ORDER_UI_HIDDEN section stays hidden for _RET.
     sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections, {
-      shipping: { visible: true, locked: false }
+      shipping: { visible: true, locked: false },
+      priceTotals: { visible: true, locked: false, editable: false, expanded: false },
+      orgData: { visible: true, locked: false, editable: false, expanded: false },
+      partiesInvolved: { visible: true, locked: false, editable: false, expanded: false, byMode: { create: { visible: false } } }
     })
   };
 
@@ -301,15 +309,7 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, RETURNS_UI_HIDDEN.columns),
-        // ZKR only (prompts/E008_Returns_ZKR_Sections_Session_Prompt.md):
-        // read-only sections from the sections/returns/* variants, collapsed
-        // on open and in create (expanded:false beats SECTION_CREATE_EXPANDED).
-        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections, {
-          priceTotals: { visible: true, locked: false, editable: false, expanded: false },
-          orgData: { visible: true, locked: false, editable: false, expanded: false },
-          // createCapable:false in the catalog is informational only; this hides it in create.
-          partiesInvolved: { visible: true, locked: false, editable: false, expanded: false, byMode: { create: { visible: false } } }
-        })
+        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections)
       }
     }
   };

@@ -67,9 +67,10 @@ sap.ui.define([
       product: "C_CustRetProdBySlsOrgDistrChnl",
       customerPurchaseOrderType: null,
       partnerFunction: "PartnerFunction",
-      // 2026-11-11: _Partner reads (navigation and $expand) return 200 on ZKR
-      // documents (60000000, 619000510); the read-only Parties section
-      // (sections/returns/PartiesInvolved.fragment.xml) is shown on ZKR only.
+      // 2026-11-11: _Partner reads (navigation and $expand) return 200 on
+      // ZKR/ZISL/ZWST/ZXFR documents (619000510, 600248105, 619000505,
+      // 619000508); the read-only Parties section
+      // (sections/returns/PartiesInvolved.fragment.xml) is shown on every return type.
       headerPartner: "HeaderPartner",
       deliveryStatus: null,
       deliveryBlockStatus: null,
@@ -387,7 +388,7 @@ sap.ui.define([
     // confirmed identical names on this service; the properties sub-map uses
     // this service's own (slightly different) field names, rest null.
     // The header table is the returns variant sections/returns/PriceTotals.
-    // fragment.xml (shown on ZKR only, OrderModeConfig.js), which binds these
+    // fragment.xml (every return type, OrderModeConfig.js), which binds these
     // names directly.
     pricingElements: {
       headerEntitySet: "HeaderPricingElement",

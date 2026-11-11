@@ -1,7 +1,7 @@
 <core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
   <!-- ADR-002 returns variant of PriceTotals.fragment.xml (loaded by
-       SectionFactory.js#_loadFragment for profileId "returns"; shown on ZKR
-       only, OrderModeConfig.js). Read-only HeaderPricingElement rows via the
+       SectionFactory.js#_loadFragment for profileId "returns"; shown on every
+       return type, OrderModeConfig.js). Read-only HeaderPricingElement rows via the
        header's `_PricingElement` navigation (ui_customerreturnmanage_2026-11-09.xml).
        Columns are static here, so Detail.controller.js#_onSectionContentLoaded's
        PricingColumns.bindTable() call leaves this table alone (it only builds

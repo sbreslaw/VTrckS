@@ -49,18 +49,17 @@ sap.ui.define([], function () {
     shipping: { id: "shipping", titleKey: "sectionShipping", fragment: "cdc.vaccreq.sections.Shipping", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
     shippingTransactions: { id: "shippingTransactions", titleKey: "sectionShippingTransactions", fragment: "cdc.vaccreq.sections.ShippingTransactions", editable: false, profiles: ["orders"], createCapable: true },
     transactionHistory: { id: "transactionHistory", titleKey: "sectionTransactionHistory", fragment: "cdc.vaccreq.sections.TransactionHistory", editable: false, profiles: ["orders"], createCapable: true },
-    // Returns: read-only variant sections/returns/OrgData.fragment.xml (ZKR only).
+    // Returns: read-only variant sections/returns/OrgData.fragment.xml (every return type).
     orgData: { id: "orgData", titleKey: "sectionOrgData", fragment: "cdc.vaccreq.sections.OrgData", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
-    // Returns: sections/returns/PriceTotals.fragment.xml (own column set);
-    // visible on ZKR only, hidden + locked for the other _RET types
-    // (OrderModeConfig.js).
+    // Returns: sections/returns/PriceTotals.fragment.xml (own column set),
+    // every return type (OrderModeConfig.js RETURNS_UI_HIDDEN.sections).
     priceTotals: { id: "priceTotals", titleKey: "sectionPriceTotals", fragment: "cdc.vaccreq.sections.PriceTotals", editable: false, profiles: ["orders", "returns"], createCapable: true },
     paymentMethod: { id: "paymentMethod", titleKey: "sectionPaymentMethod", fragment: "cdc.vaccreq.sections.PaymentMethod", editable: true, profiles: ["orders"], createCapable: true },
     scheduledActions: { id: "scheduledActions", titleKey: "sectionScheduledActions", fragment: "cdc.vaccreq.sections.ScheduledActions", editable: false, profiles: ["orders"], createCapable: true },
     status: { id: "status", titleKey: "sectionStatus", fragment: "cdc.vaccreq.sections.Status", editable: false, profiles: ["orders"], createCapable: true },
     dates: { id: "dates", titleKey: "sectionDates", fragment: "cdc.vaccreq.sections.Dates", editable: false, profiles: ["orders"], createCapable: true },
     // Returns: read-only variant sections/returns/PartiesInvolved.fragment.xml
-    // (ZKR only; hidden there in create mode by a byMode override, OrderModeConfig.js).
+    // (every return type; hidden in create mode by a byMode override, OrderModeConfig.js).
     partiesInvolved: { id: "partiesInvolved", titleKey: "sectionPartiesInvolved", fragment: "cdc.vaccreq.sections.PartiesInvolved", editable: false, profiles: ["orders", "returns"], createCapable: false },
     attachments: { id: "attachments", titleKey: "sectionAttachments", fragment: "cdc.vaccreq.sections.Attachments", editable: false, profiles: ["orders"], createCapable: true }
     // Billing intentionally excluded (client request, 2026-10-01 — Billing.fragment.xml

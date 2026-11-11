@@ -4,8 +4,8 @@
   xmlns:f="sap.ui.layout.form"
   xmlns:l="sap.ui.layout">
 	<!-- ADR-002 returns variant of OrgData.fragment.xml (loaded by
-			SectionFactory.js#_loadFragment for profileId "returns"; shown on ZKR
-			only, OrderModeConfig.js). Read-only: no edit controls and no
+			SectionFactory.js#_loadFragment for profileId "returns"; shown on every
+			return type, OrderModeConfig.js). Read-only: no edit controls and no
 			sectionFlags editing/createMode bindings - the section has no Edit
 			button on returns (editable:false) and nothing here is replayed at
 			create. Same Form/layout as the returns Details section. Each field
