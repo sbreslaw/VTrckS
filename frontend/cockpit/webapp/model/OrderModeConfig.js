@@ -301,7 +301,12 @@ sap.ui.define([
           detailsValue: { visible: false }
         },
         columns: Object.assign({}, RETURNS_UI_HIDDEN.columns),
-        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections)
+        // ZKR only (prompts/E008_Returns_ZKR_Sections_Session_Prompt.md):
+        // read-only sections from the sections/returns/* variants, collapsed
+        // on open and in create (expanded:false beats SECTION_CREATE_EXPANDED).
+        sections: Object.assign({}, RETURNS_UI_HIDDEN.sections, {
+          priceTotals: { visible: true, locked: false, editable: false, expanded: false }
+        })
       }
     }
   };

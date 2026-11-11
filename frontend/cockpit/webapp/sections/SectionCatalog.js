@@ -50,10 +50,9 @@ sap.ui.define([], function () {
     shippingTransactions: { id: "shippingTransactions", titleKey: "sectionShippingTransactions", fragment: "cdc.vaccreq.sections.ShippingTransactions", editable: false, profiles: ["orders"], createCapable: true },
     transactionHistory: { id: "transactionHistory", titleKey: "sectionTransactionHistory", fragment: "cdc.vaccreq.sections.TransactionHistory", editable: false, profiles: ["orders"], createCapable: true },
     orgData: { id: "orgData", titleKey: "sectionOrgData", fragment: "cdc.vaccreq.sections.OrgData", editable: true, editLive: true, profiles: ["orders"], createCapable: true },
-    // NOTES.md 2026-11-05 (VTrckS@21882e9): ReturnsSchema.js already declares
-    // pricingElements.properties for HeaderPricingElementType — technically
-    // profile-safe — but the section stays business-hidden (locked) for
-    // every _RET type until a decision to unhide it.
+    // Returns: sections/returns/PriceTotals.fragment.xml (own column set);
+    // visible on ZKR only, hidden + locked for the other _RET types
+    // (OrderModeConfig.js).
     priceTotals: { id: "priceTotals", titleKey: "sectionPriceTotals", fragment: "cdc.vaccreq.sections.PriceTotals", editable: false, profiles: ["orders", "returns"], createCapable: true },
     paymentMethod: { id: "paymentMethod", titleKey: "sectionPaymentMethod", fragment: "cdc.vaccreq.sections.PaymentMethod", editable: true, profiles: ["orders"], createCapable: true },
     scheduledActions: { id: "scheduledActions", titleKey: "sectionScheduledActions", fragment: "cdc.vaccreq.sections.ScheduledActions", editable: false, profiles: ["orders"], createCapable: true },

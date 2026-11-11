@@ -1,0 +1,46 @@
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+  <!-- ADR-002 returns variant of PriceTotals.fragment.xml (loaded by
+       SectionFactory.js#_loadFragment for profileId "returns"; shown on ZKR
+       only, OrderModeConfig.js). Read-only HeaderPricingElement rows via the
+       header's `_PricingElement` navigation (ui_customerreturnmanage_2026-11-09.xml).
+       Columns are static here, so Detail.controller.js#_onSectionContentLoaded's
+       PricingColumns.bindTable() call leaves this table alone (it only builds
+       a table that has no columns yet); the cell formatters are PricingColumns'
+       own, not a fork. Differences from the orders table (code-owner decisions,
+       2026-11-11): no "Unit" column, Price = ConditionRateAmount only (blank
+       when ConditionRateValueIsNull, same rule as End Value), Currency =
+       ConditionCurrency, Price Element ID after Currency, Yes/No text for the
+       two flags, Calculat. Type as text. -->
+  <Table id="priceTotalsTable" noDataText="{i18n>pricingTableEmpty}" growing="true" growingThreshold="20"
+    core:require="{PricingColumns: 'cdc/vaccreq/model/PricingColumns'}"
+    items="{path: '_PricingElement', sorter: [{path: 'PricingProcedureStep'}, {path: 'PricingProcedureCounter'}]}">
+    <columns>
+      <Column><Text text="{i18n>pricingColElement}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>pricingColPrice}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>pricingColPriceUnit}" /></Column>
+      <Column><Text text="{i18n>pricingColUom}" /></Column>
+      <Column hAlign="End"><Text text="{i18n>pricingColEndValue}" /></Column>
+      <Column><Text text="{i18n>pricingColCurrency}" /></Column>
+      <Column><Text text="{i18n>pricingColElementId}" /></Column>
+      <Column><Text text="{i18n>pricingColManuallyChanged}" /></Column>
+      <Column><Text text="{i18n>pricingColStatistical}" /></Column>
+      <Column><Text text="{i18n>pricingColCalculationType}" /></Column>
+    </columns>
+    <items>
+      <ColumnListItem>
+        <cells>
+          <Text text="{ConditionTypeName}" />
+          <Text text="{parts: [{path: 'ConditionRateValueIsNull'}, {path: 'ConditionRateAmount'}], formatter: 'PricingColumns.formatter.endValue', useRawValues: true}" />
+          <Text text="{parts: [{path: 'ConditionQuantity'}], formatter: 'PricingColumns.formatter.priceUnit', useRawValues: true}" />
+          <Text text="{ConditionQuantityUnit}" />
+          <Text text="{parts: [{path: 'ConditionAmountIsNull'}, {path: 'ConditionAmount'}], formatter: 'PricingColumns.formatter.endValue', useRawValues: true}" />
+          <Text text="{ConditionCurrency}" />
+          <Text text="{ConditionType}" />
+          <Text text="{= ${ConditionIsManuallyChanged} ? ${i18n>valueYes} : ${i18n>valueNo} }" />
+          <Text text="{= ${ConditionIsForStatistics} ? ${i18n>valueYes} : ${i18n>valueNo} }" />
+          <Text text="{_ConditionCalculationType/ConditionCalculationType_Text}" />
+        </cells>
+      </ColumnListItem>
+    </items>
+  </Table>
+</core:FragmentDefinition>

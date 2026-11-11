@@ -87,4 +87,31 @@ sap.ui.define([
     var aResolved = OrderModeConfig.resolveSections("NOT_A_TYPE", "display");
     assert.strictEqual(aResolved.length, SectionCatalog.all().length);
   });
+
+  // prompts/E008_Returns_ZKR_Sections_Session_Prompt.md: read-only sections
+  // on ZKR only, collapsed on open and in create.
+  function findSection(aResolved, sId) {
+    return aResolved.filter(function (o) { return o.id === sId; })[0];
+  }
+
+  QUnit.test("ZKR: Price Totals visible, read-only, collapsed in display and create", function (assert) {
+    ["display", "create"].forEach(function (sMode) {
+      var oPrice = findSection(OrderModeConfig.resolveSections("ZKR", sMode), "priceTotals");
+      assert.strictEqual(oPrice.visible, true, sMode + ": visible");
+      assert.strictEqual(oPrice.locked, false, sMode + ": not locked");
+      assert.strictEqual(oPrice.editable, false, sMode + ": no Edit button");
+      assert.strictEqual(oPrice.expanded, false, sMode + ": collapsed (per-type expanded beats SECTION_CREATE_EXPANDED)");
+    });
+  });
+
+  QUnit.test("ZISL/ZWST/ZXFR keep Price Totals hidden and locked; ZKB create still expands it", function (assert) {
+    ["ZISL", "ZWST", "ZXFR"].forEach(function (sType) {
+      var oPrice = findSection(OrderModeConfig.resolveSections(sType, "display"), "priceTotals");
+      assert.strictEqual(oPrice.visible, false, sType + ": hidden");
+      assert.strictEqual(oPrice.locked, true, sType + ": locked");
+    });
+    var oZkbCreate = findSection(OrderModeConfig.resolveSections("ZKB", "create"), "priceTotals");
+    assert.strictEqual(oZkbCreate.visible, true, "ZKB: visible");
+    assert.strictEqual(oZkbCreate.expanded, true, "ZKB: expanded in create (unchanged)");
+  });
 });

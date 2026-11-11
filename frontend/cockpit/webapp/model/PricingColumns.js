@@ -14,12 +14,13 @@ sap.ui.define([
   // Detail.controller.js (priceTotals section) and ItemDetail.controller.js
   // (itemPrices section) - zero duplicated column logic. Property literals
   // live in ServiceSchema.pricingElements; this module never re-spells them.
+  // The returns header table (sections/returns/PriceTotals.fragment.xml)
+  // declares its own columns and reuses only the formatters below.
   // Read fresh per call (never cached at module scope) - this module is a
   // long-lived singleton that can outlive a same-tab profile relaunch
-  // (_RET -> _ORD without a full reload), and the two profiles' step/
-  // counter differ (Returns: null, no pricing-procedure concept) - a
-  // module-level capture would silently go stale (confirmed live: creating
-  // a new _ORD order after viewing a _RET order threw inside Sorter).
+  // (_RET -> _ORD without a full reload), and the two profiles' names can
+  // differ - a module-level capture would silently go stale (confirmed live:
+  // creating a new _ORD order after viewing a _RET order threw inside Sorter).
 
   var oAmountFormat = NumberFormat.getFloatInstance({ minFractionDigits: 2, maxFractionDigits: 2, groupingEnabled: true });
   var oRatioFormat = NumberFormat.getFloatInstance({ minFractionDigits: 2, maxFractionDigits: 3, groupingEnabled: true });

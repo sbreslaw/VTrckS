@@ -388,6 +388,9 @@ sap.ui.define([
     // HeaderPricingElement/ItemPricingElement entity sets + navigations are
     // confirmed identical names on this service; the properties sub-map uses
     // this service's own (slightly different) field names, rest null.
+    // The header table is the returns variant sections/returns/PriceTotals.
+    // fragment.xml (shown on ZKR only, OrderModeConfig.js), which binds these
+    // names directly.
     pricingElements: {
       headerEntitySet: "HeaderPricingElement",
       itemEntitySet: "ItemPricingElement",
@@ -396,11 +399,12 @@ sap.ui.define([
       // 2026-10-27 metadata re-audit: rateValueIsNull/conditionQuantity/
       // conditionQuantityUnit/conditionAmountIsNull/transactionCurrency are all
       // confirmed real on Header/ItemPricingElementType (previously wrongly
-      // marked null/absent) - unmapped for PR1 (priceTotals section stays
-      // hidden for every _RET type regardless).
+      // marked null/absent).
       properties: {
-        step: null,
-        counter: null,
+        // Key parts of HeaderPricingElementType (ui_customerreturnmanage_2026-11-09.xml),
+        // live-confirmed 2026-11-11 on ZKR 619000510 (steps 15..80).
+        step: "PricingProcedureStep",
+        counter: "PricingProcedureCounter",
         // 2026-11-05 metadata re-audit (ui_customerreturnmanage_2026-11-04.xml):
         // ConditionType/ConditionCalculationType/ConditionIsForStatistics/
         // ConditionIsManuallyChanged all confirmed real on this service's own
