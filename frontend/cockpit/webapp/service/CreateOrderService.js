@@ -758,18 +758,30 @@ sap.ui.define([
             // the resulting exact-duplicate messages (see
             // MessageExtractor.dedupeMessages doc comment).
             MessageExtractor.dedupeMessages();
-            // oScratchContext is a still-pending, never-submitted
-            // transient create (deferred "vrCreate" group, nothing
-            // was ever POSTed for it) - deleting it locally always
-            // rejects with "Request canceled", which is expected/
-            // benign here and must never surface as an uncaught error.
-            oScratchContext.delete().catch(function () {});
             // oNewContext was only ever bound to a path, never GET'd -
             // getProperty() on it is a synchronous cache read that
             // fails ("invalid segment") since nothing populated the
             // cache yet. Return the already-known sNewId alongside it
             // instead of making callers call getProperty() on it.
             return { context: oNewContext, orderId: sNewId };
+          }, function (oError) {
+            // SaveChanges above already committed sNewId - a failing
+            // follow-up step (header replay PATCH, CreatePartner) leaves a
+            // real, saved order behind (live, Returns: CreatePartner 400
+            // VPD/012 left the user on the create view of a saved order).
+            // Tag it so Detail.controller.js#onCreateSavePress takes its
+            // partial-failure path into that order instead of "nothing
+            // was created".
+            var oTagged = oError && typeof oError === "object" ? oError : new Error(String(oError));
+            oTagged.orderCreatedId = sNewId;
+            throw oTagged;
+          }).finally(function () {
+            // oScratchContext is a still-pending, never-submitted
+            // transient create (deferred "vrCreate" group, nothing
+            // was ever POSTed for it) - deleting it locally always
+            // rejects with "Request canceled", which is expected/
+            // benign here and must never surface as an uncaught error.
+            oScratchContext.delete().catch(function () {});
           });
         });
     },

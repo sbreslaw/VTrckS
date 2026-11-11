@@ -4984,13 +4984,18 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           if (oError && oError.orderCreatedId) {
+            // SaveChanges' own messages plus the model's and the extractor's
+            // copy of the failing step's message - same collapse the
+            // success path runs (CreateOrderService.js#_commitStickySession).
+            MessageExtractor.dedupeMessages();
             // Enrichment failed but the order + its edits ARE committed —
             // exit createMode into the saved order; user completes the rest
             // via Change Mode (no compensating deletes). Message Accuracy &
             // Hygiene task: a tracked Messaging note, not a MessageToast, so
             // it shows in the same popover alongside the real backend
             // messages instead of a separate, easy-to-miss channel.
-            MessageExtractor.addNote(oBundle.getText("createPartialFailure", [oError.orderCreatedId]), "Information");
+            MessageExtractor.addNote(oBundle.getText("createPartialFailure",
+              [that.getView().getModel("orderUi").getProperty("/title"), oError.orderCreatedId]), "Information");
             that._openMessagePopover();
             that._completeCreate(oError.orderCreatedId);
           } else {
