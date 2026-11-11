@@ -5376,12 +5376,18 @@ sap.ui.define([
     // The only place `orderUi` is set. Create mode applies the route's type,
     // onInit the category's first type; an existing order re-applies from its OWN SalesOrderType
     // (_syncOrderUiFromContext) - deliberate, an order displays per its type.
+    // `orderUi>/sections` holds the RESOLVED state (OrderModeConfig.resolveSections
+    // for the current mode), not the raw per-type overrides, so a `byMode`
+    // override also reaches the panels (SectionFactory binds their `visible` to it).
     _applyOrderUi: function (sOrderType) {
       var oMode = OrderModeConfig.resolveOrderType(sOrderType);
       var oView = this.getView();
       this._sOrderType = oMode.orderType;
-      oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui));
-      this._applySectionResolution(oMode.orderType, this._currentSectionMode());
+      var mSections = {};
+      this._applySectionResolution(oMode.orderType, this._currentSectionMode()).forEach(function (oResolved) {
+        mSections[oResolved.id] = { visible: oResolved.visible, editable: oResolved.editable, locked: oResolved.locked };
+      });
+      oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui, { sections: mSections }));
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
       this._loadOrderStatusVH(oMode.orderType);
       this._loadCategoryOptions(oMode);
