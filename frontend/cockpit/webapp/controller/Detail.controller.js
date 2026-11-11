@@ -4935,10 +4935,10 @@ sap.ui.define([
           sNewId = oResult.orderId;
           var oEnrich = that.getView().getModel("createEnrich").getData();
           return CreateOrderService.saveNotes(oNewContext, oEnrich.notes).then(function () {
-            // contactId is no longer part of this payload - it's now a real,
-            // persisted HeaderPartner row (CreateOrderService.js#_replayContact,
-            // run earlier as part of save()), not pending on this still-blocked
-            // enrichment action.
+            // contactId is no longer part of this payload - it's written to
+            // the session's Contact Person row before SaveChanges
+            // (CreateOrderService.js#_patchSessionContact), not pending on
+            // this still-blocked enrichment action.
             return CreateOrderService.enrich(oNewContext, {
               employeeResponsibleId: oEnrich.employeeResponsibleId,
               status: oEnrich.status,

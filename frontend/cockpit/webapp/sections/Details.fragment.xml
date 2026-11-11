@@ -168,10 +168,11 @@
 								standalone query). Locked until a Provider is picked;
 								prefilled from the current IsStandardRelationship contact
 								when the Provider changes and still overridable through the
-								value help. Contact persistence is wired as of 2026-10-29
-								(CreateOrderService.js#_replayContact - a real "AP"
-								HeaderPartner row via createPartnerAction, same mechanism
-								as Parties Involved's own Add). -->
+								value help. Contact persists by PATCHing the backend-determined
+								Contact Person (HeaderPartner PartnerFunction AP) row inside the
+								create session before SaveChanges
+								(CreateOrderService.js#_patchSessionContact) - never via
+								CreatePartner (only one CP allowed, VPD/012). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>

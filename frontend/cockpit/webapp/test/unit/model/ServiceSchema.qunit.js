@@ -26,15 +26,14 @@ sap.ui.define([
     assert.strictEqual(typeof ServiceSchema.use, "function", "use() itself survives");
   });
 
-  QUnit.test("Returns writes Contact in session; Orders keeps CreatePartner", function (assert) {
+  QUnit.test("both profiles address the session's Contact Person row by key", function (assert) {
     ServiceSchema.use(ReturnsSchema);
-    assert.strictEqual(ServiceSchema.contactInSession, true);
     assert.strictEqual(ServiceSchema.buildHeaderPartnerPath("", ServiceSchema.contactPartnerFunction),
-      "/HeaderPartner(CustomerReturn='',PartnerFunction='AP')", "same key the standard app PATCHes in session");
+      "/HeaderPartner(CustomerReturn='',PartnerFunction='AP')", "same key the standard returns app PATCHes in session");
 
     ServiceSchema.use(OrdersSchema);
-    assert.notOk(ServiceSchema.contactInSession, "orders has no in-session contact write");
-    assert.ok(ServiceSchema.createPartnerAction, "orders still creates the AP partner after SaveChanges");
+    assert.strictEqual(ServiceSchema.buildHeaderPartnerPath("", ServiceSchema.contactPartnerFunction),
+      "/HeaderPartner(SalesOrder='',PartnerFunction='AP')", "orders session row");
   });
 
   QUnit.test("item payload whitelist follows the active profile", function (assert) {

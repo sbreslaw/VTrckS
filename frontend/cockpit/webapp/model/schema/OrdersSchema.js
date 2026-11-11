@@ -706,7 +706,8 @@ sap.ui.define([
     // parameter and returns the new HeaderPartnerType row (Customer is NOT a
     // parameter - set via a follow-up PATCH, since UpdateRestrictions.
     // NonUpdatableProperties only lists PartnerFunction, not Customer - so.xml
-    // same block). See Detail.controller.js#onPartiesAddConfirm.
+    // same block). See Detail.controller.js#onPartiesAddConfirm. Not used for
+    // the create-mode Contact (CreateOrderService.js#_patchSessionContact).
     createPartnerAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.CreatePartner",
 
     // Org Data fields confirmed creatable-only (writable at document creation,
@@ -761,9 +762,9 @@ sap.ui.define([
       salesOrder: "SalesOrder",
       partnerFunction: "PartnerFunction",
       // Customer is the real, settable partner-number field (set via a PATCH
-      // after CreatePartner, see createPartnerAction above); Partner
-      // (Computed, Label "Customer" in so.xml) is a generic display-only
-      // mirror used for RO rendering of already-created rows.
+      // after CreatePartner in the Parties Add flow, see createPartnerAction
+      // above); Partner (Computed, Label "Customer" in so.xml) is a generic
+      // display-only mirror used for RO rendering of already-created rows.
       customer: "Customer",
       partner: "Partner",
       contactPerson: "ContactPerson",
@@ -1029,6 +1030,13 @@ sap.ui.define([
 
     buildHeaderPath: function (sOrderId) {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";
+    },
+
+    // HeaderPartnerType key (so_C_SALESORDERMANAGE_2026-11-06.xml):
+    // SalesOrder + PartnerFunction; "" for the order inside a create session.
+    buildHeaderPartnerPath: function (sOrderId, sPartnerFunction) {
+      return "/" + this.entitySets.headerPartner + "(" + this.headerPartnerProperties.salesOrder + "='" + sOrderId + "',"
+        + this.headerPartnerProperties.partnerFunction + "='" + sPartnerFunction + "')";
     },
 
     // Item Detail view (FCL end column) - canonical path for the top-level

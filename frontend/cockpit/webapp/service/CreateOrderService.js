@@ -683,15 +683,18 @@ sap.ui.define([
       });
     },
 
-    // Returns (ServiceSchema.contactInSession): fill the backend-determined
-    // blank Contact Person row inside the sticky session, before SaveChanges -
-    // exactly what the standard Manage Customer Returns app does (PATCH
-    // HeaderPartner(CustomerReturn='',PartnerFunction='AP') {ContactPerson}).
-    // Read first (minimal $select): the V4 model only PATCHes an entity it
-    // has in its cache. ITEM_GROUP ($auto) keeps it out of SaveChanges'
-    // changeset ("Save not alone in changeset", see save() above).
+    // Create-mode Contact, both profiles: as soon as the Sold-To is set the
+    // backend determines a blank Contact Person row (PartnerFunction "AP",
+    // shown as "CP" in English) and allows only one, so a CreatePartner after
+    // SaveChanges 400s (VPD/012, live 2026-11-11). Same as the standard
+    // Manage Customer Returns app: fill that row inside the sticky session,
+    // before SaveChanges (probed live on both services: GET/PATCH
+    // HeaderPartner(<order>='',PartnerFunction='AP') 200, ContactPerson "0"
+    // before). Read first (minimal $select): the V4 model only PATCHes an
+    // entity it has in its cache. ITEM_GROUP ($auto) keeps it out of
+    // SaveChanges' changeset ("Save not alone in changeset", see save() above).
     _patchSessionContact: function (oModel, oCreateOptions) {
-      if (!ServiceSchema.contactInSession || !oCreateOptions || !oCreateOptions.contactId) {
+      if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.contactPartnerFunction) {
         return Promise.resolve();
       }
       var sProperty = ServiceSchema.headerPartnerProperties.contactPerson;
@@ -789,8 +792,6 @@ sap.ui.define([
             $$updateGroupId: CREATE_REPLAY_GROUP
           }).getBoundContext();
           return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
-            return CreateOrderService._replayContact(oNewContext, oCreateOptions);
-          }).then(function () {
             if (oContactError) {
               throw oContactError;
             }
@@ -851,36 +852,6 @@ sap.ui.define([
       }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
-    },
-
-    // Internal — persists the createMode Contact picker's selection
-    // (createEnrich>/contactId, Detail.controller.js#onContactValueHelpRequest)
-    // as a real "AP" HeaderPartner row. No header/item property for Contact
-    // exists (OPEN_QUESTIONS.md item 17 previously called this unconfirmed) -
-    // the only real write path is the same CreatePartner-bound-action-then-
-    // PATCH-Customer two-step already used by the Parties Involved section's
-    // own Add flow (Detail.controller.js#_onPartiesAddConfirm). Runs as its
-    // own batch (the action's response, with the new row's own key, must
-    // resolve before the follow-up PATCH can target it - unlike
-    // _replayHeaderProperties above, this can't be a single flat PATCH list).
-    _replayContact: function (oNewContext, oCreateOptions) {
-      // contactInSession profiles (Returns) already wrote it before SaveChanges.
-      if (ServiceSchema.contactInSession || !oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.createPartnerAction || !ServiceSchema.contactPartnerFunction) {
-        return Promise.resolve();
-      }
-      var oModel = oNewContext.getModel();
-      var oActionBinding = oModel.bindContext(ServiceSchema.createPartnerAction + "(...)", oNewContext);
-      oActionBinding.setParameter("PartnerFunction", ServiceSchema.contactPartnerFunction);
-      // CREATE_REPLAY_GROUP is a manually-submitted ("API") group - execute()
-      // alone only queues the request; it never resolves without an explicit
-      // submitBatch, so that call must happen BEFORE awaiting the promise
-      // (awaiting first deadlocks the whole save chain forever).
-      var oExecutePromise = oActionBinding.execute(CREATE_REPLAY_GROUP);
-      oModel.submitBatch(CREATE_REPLAY_GROUP).catch(function () { /* surfaced via oExecutePromise below */ });
-      return oExecutePromise.then(function () {
-        oActionBinding.getBoundContext().setProperty(ServiceSchema.headerPartnerProperties.customer, oCreateOptions.contactId);
-        return oModel.submitBatch(CREATE_REPLAY_GROUP);
-      });
     },
 
     // Step ② — post-create enrichment action (description/status-if-changed/

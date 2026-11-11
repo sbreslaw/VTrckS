@@ -469,19 +469,10 @@ sap.ui.define([
     // _it: CustomerReturnManageType, Parameter PartnerFunction, ReturnType
     // HeaderPartnerType) IS real on this service - absent from the older
     // 2026-10-27/28 dumps this session's prior "no equivalent" conclusion was
-    // based on. Same shape as OrdersSchema.js's own CreatePartner - but NOT
-    // used for Contact on this service (see contactInSession below).
+    // based on. Same shape as OrdersSchema.js's own CreatePartner - not used
+    // for the create-mode Contact (CreateOrderService.js#_patchSessionContact:
+    // only one Contact Person row is allowed and the backend pre-creates it).
     createPartnerAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreatePartner",
-
-    // 2026-11-11 (live): the backend determines a blank Contact Person row
-    // (PartnerFunction "AP", shown as "CP" in English) as soon as the Sold-To
-    // is set and allows only one, so CreatePartner after SaveChanges 400s
-    // (VPD/012). The standard Manage Customer Returns app never calls
-    // CreatePartner for Contact - it PATCHes that row's ContactPerson inside
-    // the sticky session, before SaveChanges. CreateOrderService.js#
-    // _patchSessionContact does the same (probed in session:
-    // GET/PATCH HeaderPartner(CustomerReturn='',PartnerFunction='AP') 200).
-    contactInSession: true,
 
     statusProperties: {
       code: "OverallSDProcessStatus",
