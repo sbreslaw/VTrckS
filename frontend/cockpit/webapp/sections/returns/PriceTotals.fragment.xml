@@ -31,7 +31,7 @@
         <cells>
           <Text text="{ConditionTypeName}" />
           <Text text="{parts: [{path: 'ConditionRateValueIsNull'}, {path: 'ConditionRateAmount'}], formatter: 'PricingColumns.formatter.endValue', useRawValues: true}" />
-          <Text text="{parts: [{path: 'ConditionQuantity'}], formatter: 'PricingColumns.formatter.priceUnit', useRawValues: true}" />
+          <Text text="{path: 'ConditionQuantity', targetType: 'any', formatter: 'PricingColumns.formatter.priceUnit'}" />
           <Text text="{ConditionQuantityUnit}" />
           <Text text="{parts: [{path: 'ConditionAmountIsNull'}, {path: 'ConditionAmount'}], formatter: 'PricingColumns.formatter.endValue', useRawValues: true}" />
           <Text text="{ConditionCurrency}" />

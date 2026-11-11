@@ -282,9 +282,10 @@ sap.ui.define([
       return sText ? sText + " (" + sCode + ")" : sCode;
     },
 
-    // Read-only Edm.Boolean cell; bind with useRawValues - V4 otherwise
-    // converts the boolean to the localized "Yes"/"No" string first, and "No"
-    // is truthy. null (flag not set) reads as No.
+    // Read-only Edm.Boolean cell; bind with useRawValues on 2+ parts (or
+    // targetType:'any' on a single path - UI5 ignores useRawValues there).
+    // Otherwise V4 converts the boolean to the localized "Yes"/"No" string
+    // first, and "No" is truthy. null (flag not set) reads as No.
     yesNo: function (bValue, sYes, sNo) {
       return bValue === true ? sYes : sNo;
     },
