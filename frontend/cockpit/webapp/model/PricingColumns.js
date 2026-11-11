@@ -115,7 +115,9 @@ sap.ui.define([
           text: { parts: [P.rateValueIsNull, P.rateValueIsRatio, P.conditionCurrency], formatter: rateUnit, useRawValues: true }
         }),
         new Text({
-          text: { path: P.conditionQuantity, formatter: priceUnit }
+          // targetType "any": a single-path binding ignores useRawValues, and the
+          // formatter would otherwise get the grouped Decimal string ("1,000" -> 1).
+          text: { path: P.conditionQuantity, targetType: "any", formatter: priceUnit }
         }),
         new Text({ text: "{" + P.conditionQuantityUnit + "}" }),
         new Text({
