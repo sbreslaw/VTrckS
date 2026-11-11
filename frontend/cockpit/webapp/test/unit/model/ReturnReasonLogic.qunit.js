@@ -7,11 +7,12 @@ sap.ui.define([
   "use strict";
 
   // ReturnReasonLogic reads the "Multiple Values" code from the active
-  // profile - only ReturnsSchema defines one.
-  ServiceSchema.use(ReturnsSchema);
+  // profile - only ReturnsSchema defines one. Selected before every test:
+  // other suites (ServiceSchema.qunit.js) switch the shared facade.
+  var oUseReturns = { beforeEach: function () { ServiceSchema.use(ReturnsSchema); } };
   var G99 = ReturnsSchema.headerProperties.orderReasonMultiple;
 
-  QUnit.module("ReturnReasonLogic.defaultForNewItem (rule 2.1.1)");
+  QUnit.module("ReturnReasonLogic.defaultForNewItem (rule 2.1.1)", oUseReturns);
 
   QUnit.test("first item defaults to the header value", function (assert) {
     assert.strictEqual(ReturnReasonLogic.defaultForNewItem("200", []), "200");
@@ -25,7 +26,7 @@ sap.ui.define([
     assert.strictEqual(ReturnReasonLogic.defaultForNewItem(G99, ["201", "200"]), "201");
   });
 
-  QUnit.module("ReturnReasonLogic.headerAfterItemChange (rule 2.1.2 + completion a)");
+  QUnit.module("ReturnReasonLogic.headerAfterItemChange (rule 2.1.2 + completion a)", oUseReturns);
 
   QUnit.test("no items -> no header change", function (assert) {
     assert.strictEqual(ReturnReasonLogic.headerAfterItemChange([]), undefined);
@@ -43,7 +44,7 @@ sap.ui.define([
     assert.strictEqual(ReturnReasonLogic.headerAfterItemChange(["200", "200"]), "200");
   });
 
-  QUnit.module("ReturnReasonLogic.headerAfterItemDelete (completion b)");
+  QUnit.module("ReturnReasonLogic.headerAfterItemDelete (completion b)", oUseReturns);
 
   QUnit.test("no items left -> header unchanged", function (assert) {
     assert.strictEqual(ReturnReasonLogic.headerAfterItemDelete([], G99), undefined);
@@ -57,7 +58,7 @@ sap.ui.define([
     assert.strictEqual(ReturnReasonLogic.headerAfterItemDelete(["200", "201"], "200"), G99);
   });
 
-  QUnit.module("ReturnReasonLogic.itemReasonAfterHeaderChange (completion c, broadcast)");
+  QUnit.module("ReturnReasonLogic.itemReasonAfterHeaderChange (completion c, broadcast)", oUseReturns);
 
   QUnit.test("a specific header reason is written to every item", function (assert) {
     assert.strictEqual(ReturnReasonLogic.itemReasonAfterHeaderChange("201"), "201");

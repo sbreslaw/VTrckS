@@ -56,26 +56,30 @@ sap.ui.define([
   // Sales Order" app) ever sends on create. This whitelist is the ONLY
   // fields actually harvested onto the create payload (cleanItemPayload
   // below) - the six ZZ*QTY mirrors are Nullable="false" Int32s and must
-  // always be present (_addItemRows seeds them to 0).
-  var ITEM_PROPERTIES = [
-    ServiceSchema.itemProperties.material,
-    ServiceSchema.itemProperties.quantity,
-    ServiceSchema.itemProperties.unit,
-    ServiceSchema.itemProperties.exisId,
-    ServiceSchema.itemProperties.orderIntention,
-    ServiceSchema.itemProperties.fundType,
-    ServiceSchema.itemProperties.deliveryPriority,
-    ServiceSchema.itemProperties.vfcQty,
-    ServiceSchema.itemProperties.stateQty,
-    ServiceSchema.itemProperties.qty317,
-    ServiceSchema.itemProperties.chipQty,
-    ServiceSchema.itemProperties.panQty,
-    ServiceSchema.itemProperties.resQty,
-    // Return Orders session prompt 3.1/3.2.
-    ServiceSchema.itemProperties.batch,
-    ServiceSchema.itemProperties.expirationDate,
-    ServiceSchema.itemProperties.returnReason
-  ];
+  // always be present (_addItemRows seeds them to 0). Built per call, never
+  // captured at module load - the names differ per profile (same same-tab
+  // relaunch staleness as the header list above).
+  function getItemProperties() {
+    return [
+      ServiceSchema.itemProperties.material,
+      ServiceSchema.itemProperties.quantity,
+      ServiceSchema.itemProperties.unit,
+      ServiceSchema.itemProperties.exisId,
+      ServiceSchema.itemProperties.orderIntention,
+      ServiceSchema.itemProperties.fundType,
+      ServiceSchema.itemProperties.deliveryPriority,
+      ServiceSchema.itemProperties.vfcQty,
+      ServiceSchema.itemProperties.stateQty,
+      ServiceSchema.itemProperties.qty317,
+      ServiceSchema.itemProperties.chipQty,
+      ServiceSchema.itemProperties.panQty,
+      ServiceSchema.itemProperties.resQty,
+      // Return Orders session prompt 3.1/3.2.
+      ServiceSchema.itemProperties.batch,
+      ServiceSchema.itemProperties.expirationDate,
+      ServiceSchema.itemProperties.returnReason
+    ];
+  }
 
   // Never JSON.stringify the message model's data in a log statement —
   // sap.ui.core.message.Message#processor points back at this very model, so
@@ -169,15 +173,16 @@ sap.ui.define([
     return oParams;
   }
 
-  // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the ITEM_PROPERTIES
+  // Issue Batch 9-30-001 §2 (payload hygiene): keeps ONLY the getItemProperties()
   // whitelist above - replaces the old "strip OData annotation keys, keep
   // everything else" approach, which is what let SalesOrderItem/
   // SalesOrderItemText/ZZIndustryStandardName (plain property names, no
   // annotation characters to strip) leak into the create payload.
   function cleanItemPayload(oItemData) {
     var oClean = {};
+    var aItemProperties = getItemProperties();
     Object.keys(oItemData || {}).forEach(function (sProperty) {
-      if (ITEM_PROPERTIES.indexOf(sProperty) !== -1 && oItemData[sProperty] !== undefined) {
+      if (aItemProperties.indexOf(sProperty) !== -1 && oItemData[sProperty] !== undefined) {
         oClean[sProperty] = oItemData[sProperty];
       }
     });
@@ -254,7 +259,7 @@ sap.ui.define([
     // Exposed so Detail.controller.js can re-seed local scratch rows from
     // an orphaned session's row data (session-death recovery) with the
     // exact same whitelist this module itself replays - no second,
-    // drift-prone copy of ITEM_PROPERTIES.
+    // drift-prone copy of getItemProperties().
     cleanItemPayload: cleanItemPayload,
 
     // Enter create mode: a transient list-binding context bound to the whole
