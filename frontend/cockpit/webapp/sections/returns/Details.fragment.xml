@@ -187,10 +187,11 @@
 								standalone query). Locked until a Provider is picked;
 								prefilled from the current IsStandardRelationship contact
 								when the Provider changes and still overridable through the
-								value help. Contact now persists via the header-bound
-								CreatePartner action (2026-11-09 metadata re-audit,
-								ReturnsSchema.js createPartnerAction), same mechanism as
-								orders. -->
+								value help. Contact persists by PATCHing the backend-determined
+								Contact Person (HeaderPartner PartnerFunction AP) row inside the
+								create session before SaveChanges, like the standard Manage
+								Customer Returns app (ReturnsSchema.js contactInSession) -
+								never via CreatePartner (only one CP allowed, VPD/012). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>

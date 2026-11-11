@@ -469,9 +469,19 @@ sap.ui.define([
     // _it: CustomerReturnManageType, Parameter PartnerFunction, ReturnType
     // HeaderPartnerType) IS real on this service - absent from the older
     // 2026-10-27/28 dumps this session's prior "no equivalent" conclusion was
-    // based on. Same shape as OrdersSchema.js's own CreatePartner - Contact
-    // now persists via CreateOrderService.js#_replayContact same as orders.
+    // based on. Same shape as OrdersSchema.js's own CreatePartner - but NOT
+    // used for Contact on this service (see contactInSession below).
     createPartnerAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreatePartner",
+
+    // 2026-11-11 (live): the backend determines a blank Contact Person row
+    // (PartnerFunction "AP", shown as "CP" in English) as soon as the Sold-To
+    // is set and allows only one, so CreatePartner after SaveChanges 400s
+    // (VPD/012). The standard Manage Customer Returns app never calls
+    // CreatePartner for Contact - it PATCHes that row's ContactPerson inside
+    // the sticky session, before SaveChanges. CreateOrderService.js#
+    // _patchSessionContact does the same (probed in session:
+    // GET/PATCH HeaderPartner(CustomerReturn='',PartnerFunction='AP') 200).
+    contactInSession: true,
 
     statusProperties: {
       code: "OverallSDProcessStatus",
@@ -763,6 +773,13 @@ sap.ui.define([
 
     buildHeaderPath: function (sOrderId) {
       return "/" + this.entitySets.header + "(" + this.keys.orderId + "='" + sOrderId + "')";
+    },
+
+    // HeaderPartnerType key (ui_customerreturnmanage_2026-11-09.xml):
+    // CustomerReturn + PartnerFunction; "" for the order inside a create session.
+    buildHeaderPartnerPath: function (sOrderId, sPartnerFunction) {
+      return "/" + this.entitySets.headerPartner + "(" + this.headerPartnerProperties.salesOrder + "='" + sOrderId + "',"
+        + this.headerPartnerProperties.partnerFunction + "='" + sPartnerFunction + "')";
     },
 
     buildItemPath: function (sOrderId, sItemNumber) {

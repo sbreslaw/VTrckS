@@ -672,7 +672,45 @@ sap.ui.define([
     // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
     // bound context - see the (still-applicable) v5 gotcha comment history
     // above for why a plain canonical-path context is required here instead.
+    // A failed in-session contact PATCH (_patchSessionContact) never blocks
+    // saving the order - it is reported as a partial failure after the commit.
     _commitStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions) {
+      var oContactError = null;
+      return CreateOrderService._patchSessionContact(oModel, oCreateOptions).catch(function (oError) {
+        oContactError = oError;
+      }).then(function () {
+        return CreateOrderService._saveStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions, oContactError);
+      });
+    },
+
+    // Returns (ServiceSchema.contactInSession): fill the backend-determined
+    // blank Contact Person row inside the sticky session, before SaveChanges -
+    // exactly what the standard Manage Customer Returns app does (PATCH
+    // HeaderPartner(CustomerReturn='',PartnerFunction='AP') {ContactPerson}).
+    // Read first (minimal $select): the V4 model only PATCHes an entity it
+    // has in its cache. ITEM_GROUP ($auto) keeps it out of SaveChanges'
+    // changeset ("Save not alone in changeset", see save() above).
+    _patchSessionContact: function (oModel, oCreateOptions) {
+      if (!ServiceSchema.contactInSession || !oCreateOptions || !oCreateOptions.contactId) {
+        return Promise.resolve();
+      }
+      var sProperty = ServiceSchema.headerPartnerProperties.contactPerson;
+      var oBinding = oModel.bindContext(ServiceSchema.buildHeaderPartnerPath("", ServiceSchema.contactPartnerFunction), undefined, {
+        $$updateGroupId: ITEM_GROUP,
+        $select: sProperty
+      });
+      var oContext = oBinding.getBoundContext();
+      return oContext.requestProperty(sProperty).then(function (sCurrent) {
+        if (sCurrent === oCreateOptions.contactId) {
+          return undefined;
+        }
+        return oContext.setProperty(sProperty, oCreateOptions.contactId);
+      }).finally(function () {
+        oBinding.destroy();
+      });
+    },
+
+    _saveStickySession: function (oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions, oContactError) {
       // v5 gotcha, round 6 (live test, 2026-08-28): without an explicit
       // $$updateGroupId here (unlike its sibling contexts elsewhere in this
       // flow), this operation binding fell back to "$auto" instead of
@@ -753,6 +791,10 @@ sap.ui.define([
           return CreateOrderService._replayHeaderProperties(oNewContext, oScratchData, oCreateOptions).then(function () {
             return CreateOrderService._replayContact(oNewContext, oCreateOptions);
           }).then(function () {
+            if (oContactError) {
+              throw oContactError;
+            }
+          }).then(function () {
             // Both SaveChanges above and this PATCH just succeeded,
             // each re-running the same backend validation - collapse
             // the resulting exact-duplicate messages (see
@@ -822,7 +864,8 @@ sap.ui.define([
     // resolve before the follow-up PATCH can target it - unlike
     // _replayHeaderProperties above, this can't be a single flat PATCH list).
     _replayContact: function (oNewContext, oCreateOptions) {
-      if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.createPartnerAction || !ServiceSchema.contactPartnerFunction) {
+      // contactInSession profiles (Returns) already wrote it before SaveChanges.
+      if (ServiceSchema.contactInSession || !oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.createPartnerAction || !ServiceSchema.contactPartnerFunction) {
         return Promise.resolve();
       }
       var oModel = oNewContext.getModel();
