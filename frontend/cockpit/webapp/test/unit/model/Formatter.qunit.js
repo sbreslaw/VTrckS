@@ -15,6 +15,15 @@ sap.ui.define([
     assert.strictEqual(formatter.codeAndText("", null), "\u2014", "no code (e.g. Sales Group not set)");
   });
 
+  QUnit.module("formatter.yesNo");
+
+  QUnit.test("only a raw true reads Yes", function (assert) {
+    assert.strictEqual(formatter.yesNo(true, "Yes", "No"), "Yes");
+    assert.strictEqual(formatter.yesNo(false, "Yes", "No"), "No");
+    assert.strictEqual(formatter.yesNo(null, "Yes", "No"), "No", "flag not set (e.g. pricing subtotal rows)");
+    assert.strictEqual(formatter.yesNo("No", "Yes", "No"), "No", "a type-formatted string is never mistaken for true");
+  });
+
   // Read-only returns Parties table (prompts/E008_Returns_ZKR_Sections_Session_Prompt.md),
   // values as returned live on ZKR 619000510 / 619000507 (2026-11-11).
   QUnit.module("formatter - Parties Involved");

@@ -36,8 +36,8 @@
           <Text text="{parts: [{path: 'ConditionAmountIsNull'}, {path: 'ConditionAmount'}], formatter: 'PricingColumns.formatter.endValue', useRawValues: true}" />
           <Text text="{ConditionCurrency}" />
           <Text text="{ConditionType}" />
-          <Text text="{= ${ConditionIsManuallyChanged} ? ${i18n>valueYes} : ${i18n>valueNo} }" />
-          <Text text="{= ${ConditionIsForStatistics} ? ${i18n>valueYes} : ${i18n>valueNo} }" />
+          <Text text="{parts: [{path: 'ConditionIsManuallyChanged'}, {path: 'i18n>valueYes'}, {path: 'i18n>valueNo'}], formatter: '.formatter.yesNo', useRawValues: true}" />
+          <Text text="{parts: [{path: 'ConditionIsForStatistics'}, {path: 'i18n>valueYes'}, {path: 'i18n>valueNo'}], formatter: '.formatter.yesNo', useRawValues: true}" />
           <Text text="{_ConditionCalculationType/ConditionCalculationType_Text}" />
         </cells>
       </ColumnListItem>

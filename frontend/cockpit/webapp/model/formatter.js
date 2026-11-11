@@ -282,6 +282,13 @@ sap.ui.define([
       return sText ? sText + " (" + sCode + ")" : sCode;
     },
 
+    // Read-only Edm.Boolean cell; bind with useRawValues - V4 otherwise
+    // converts the boolean to the localized "Yes"/"No" string first, and "No"
+    // is truthy. null (flag not set) reads as No.
+    yesNo: function (bValue, sYes, sNo) {
+      return bValue === true ? sYes : sNo;
+    },
+
     // Read-only Parties tables: the partner's id lives in a different property
     // per partner function (live 2026-11-11: Customer for AG/RE/RG/WE,
     // ContactPerson for AP; unused NUMC ids arrive as "0") - first real one wins.
