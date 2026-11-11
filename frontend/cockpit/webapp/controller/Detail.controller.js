@@ -2559,7 +2559,6 @@ sap.ui.define([
           // refresh, then delete the row itself - whatever ancillary rows
           // still remain are the backend's own to reconcile when the parent
           // line goes, not ours to delete client-side.
-          var bReleasesNdcAddGate = that._ownsNdcAddGate(oRowContext);
           var sItemNumber = oRowContext.getProperty(ServiceSchema.itemProperties.itemNumber);
           var bHasChildren = that._getAncillaryChildContexts(sItemNumber).length > 0;
           var pChain = bHasChildren
@@ -2582,10 +2581,6 @@ sap.ui.define([
             : oRowContext.delete();
           pChain
             .then(function () {
-              if (bReleasesNdcAddGate) {
-                that._releaseNdcAddGate();
-              }
-              
               // E008_Returns_ItemReturnReason_Session_Prompt §5.3: Recompute header
               // Return Reason after item deletion (completion (b)).
               if (ServiceSchema.itemProperties.returnReason) {
