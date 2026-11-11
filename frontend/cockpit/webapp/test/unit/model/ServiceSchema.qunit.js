@@ -3,8 +3,9 @@ sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/schema/OrdersSchema",
   "cdc/vaccreq/model/schema/ReturnsSchema",
-  "cdc/vaccreq/service/CreateOrderService"
-], function (ServiceSchema, OrdersSchema, ReturnsSchema, CreateOrderService) {
+  "cdc/vaccreq/service/CreateOrderService",
+  "cdc/vaccreq/model/formatter"
+], function (ServiceSchema, OrdersSchema, ReturnsSchema, CreateOrderService, formatter) {
   "use strict";
 
   // Regression guard: the Returns and Provider Orders apps share one module
@@ -50,5 +51,17 @@ sap.ui.define([
     var oOrdersPayload = CreateOrderService.cleanItemPayload(oRow);
     assert.strictEqual(oOrdersPayload[OrdersSchema.itemProperties.fundType], "VFC", "orders keeps the fund type field");
     assert.notOk(ReturnsSchema.itemProperties.returnReason in oOrdersPayload, "orders drops ReasonCode");
+  });
+
+  // Live bug 2026-11-11: the Parties row-action guard {:= ${PartnerFunction} !== 'AG' }
+  // never evaluated (V4 converted "AG" to boolean and threw), so Delete/Change
+  // showed on the Sold-To row. The guard now reads the profile's Sold-To code.
+  QUnit.test("Parties row actions are hidden only on the orders Sold-To row", function (assert) {
+    ServiceSchema.use(OrdersSchema);
+    assert.strictEqual(ServiceSchema.partnerFunctions.soldTo, "AG", "orders Sold-To function");
+    assert.strictEqual(formatter.isNotSoldTo("AG"), false, "Sold-To: hidden");
+    ["AP", "RE", "RG", "WE"].forEach(function (sFunction) {
+      assert.strictEqual(formatter.isNotSoldTo(sFunction), true, sFunction + ": shown");
+    });
   });
 });
