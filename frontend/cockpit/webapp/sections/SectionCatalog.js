@@ -49,7 +49,8 @@ sap.ui.define([], function () {
     shipping: { id: "shipping", titleKey: "sectionShipping", fragment: "cdc.vaccreq.sections.Shipping", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
     shippingTransactions: { id: "shippingTransactions", titleKey: "sectionShippingTransactions", fragment: "cdc.vaccreq.sections.ShippingTransactions", editable: false, profiles: ["orders"], createCapable: true },
     transactionHistory: { id: "transactionHistory", titleKey: "sectionTransactionHistory", fragment: "cdc.vaccreq.sections.TransactionHistory", editable: false, profiles: ["orders"], createCapable: true },
-    orgData: { id: "orgData", titleKey: "sectionOrgData", fragment: "cdc.vaccreq.sections.OrgData", editable: true, editLive: true, profiles: ["orders"], createCapable: true },
+    // Returns: read-only variant sections/returns/OrgData.fragment.xml (ZKR only).
+    orgData: { id: "orgData", titleKey: "sectionOrgData", fragment: "cdc.vaccreq.sections.OrgData", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
     // Returns: sections/returns/PriceTotals.fragment.xml (own column set);
     // visible on ZKR only, hidden + locked for the other _RET types
     // (OrderModeConfig.js).

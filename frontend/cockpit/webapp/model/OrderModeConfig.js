@@ -305,7 +305,8 @@ sap.ui.define([
         // read-only sections from the sections/returns/* variants, collapsed
         // on open and in create (expanded:false beats SECTION_CREATE_EXPANDED).
         sections: Object.assign({}, RETURNS_UI_HIDDEN.sections, {
-          priceTotals: { visible: true, locked: false, editable: false, expanded: false }
+          priceTotals: { visible: true, locked: false, editable: false, expanded: false },
+          orgData: { visible: true, locked: false, editable: false, expanded: false }
         })
       }
     }

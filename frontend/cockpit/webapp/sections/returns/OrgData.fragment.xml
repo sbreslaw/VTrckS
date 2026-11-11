@@ -1,0 +1,127 @@
+<core:FragmentDefinition
+  xmlns="sap.m"
+  xmlns:core="sap.ui.core"
+  xmlns:f="sap.ui.layout.form"
+  xmlns:l="sap.ui.layout">
+	<!-- ADR-002 returns variant of OrgData.fragment.xml (loaded by
+			SectionFactory.js#_loadFragment for profileId "returns"; shown on ZKR
+			only, OrderModeConfig.js). Read-only: no edit controls and no
+			sectionFlags editing/createMode bindings - the section has no Edit
+			button on returns (editable:false) and nothing here is replayed at
+			create. Same Form/layout as the returns Details section. Each field
+			shows text + code from the header's text navigations
+			(ui_customerreturnmanage_2026-11-09.xml); there is no separate
+			"Sales Org. Unit" field (code-owner decision, 2026-11-11). -->
+	<f:Form width="auto" editable="false">
+		<f:layout>
+			<f:ResponsiveGridLayout
+				labelSpanXL="4"
+				labelSpanL="4"
+				labelSpanM="4"
+				labelSpanS="12"
+				adjustLabelSpan="false"
+				emptySpanXL="0"
+				emptySpanL="0"
+				emptySpanM="0"
+				emptySpanS="0"
+				columnsXL="2"
+				columnsL="2"
+				columnsM="1"
+				singleContainerFullSize="false"
+			/>
+		</f:layout>
+
+		<f:formContainers>
+			<f:FormContainer>
+				<f:formElements>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>salesOrg}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'SalesOrganization'}, {path: '_SalesOrganization/SalesOrganization_Text'}], formatter: '.formatter.codeAndText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>distributionChannel}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'DistributionChannel'}, {path: '_DistributionChannel/DistributionChannel_Text'}], formatter: '.formatter.codeAndText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>division}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'OrganizationDivision'}, {path: '_OrganizationDivision/Division_Text'}], formatter: '.formatter.codeAndText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>salesOffice}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'SalesOffice'}, {path: '_SalesOffice/SalesOffice_Text'}], formatter: '.formatter.codeAndText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
+							<Label text="{i18n>salesGroup}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{parts: [{path: 'SalesGroup'}, {path: '_SalesGroup/SalesGroup_Text'}], formatter: '.formatter.codeAndText'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+				</f:formElements>
+			</f:FormContainer>
+		</f:formContainers>
+	</f:Form>
+</core:FragmentDefinition>

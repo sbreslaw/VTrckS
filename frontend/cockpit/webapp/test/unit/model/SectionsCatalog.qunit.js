@@ -28,6 +28,7 @@ sap.ui.define([
     assert.ok(aReturnsIds.indexOf("details") > -1, "details has a returns fragment variant");
     assert.ok(aReturnsIds.indexOf("shipping") > -1, "shipping has a returns fragment variant");
     assert.ok(aReturnsIds.indexOf("inventory") === -1, "inventory (IoH) not ported to returns per ADR-002");
+    assert.ok(aReturnsIds.indexOf("orgData") > -1, "orgData has a read-only returns fragment variant");
     assert.ok(aReturnsIds.indexOf("partiesInvolved") === -1, "partiesInvolved not ported to returns");
   });
 
@@ -94,24 +95,34 @@ sap.ui.define([
     return aResolved.filter(function (o) { return o.id === sId; })[0];
   }
 
-  QUnit.test("ZKR: Price Totals visible, read-only, collapsed in display and create", function (assert) {
+  QUnit.test("ZKR: Price Totals and Org Data visible, read-only, collapsed in display and create", function (assert) {
     ["display", "create"].forEach(function (sMode) {
-      var oPrice = findSection(OrderModeConfig.resolveSections("ZKR", sMode), "priceTotals");
-      assert.strictEqual(oPrice.visible, true, sMode + ": visible");
-      assert.strictEqual(oPrice.locked, false, sMode + ": not locked");
-      assert.strictEqual(oPrice.editable, false, sMode + ": no Edit button");
-      assert.strictEqual(oPrice.expanded, false, sMode + ": collapsed (per-type expanded beats SECTION_CREATE_EXPANDED)");
+      var aResolved = OrderModeConfig.resolveSections("ZKR", sMode);
+      ["priceTotals", "orgData"].forEach(function (sId) {
+        var oSection = findSection(aResolved, sId);
+        assert.strictEqual(oSection.visible, true, sMode + "/" + sId + ": visible");
+        assert.strictEqual(oSection.locked, false, sMode + "/" + sId + ": not locked");
+        assert.strictEqual(oSection.editable, false, sMode + "/" + sId + ": no Edit button");
+        assert.strictEqual(oSection.expanded, false, sMode + "/" + sId + ": collapsed (per-type expanded beats SECTION_CREATE_EXPANDED)");
+      });
     });
   });
 
-  QUnit.test("ZISL/ZWST/ZXFR keep Price Totals hidden and locked; ZKB create still expands it", function (assert) {
+  QUnit.test("ZISL/ZWST/ZXFR keep the ZKR-only sections hidden and locked; ZKB create still expands them", function (assert) {
     ["ZISL", "ZWST", "ZXFR"].forEach(function (sType) {
-      var oPrice = findSection(OrderModeConfig.resolveSections(sType, "display"), "priceTotals");
-      assert.strictEqual(oPrice.visible, false, sType + ": hidden");
-      assert.strictEqual(oPrice.locked, true, sType + ": locked");
+      var aResolved = OrderModeConfig.resolveSections(sType, "display");
+      ["priceTotals", "orgData"].forEach(function (sId) {
+        var oSection = findSection(aResolved, sId);
+        assert.strictEqual(oSection.visible, false, sType + "/" + sId + ": hidden");
+        assert.strictEqual(oSection.locked, true, sType + "/" + sId + ": locked");
+      });
     });
-    var oZkbCreate = findSection(OrderModeConfig.resolveSections("ZKB", "create"), "priceTotals");
-    assert.strictEqual(oZkbCreate.visible, true, "ZKB: visible");
-    assert.strictEqual(oZkbCreate.expanded, true, "ZKB: expanded in create (unchanged)");
+    var aZkbCreate = OrderModeConfig.resolveSections("ZKB", "create");
+    ["priceTotals", "orgData"].forEach(function (sId) {
+      var oSection = findSection(aZkbCreate, sId);
+      assert.strictEqual(oSection.visible, true, "ZKB/" + sId + ": visible");
+      assert.strictEqual(oSection.editable, true, "ZKB/" + sId + ": editability unchanged");
+      assert.strictEqual(oSection.expanded, true, "ZKB/" + sId + ": expanded in create (unchanged)");
+    });
   });
 });

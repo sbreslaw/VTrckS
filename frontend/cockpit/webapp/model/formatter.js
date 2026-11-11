@@ -273,6 +273,15 @@ sap.ui.define([
       return orDash(vValue);
     },
 
+    // Read-only code + description display, e.g. "Chicago (107)"; the code
+    // alone when its text navigation is empty, an em dash when there is no code.
+    codeAndText: function (sCode, sText) {
+      if (!sCode) {
+        return EM_DASH;
+      }
+      return sText ? sText + " (" + sCode + ")" : sCode;
+    },
+
     maskCardNumber: function (sValue) {
       if (!sValue) {
         return EM_DASH;
