@@ -51,7 +51,8 @@ sap.ui.define([
     assert.strictEqual(formatter.mainPartnerText("WE", "Yes", "No"), "No", "Ship-To");
     assert.strictEqual(formatter.mainPartnerText("", "Yes", "No"), "", "no partner function");
 
+    ServiceSchema.use({ profileId: "withoutSoldTo", serviceRoot: "/test/" });
+    assert.strictEqual(formatter.mainPartnerText("AG", "Yes", "No"), "", "a profile without partnerFunctions marks no main partner");
     ServiceSchema.use(OrdersSchema);
-    assert.strictEqual(formatter.mainPartnerText("AG", "Yes", "No"), "", "orders profile declares no partnerFunctions");
   });
 });
