@@ -59,7 +59,9 @@ sap.ui.define([], function () {
     scheduledActions: { id: "scheduledActions", titleKey: "sectionScheduledActions", fragment: "cdc.vaccreq.sections.ScheduledActions", editable: false, profiles: ["orders"], createCapable: true },
     status: { id: "status", titleKey: "sectionStatus", fragment: "cdc.vaccreq.sections.Status", editable: false, profiles: ["orders"], createCapable: true },
     dates: { id: "dates", titleKey: "sectionDates", fragment: "cdc.vaccreq.sections.Dates", editable: false, profiles: ["orders"], createCapable: true },
-    partiesInvolved: { id: "partiesInvolved", titleKey: "sectionPartiesInvolved", fragment: "cdc.vaccreq.sections.PartiesInvolved", editable: false, profiles: ["orders"], createCapable: false },
+    // Returns: read-only variant sections/returns/PartiesInvolved.fragment.xml
+    // (ZKR only; hidden there in create mode by a byMode override, OrderModeConfig.js).
+    partiesInvolved: { id: "partiesInvolved", titleKey: "sectionPartiesInvolved", fragment: "cdc.vaccreq.sections.PartiesInvolved", editable: false, profiles: ["orders", "returns"], createCapable: false },
     attachments: { id: "attachments", titleKey: "sectionAttachments", fragment: "cdc.vaccreq.sections.Attachments", editable: false, profiles: ["orders"], createCapable: true }
     // Billing intentionally excluded (client request, 2026-10-01 — Billing.fragment.xml
     // stays on disk, unreferenced; see the prior SectionConfig.js history).

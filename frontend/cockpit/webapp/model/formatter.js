@@ -282,6 +282,38 @@ sap.ui.define([
       return sText ? sText + " (" + sCode + ")" : sCode;
     },
 
+    // Read-only Parties tables: the partner's id lives in a different property
+    // per partner function (live 2026-11-11: Customer for AG/RE/RG/WE,
+    // ContactPerson for AP; unused NUMC ids arrive as "0") - first real one wins.
+    partnerId: function (sCustomer, sSupplier, sPersonnel, sContactPerson) {
+      var sId = [sCustomer, sSupplier, sPersonnel, sContactPerson].filter(function (sValue) {
+        return !!sValue && !/^0+$/.test(sValue);
+      })[0];
+      return sId || "";
+    },
+
+    // "Street HouseNumber, City PostalCode, Country" from the address parts;
+    // the backend's preformatted address when street, city and postal code are all empty.
+    partnerAddress: function (sStreet, sHouseNumber, sCity, sPostalCode, sCountry, sFormatted) {
+      var sStreetLine = [sStreet, sHouseNumber].filter(Boolean).join(" ");
+      var sCityLine = [sCity, sPostalCode].filter(Boolean).join(" ");
+      if (!sStreetLine && !sCityLine) {
+        return sFormatted || sCountry || "";
+      }
+      return [sStreetLine, sCityLine, sCountry].filter(Boolean).join(", ");
+    },
+
+    // No main-partner flag exists on HeaderPartner; the Sold-To function
+    // (ServiceSchema.partnerFunctions.soldTo) is the main partner. Blank when
+    // the profile declares no Sold-To function.
+    mainPartnerText: function (sPartnerFunction, sYes, sNo) {
+      var sSoldTo = ServiceSchema.partnerFunctions && ServiceSchema.partnerFunctions.soldTo;
+      if (!sSoldTo || !sPartnerFunction) {
+        return "";
+      }
+      return sPartnerFunction === sSoldTo ? sYes : sNo;
+    },
+
     maskCardNumber: function (sValue) {
       if (!sValue) {
         return EM_DASH;

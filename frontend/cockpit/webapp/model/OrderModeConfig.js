@@ -306,7 +306,9 @@ sap.ui.define([
         // on open and in create (expanded:false beats SECTION_CREATE_EXPANDED).
         sections: Object.assign({}, RETURNS_UI_HIDDEN.sections, {
           priceTotals: { visible: true, locked: false, editable: false, expanded: false },
-          orgData: { visible: true, locked: false, editable: false, expanded: false }
+          orgData: { visible: true, locked: false, editable: false, expanded: false },
+          // createCapable:false in the catalog is informational only; this hides it in create.
+          partiesInvolved: { visible: true, locked: false, editable: false, expanded: false, byMode: { create: { visible: false } } }
         })
       }
     }

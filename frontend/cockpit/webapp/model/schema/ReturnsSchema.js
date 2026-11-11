@@ -67,10 +67,9 @@ sap.ui.define([
       product: "C_CustRetProdBySlsOrgDistrChnl",
       customerPurchaseOrderType: null,
       partnerFunction: "PartnerFunction",
-      // Parties reads (_Partner/HeaderPartner) are a confirmed backend bug on
-      // this service (500 RAISE_SHORTDUMP, NOTES.md) - entity set name kept
-      // here for completeness, but the Parties section stays hidden for every
-      // _RET order type (OrderModeConfig.js RETURNS_UI_HIDDEN.sections).
+      // 2026-11-11: _Partner reads (navigation and $expand) return 200 on ZKR
+      // documents (60000000, 619000510); the read-only Parties section
+      // (sections/returns/PartiesInvolved.fragment.xml) is shown on ZKR only.
       headerPartner: "HeaderPartner",
       deliveryStatus: null,
       deliveryBlockStatus: null,
@@ -182,9 +181,8 @@ sap.ui.define([
       category: "CustomerPurchaseOrderType"
     },
 
-    // Parties reads 500 on this service (backend bug, excluded from scope) -
-    // entire block null, Parties/Contact sections stay hidden for every _RET
-    // order type regardless.
+    // No _SoldToPartyContactInfo navigation on this service
+    // (navigation.headerToContactInfo: null) - entire block null.
     contactProperties: {
       fullName: null,
       email: null,
@@ -523,6 +521,14 @@ sap.ui.define([
 
     contactPartnerFunction: "AP",
 
+    // Sold-To partner function (internal code, PartnerFunction_Text "Sold-to party").
+    // formatter.mainPartnerText marks it as the Main Partner in the read-only
+    // Parties table - HeaderPartnerType has no main-partner flag. Live
+    // 2026-11-11: AG/AP/RE/RG/WE on ZKR 619000510.
+    partnerFunctions: {
+      soldTo: "AG"
+    },
+
     // 2026-10-30: _Partner/HeaderPartner reads still 500 on this service
     // (confirmed backend bug, NOTES.md) - this is now a SEPARATE flag from
     // contactPartnerFunction above (which is also used for the unrelated
@@ -537,10 +543,9 @@ sap.ui.define([
     // HeaderPartnerType - 2026-10-27 metadata re-audit: customer/contactPerson/
     // phone(InternationalPhoneNumber)/email(EmailAddress)/postalCode/cityName/
     // country/streetName/houseNumber are ALL confirmed real (previous comment
-    // wrongly claimed a much smaller shape than orders'). Mapped for
-    // correctness, but _Partner/HeaderPartner reads still 500 on this service
-    // (confirmed backend bug, NOTES.md) - Parties section stays hidden for
-    // every _RET order type regardless until the backend bug is fixed.
+    // wrongly claimed a much smaller shape than orders'). The read-only ZKR
+    // Parties section binds its columns in sections/returns/PartiesInvolved.
+    // fragment.xml; _Partner reads return 200 since 2026-11-11 (see entitySets).
     headerPartnerProperties: {
       salesOrder: "CustomerReturn",
       partnerFunction: "PartnerFunction",

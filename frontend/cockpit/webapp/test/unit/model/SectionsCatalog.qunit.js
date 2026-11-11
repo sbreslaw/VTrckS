@@ -29,7 +29,7 @@ sap.ui.define([
     assert.ok(aReturnsIds.indexOf("shipping") > -1, "shipping has a returns fragment variant");
     assert.ok(aReturnsIds.indexOf("inventory") === -1, "inventory (IoH) not ported to returns per ADR-002");
     assert.ok(aReturnsIds.indexOf("orgData") > -1, "orgData has a read-only returns fragment variant");
-    assert.ok(aReturnsIds.indexOf("partiesInvolved") === -1, "partiesInvolved not ported to returns");
+    assert.ok(aReturnsIds.indexOf("partiesInvolved") > -1, "partiesInvolved has a read-only returns fragment variant");
   });
 
   QUnit.test("Billing is intentionally excluded from the catalog", function (assert) {
@@ -124,5 +124,22 @@ sap.ui.define([
       assert.strictEqual(oSection.editable, true, "ZKB/" + sId + ": editability unchanged");
       assert.strictEqual(oSection.expanded, true, "ZKB/" + sId + ": expanded in create (unchanged)");
     });
+  });
+
+  QUnit.test("ZKR: Parties Involved read-only and collapsed in display, absent in create", function (assert) {
+    ["display", "edit"].forEach(function (sMode) {
+      var oParties = findSection(OrderModeConfig.resolveSections("ZKR", sMode), "partiesInvolved");
+      assert.strictEqual(oParties.visible, true, sMode + ": visible");
+      assert.strictEqual(oParties.locked, false, sMode + ": not locked");
+      assert.strictEqual(oParties.editable, false, sMode + ": no Edit button");
+      assert.strictEqual(oParties.expanded, false, sMode + ": collapsed");
+    });
+    assert.strictEqual(findSection(OrderModeConfig.resolveSections("ZKR", "create"), "partiesInvolved").visible, false, "create: hidden");
+    ["ZISL", "ZWST", "ZXFR"].forEach(function (sType) {
+      var oParties = findSection(OrderModeConfig.resolveSections(sType, "display"), "partiesInvolved");
+      assert.strictEqual(oParties.visible, false, sType + ": hidden");
+      assert.strictEqual(oParties.locked, true, sType + ": locked");
+    });
+    assert.strictEqual(findSection(OrderModeConfig.resolveSections("ZKB", "create"), "partiesInvolved").visible, true, "ZKB create: still visible (unchanged)");
   });
 });
