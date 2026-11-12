@@ -175,11 +175,16 @@
           <!-- Return Reason: item-level reason code (ReasonCode), bound to the same
                SDDocumentReason VH as the header Return Reason. Display shows text via
                the shared /SDDocumentReason map (loaded for the header Select).
-               In create/edit mode, Select with change handler for rule 2.1.2. -->
+               In create/edit mode, Select with change handler for rule 2.1.2.
+               Editable once the row has an NDC (like Lot Number), also before the
+               row is posted: ReasonCode is a plain property (no bound action, unlike
+               Rejection Reason below), so an unposted row's value is sent with
+               the rest of the row by CreateOrderService.postItem. Rows without an
+               NDC are not counted in the header recompute (_getItemReasonsArray). -->
           <Select selectedKey="{path: 'ReasonCode', mode: 'sap.ui.model.BindingMode.TwoWay'}" forceSelection="false" width="100%"
             visible="{itemsColumns>/returnReason}"
             items="{/SDDocumentReason}"
-            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
+            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
             change=".onItemReturnReasonChange">
             <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
           </Select>
