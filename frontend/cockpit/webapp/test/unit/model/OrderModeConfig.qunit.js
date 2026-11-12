@@ -48,7 +48,7 @@ sap.ui.define([
   });
 
   QUnit.test("every column has a label key that exists in i18n", function (assert) {
-    return ResourceBundle.create({ url: sap.ui.require.toUrl("cdc/vaccreq/i18n/i18n.properties"), async: true }).then(function (oBundle) {
+    return ResourceBundle.create({ url: sap.ui.require.toUrl("cdc/vaccreq/i18n/i18n.properties"), async: true, supportedLocales: [""], fallbackLocale: "" }).then(function (oBundle) {
       ["orders", "returns"].forEach(function (sProfile) {
         var oLayout = OrderModeConfig.getItemsColumnLayout(sProfile);
         oLayout.keys.forEach(function (sKey) {
