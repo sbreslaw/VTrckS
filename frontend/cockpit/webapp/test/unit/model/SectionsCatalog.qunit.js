@@ -28,7 +28,8 @@ sap.ui.define([
     assert.ok(aReturnsIds.indexOf("details") > -1, "details has a returns fragment variant");
     assert.ok(aReturnsIds.indexOf("shipping") > -1, "shipping has a returns fragment variant");
     assert.ok(aReturnsIds.indexOf("inventory") === -1, "inventory (IoH) not ported to returns per ADR-002");
-    assert.ok(aReturnsIds.indexOf("partiesInvolved") === -1, "partiesInvolved not ported to returns");
+    assert.ok(aReturnsIds.indexOf("orgData") > -1, "orgData has a read-only returns fragment variant");
+    assert.ok(aReturnsIds.indexOf("partiesInvolved") > -1, "partiesInvolved has a read-only returns fragment variant");
   });
 
   QUnit.test("Billing is intentionally excluded from the catalog", function (assert) {
@@ -86,5 +87,53 @@ sap.ui.define([
   QUnit.test("unknown order type falls back to the default order type, never throws", function (assert) {
     var aResolved = OrderModeConfig.resolveSections("NOT_A_TYPE", "display");
     assert.strictEqual(aResolved.length, SectionCatalog.all().length);
+  });
+
+  // prompts/E008_Returns_ZKR_Sections_Session_Prompt.md (widened to every
+  // return type, 2026-11-11): read-only sections, collapsed on open and in create.
+  var RETURN_TYPES = ["ZISL", "ZWST", "ZXFR", "ZKR"];
+
+  function findSection(aResolved, sId) {
+    return aResolved.filter(function (o) { return o.id === sId; })[0];
+  }
+
+  QUnit.test("every return type: Price Totals and Org Data visible, read-only, collapsed in display and create", function (assert) {
+    RETURN_TYPES.forEach(function (sType) {
+      ["display", "create"].forEach(function (sMode) {
+        var aResolved = OrderModeConfig.resolveSections(sType, sMode);
+        ["priceTotals", "orgData"].forEach(function (sId) {
+          var oSection = findSection(aResolved, sId);
+          var sMsg = sType + "/" + sMode + "/" + sId;
+          assert.strictEqual(oSection.visible, true, sMsg + ": visible");
+          assert.strictEqual(oSection.locked, false, sMsg + ": not locked");
+          assert.strictEqual(oSection.editable, false, sMsg + ": no Edit button");
+          assert.strictEqual(oSection.expanded, false, sMsg + ": collapsed (per-type expanded beats SECTION_CREATE_EXPANDED)");
+        });
+      });
+    });
+  });
+
+  QUnit.test("ZKB create still expands Price Totals and Org Data, editability unchanged", function (assert) {
+    var aZkbCreate = OrderModeConfig.resolveSections("ZKB", "create");
+    ["priceTotals", "orgData"].forEach(function (sId) {
+      var oSection = findSection(aZkbCreate, sId);
+      assert.strictEqual(oSection.visible, true, "ZKB/" + sId + ": visible");
+      assert.strictEqual(oSection.editable, true, "ZKB/" + sId + ": editability unchanged");
+      assert.strictEqual(oSection.expanded, true, "ZKB/" + sId + ": expanded in create (unchanged)");
+    });
+  });
+
+  QUnit.test("every return type: Parties Involved read-only and collapsed in display, absent in create", function (assert) {
+    RETURN_TYPES.forEach(function (sType) {
+      ["display", "edit"].forEach(function (sMode) {
+        var oParties = findSection(OrderModeConfig.resolveSections(sType, sMode), "partiesInvolved");
+        assert.strictEqual(oParties.visible, true, sType + "/" + sMode + ": visible");
+        assert.strictEqual(oParties.locked, false, sType + "/" + sMode + ": not locked");
+        assert.strictEqual(oParties.editable, false, sType + "/" + sMode + ": no Edit button");
+        assert.strictEqual(oParties.expanded, false, sType + "/" + sMode + ": collapsed");
+      });
+      assert.strictEqual(findSection(OrderModeConfig.resolveSections(sType, "create"), "partiesInvolved").visible, false, sType + "/create: hidden");
+    });
+    assert.strictEqual(findSection(OrderModeConfig.resolveSections("ZKB", "create"), "partiesInvolved").visible, true, "ZKB create: still visible (unchanged)");
   });
 });

@@ -67,10 +67,10 @@ sap.ui.define([
       product: "C_CustRetProdBySlsOrgDistrChnl",
       customerPurchaseOrderType: null,
       partnerFunction: "PartnerFunction",
-      // Parties reads (_Partner/HeaderPartner) are a confirmed backend bug on
-      // this service (500 RAISE_SHORTDUMP, NOTES.md) - entity set name kept
-      // here for completeness, but the Parties section stays hidden for every
-      // _RET order type (OrderModeConfig.js RETURNS_UI_HIDDEN.sections).
+      // 2026-11-11: _Partner reads (navigation and $expand) return 200 on
+      // ZKR/ZISL/ZWST/ZXFR documents (619000510, 600248105, 619000505,
+      // 619000508); the read-only Parties section
+      // (sections/returns/PartiesInvolved.fragment.xml) is shown on every return type.
       headerPartner: "HeaderPartner",
       deliveryStatus: null,
       deliveryBlockStatus: null,
@@ -182,9 +182,8 @@ sap.ui.define([
       category: "CustomerPurchaseOrderType"
     },
 
-    // Parties reads 500 on this service (backend bug, excluded from scope) -
-    // entire block null, Parties/Contact sections stay hidden for every _RET
-    // order type regardless.
+    // No _SoldToPartyContactInfo navigation on this service
+    // (navigation.headerToContactInfo: null) - entire block null.
     contactProperties: {
       fullName: null,
       email: null,
@@ -388,6 +387,9 @@ sap.ui.define([
     // HeaderPricingElement/ItemPricingElement entity sets + navigations are
     // confirmed identical names on this service; the properties sub-map uses
     // this service's own (slightly different) field names, rest null.
+    // The header table is the returns variant sections/returns/PriceTotals.
+    // fragment.xml (every return type, OrderModeConfig.js), which binds these
+    // names directly.
     pricingElements: {
       headerEntitySet: "HeaderPricingElement",
       itemEntitySet: "ItemPricingElement",
@@ -396,11 +398,12 @@ sap.ui.define([
       // 2026-10-27 metadata re-audit: rateValueIsNull/conditionQuantity/
       // conditionQuantityUnit/conditionAmountIsNull/transactionCurrency are all
       // confirmed real on Header/ItemPricingElementType (previously wrongly
-      // marked null/absent) - unmapped for PR1 (priceTotals section stays
-      // hidden for every _RET type regardless).
+      // marked null/absent).
       properties: {
-        step: null,
-        counter: null,
+        // Key parts of HeaderPricingElementType (ui_customerreturnmanage_2026-11-09.xml),
+        // live-confirmed 2026-11-11 on ZKR 619000510 (steps 15..80).
+        step: "PricingProcedureStep",
+        counter: "PricingProcedureCounter",
         // 2026-11-05 metadata re-audit (ui_customerreturnmanage_2026-11-04.xml):
         // ConditionType/ConditionCalculationType/ConditionIsForStatistics/
         // ConditionIsManuallyChanged all confirmed real on this service's own
@@ -519,6 +522,14 @@ sap.ui.define([
 
     contactPartnerFunction: "AP",
 
+    // Sold-To partner function (internal code, PartnerFunction_Text "Sold-to party").
+    // formatter.mainPartnerText marks it as the Main Partner in the read-only
+    // Parties table - HeaderPartnerType has no main-partner flag. Live
+    // 2026-11-11: AG/AP/RE/RG/WE on ZKR 619000510.
+    partnerFunctions: {
+      soldTo: "AG"
+    },
+
     // 2026-10-30: _Partner/HeaderPartner reads still 500 on this service
     // (confirmed backend bug, NOTES.md) - this is now a SEPARATE flag from
     // contactPartnerFunction above (which is also used for the unrelated
@@ -533,10 +544,9 @@ sap.ui.define([
     // HeaderPartnerType - 2026-10-27 metadata re-audit: customer/contactPerson/
     // phone(InternationalPhoneNumber)/email(EmailAddress)/postalCode/cityName/
     // country/streetName/houseNumber are ALL confirmed real (previous comment
-    // wrongly claimed a much smaller shape than orders'). Mapped for
-    // correctness, but _Partner/HeaderPartner reads still 500 on this service
-    // (confirmed backend bug, NOTES.md) - Parties section stays hidden for
-    // every _RET order type regardless until the backend bug is fixed.
+    // wrongly claimed a much smaller shape than orders'). The read-only ZKR
+    // Parties section binds its columns in sections/returns/PartiesInvolved.
+    // fragment.xml; _Partner reads return 200 since 2026-11-11 (see entitySets).
     headerPartnerProperties: {
       salesOrder: "CustomerReturn",
       partnerFunction: "PartnerFunction",

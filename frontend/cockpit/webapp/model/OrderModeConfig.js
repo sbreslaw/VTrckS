@@ -14,7 +14,8 @@ sap.ui.define([
   //   kinds  - fields, fieldGroups (Details.fragment.xml), columns (Items
   //            table, ITEMS_COLUMN_KEYS), sections (SectionCatalog.js ids,
   //            resolved through resolveSections() below — NOT read via uiFlag)
-  //   flags  - visible, editable; both default to true when absent
+  //   flags  - visible, editable; both default to true when absent (sections
+  //            also take locked, expanded and byMode - see resolveSections)
   //   XML    - visible="{= ${orderUi>/<kind>/<id>/visible} !== false }"
   //            (editable: append "&& ${orderUi>/<kind>/<id>/editable} !== false")
   //   JS     - uiFlag(oUi, kind, id, flag)
@@ -148,10 +149,18 @@ sap.ui.define([
     // real, raw-code-only property on CustomerReturnManageType (confirmed
     // live, 2026-10-28 metadata); sections/returns/Shipping.fragment.xml maps
     // it instead of orders' _OverallDeliveryBlockStatus text lookup (which
-    // does not exist on this service). Every other PROVIDER_ORDER_UI_HIDDEN
-    // section stays hidden for _RET.
+    // does not exist on this service).
+    // prompts/E008_Returns_ZKR_Sections_Session_Prompt.md (widened to every
+    // return type, code owner 2026-11-11): read-only Price Totals, Org Data and
+    // Parties Involved from the sections/returns/* variants, collapsed on open
+    // and in create (expanded:false beats SECTION_CREATE_EXPANDED); Parties is
+    // hidden in create (createCapable:false in the catalog is informational only).
+    // Every other PROVIDER_ORDER_UI_HIDDEN section stays hidden for _RET.
     sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections, {
-      shipping: { visible: true, locked: false }
+      shipping: { visible: true, locked: false },
+      priceTotals: { visible: true, locked: false, editable: false, expanded: false },
+      orgData: { visible: true, locked: false, editable: false, expanded: false },
+      partiesInvolved: { visible: true, locked: false, editable: false, expanded: false, byMode: { create: { visible: false } } }
     })
   };
 
@@ -427,6 +436,9 @@ sap.ui.define([
   // section's Edit button only while another section has an active edit
   // session — on top of, not instead of, the existing per-button
   // `editEnabled` serialization in onSectionEditPress/_endEditSession).
+  // A per-type (or `byMode`) `expanded` boolean beats the two global maps
+  // (lets one type keep a section collapsed in create mode although
+  // SECTION_CREATE_EXPANDED expands it for every other type).
   function resolveSections(vOrderType, sMode) {
     var oConfig = ORDER_TYPES[normalizeOrderType(vOrderType)];
     var oPerType = (oConfig.ui && oConfig.ui.sections) || {};
@@ -436,6 +448,10 @@ sap.ui.define([
       var bExpanded = !!SECTION_BASELINE_EXPANDED[oCatalogEntry.id];
       if (sMode === "create" && SECTION_CREATE_EXPANDED[oCatalogEntry.id]) {
         bExpanded = true;
+      }
+      var vExpanded = oModeOverride.expanded !== undefined ? oModeOverride.expanded : oOverride.expanded;
+      if (typeof vExpanded === "boolean") {
+        bExpanded = vExpanded;
       }
       return {
         id: oCatalogEntry.id,
