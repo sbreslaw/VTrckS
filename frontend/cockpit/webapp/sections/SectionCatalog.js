@@ -46,7 +46,7 @@ sap.ui.define([], function () {
       createCapable: true,
       headerAction: { id: "editList", titleKey: "sectionEditList", press: "onInventoryEditListPress", createOnly: true }
     },
-    shipping: { id: "shipping", titleKey: "sectionShipping", fragment: "cdc.vaccreq.sections.Shipping", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
+    shipping: { id: "shipping", titleKey: "sectionShipping", titleKeyByProfile: { returns: "sectionShippingAssignment" }, fragment: "cdc.vaccreq.sections.Shipping", editable: true, editLive: true, profiles: ["orders", "returns"], createCapable: true },
     shippingTransactions: { id: "shippingTransactions", titleKey: "sectionShippingTransactions", fragment: "cdc.vaccreq.sections.ShippingTransactions", editable: false, profiles: ["orders"], createCapable: true },
     transactionHistory: { id: "transactionHistory", titleKey: "sectionTransactionHistory", fragment: "cdc.vaccreq.sections.TransactionHistory", editable: false, profiles: ["orders"], createCapable: true },
     // Returns: read-only variant sections/returns/OrgData.fragment.xml (every return type).
@@ -83,9 +83,17 @@ sap.ui.define([], function () {
     });
   }
 
+  // Section title i18n key for a service profile: `titleKeyByProfile[profileId]`
+  // when the entry has one (returns: "Shipping Assignment"), else `titleKey`.
+  // Works for any section meta (SectionFactory also renders ItemDetail sections).
+  function titleKeyFor(oEntry, sProfileId) {
+    return (oEntry.titleKeyByProfile && oEntry.titleKeyByProfile[sProfileId]) || oEntry.titleKey;
+  }
+
   return {
     get: get,
     all: all,
-    availableFor: availableFor
+    availableFor: availableFor,
+    titleKeyFor: titleKeyFor
   };
 });

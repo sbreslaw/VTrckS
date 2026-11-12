@@ -1025,7 +1025,7 @@ sap.ui.define([
     // there's no visible UI change, just a resolved i18n string lookup.
     _getSectionTitle: function (sSectionId) {
       var oMeta = this._aSectionMeta.find(function (oEntry) { return oEntry.id === sSectionId; });
-      return oMeta ? this.getResourceBundle().getText(oMeta.titleKey) : sSectionId;
+      return oMeta ? this.getResourceBundle().getText(SectionCatalog.titleKeyFor(oMeta, ServiceSchema.profileId)) : sSectionId;
     },
 
     onItemsAddMore: function () {
@@ -5060,7 +5060,7 @@ sap.ui.define([
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
         // `gated`: hidden with its panel while sectionFlags>/sectionsGateOpen is false.
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true, gated: !oMeta.mandatoryHeader };
+        return { id: oMeta.id, title: oBundle.getText(SectionCatalog.titleKeyFor(oMeta, ServiceSchema.profileId)), visible: true, gated: !oMeta.mandatoryHeader };
       });
       return new JSONModel({ list: aList });
     },

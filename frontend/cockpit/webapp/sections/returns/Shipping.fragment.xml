@@ -3,23 +3,22 @@
   xmlns:core="sap.ui.core" 
   xmlns:f="sap.ui.layout.form" 
 	xmlns:l="sap.ui.layout">
-	<!-- ret-10-28 #1: _RET-specific Shipping variant. Differences from the
-			shared sections/Shipping.fragment.xml:
-			- Shipping Condition FormElement omitted - already shown in
-				sections/returns/Details.fragment.xml for every _RET order type
-				(orderUi>/fields/detailsShippingCondition/visible defaults true
-				there), same convention the shared fragment's own comment documents
-				for ZKB/ZREP's inverse case.
-			- Delivery Status FormElement omitted entirely - CustomerReturnManageType
-				has no equivalent property or _OverallDeliveryStatus navigation at all
-				(ReturnsSchema.js entitySets.deliveryStatus/headerProperties.
-				deliveryStatus both null, confirmed 2026-10-28 metadata) - unlike
-				Delivery Block, there is no raw-code fallback to show either.
+	<!-- ret-10-28 #1: _RET-specific Shipping variant (section title "Shipping
+			Assignment" on returns - SectionCatalog.js titleKeyByProfile). Fields, in
+			order (code owner, 2026-11-12): Provider, Provider Address, Delivery
+			Status, Delivery Block Status, Shipping Condition.
+			- Delivery Status: the header roll-up of the items' DeliveryStatus,
+				_OverallDeliveryStatus/OverallDeliveryStatus_Text (same binding as the
+				orders Shipping form; ui_customerreturnmanage_2026-11-12.xml). A new
+				return has none yet - the transient create context shows a dash.
 			- Delivery Block shows the raw DeliveryBlockReason code only - this
 				service has NO Text annotation/ValueListReferences for it (confirmed
 				live, 2026-10-28 metadata), unlike orders' _OverallDeliveryBlockStatus/
-				OverallDeliveryBlockStatus_Text nav, so there is no text to look up and
-				no createMode-scratch-context split to cover. -->
+				OverallDeliveryBlockStatus_Text nav.
+			- Shipping Condition is shown here AND in sections/returns/Details.fragment.xml
+				(code owner: both), with the same per-type flag
+				(orderUi>/fields/detailsShippingCondition: ZKR only) and the same
+				editable rule; ShippingCondition is in ReturnsSchema.updatableHeaderProperties. -->
 	<f:Form width="auto" editable="{sectionFlags>/shipping/editing}">
 		<f:layout>
 			<f:ResponsiveGridLayout 
@@ -126,6 +125,23 @@
 
 					<f:FormElement>
 						<f:label>
+							<Label text="{i18n>deliveryStatus}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{path: '_OverallDeliveryStatus/OverallDeliveryStatus_Text', formatter: '.formatter.orDash'}">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement>
+						<f:label>
 							<Label text="{i18n>deliveryBlockStatus}">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
@@ -138,6 +154,34 @@
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
 							</Text>
+						</f:fields>
+					</f:FormElement>
+
+					<f:FormElement visible="{orderUi>/fields/detailsShippingCondition/visible}">
+						<f:label>
+							<Label text="{i18n>shippingCondition}">
+								<layoutData>
+									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
+								</layoutData>
+							</Label>
+						</f:label>
+						<f:fields>
+							<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/shipping/editing} }">
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</Text>
+							<ComboBox
+								selectedKey="{ShippingCondition}"
+								visible="{sectionFlags>/shipping/editing}"
+								editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
+								enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+								items="{path: '/ShippingCondition'}">
+								<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />
+								<layoutData>
+									<l:GridData span="XL8 L8 M8 S12"/>
+								</layoutData>
+							</ComboBox>
 						</f:fields>
 					</f:FormElement>
 
