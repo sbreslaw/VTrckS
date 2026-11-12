@@ -183,7 +183,11 @@ sap.ui.define([
       orderType: "ZKB",
       titleKey: "orderTypeZkb",
       defaults: {},
-      createStatusDefault: "",
+      // Create-mode Status default (createEnrich>/status, a po>/OrderStatus
+      // key): E0001 = "1A In Process - Request". Display only - Provider
+      // Orders have no writable header status (UserStatusDerived is
+      // Computed); the backend's status profile assigns E0001 itself at save.
+      createStatusDefault: "E0001",
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
@@ -199,7 +203,9 @@ sap.ui.define([
       orderType: "ZREP",
       titleKey: "orderTypeZrep",
       defaults: {},
-      createStatusDefault: "2A",
+      // E0001 = "2A Open - Replacement" (see ZKB). Replaces "2A", a pre-E000x
+      // code that matched no status key, so the Select started blank.
+      createStatusDefault: "E0001",
       // createStatusOptions: ZREP_STATUS_OPTIONS,
       // editStatusOptions: ZREP_STATUS_OPTIONS,
       createStatusOptions: [],
