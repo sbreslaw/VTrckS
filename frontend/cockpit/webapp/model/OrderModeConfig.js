@@ -12,7 +12,7 @@ sap.ui.define([
   // differences here. `ui` is the single UI-config source, exposed to the
   // Detail view as the `orderUi` model (Detail.controller.js#_applyOrderUi):
   //   kinds  - fields, fieldGroups (Details.fragment.xml), columns (Items
-  //            table, ITEMS_COLUMN_KEYS), sections (SectionCatalog.js ids,
+  //            table, OrderModeConfig.getItemsColumnLayout), sections (SectionCatalog.js ids,
   //            resolved through resolveSections() below — NOT read via uiFlag)
   //   flags  - visible, editable; both default to true when absent (sections
   //            also take locked, expanded and byMode - see resolveSections)
@@ -492,6 +492,45 @@ sap.ui.define([
     return JSON.parse(JSON.stringify(ITEM_UI_HIDDEN_BY_PROFILE[sProfileId] || { sections: {} }));
   }
 
+  // Items table column keys (itemsColumns>/<key>, in table order) and their
+  // Personalize/export labels, per service profile. Each profile's Items
+  // fragment renders its columns in this same order. Orders: unchanged.
+  // Returns (code owner, 2026-11-12): exactly Action, Item Number, NDC Code,
+  // Lot Number, Expiration Date, Quantity, Unit, NDC Description, Status,
+  // Rejection Reason, Return Reason, Item Category, ExIS Line Number.
+  var ITEMS_COLUMN_LAYOUT_BY_PROFILE = {
+    orders: {
+      keys: [
+        "rowAction", "optOut", "itemNumber", "exisId", "brand", "ndcCode", "lotNumber", "expirationDate", "ndcDescription",
+        "qty", "uom", "orderIntention", "fundType", "poReference", "deliveryStatus", "netValue", "rejectionReason"
+      ],
+      i18n: {
+        rowAction: "colRowAction", optOut: "colOptOutAncillary", itemNumber: "colItemNumber",
+        exisId: "colExisId", brand: "colBrand", ndcCode: "colNdcCode", lotNumber: "colLotNumber",
+        expirationDate: "colExpirationDate", ndcDescription: "colNdcDescription",
+        qty: "itemQty", uom: "itemUom", orderIntention: "colOrderIntention", fundType: "colFundType",
+        poReference: "colPoReference", deliveryStatus: "colDeliveryStatus", netValue: "itemNetAmount",
+        rejectionReason: "colRejectionReason"
+      }
+    },
+    returns: {
+      keys: [
+        "rowAction", "itemNumber", "ndcCode", "lotNumber", "expirationDate", "qty", "uom", "ndcDescription",
+        "itemStatus", "rejectionReason", "returnReason", "itemCategory", "exisId"
+      ],
+      i18n: {
+        rowAction: "colAction", itemNumber: "colItemNumberFull", ndcCode: "colNdcCode", lotNumber: "colLotNumber",
+        expirationDate: "colExpirationDate", qty: "colQuantity", uom: "colUnit", ndcDescription: "colNdcDescriptionFull",
+        itemStatus: "colStatus", rejectionReason: "colRejectionReason", returnReason: "colReturnReason",
+        itemCategory: "colItemCategory", exisId: "colExisLineNumber"
+      }
+    }
+  };
+
+  function getItemsColumnLayout(sProfileId) {
+    return JSON.parse(JSON.stringify(ITEMS_COLUMN_LAYOUT_BY_PROFILE[sProfileId] || ITEMS_COLUMN_LAYOUT_BY_PROFILE.orders));
+  }
+
   return {
     startupParameter: STARTUP_PARAMETER,
     defaultCategory: DEFAULT_CATEGORY,
@@ -504,6 +543,7 @@ sap.ui.define([
     resolve: resolve,
     uiFlag: uiFlag,
     resolveSections: resolveSections,
-    getItemUi: getItemUi
+    getItemUi: getItemUi,
+    getItemsColumnLayout: getItemsColumnLayout
   };
 });

@@ -292,6 +292,10 @@ sap.ui.define([
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
       returnReason: "ReasonCode",
+      // 2026-11-12: custom item status (Edm.String(20), no Computed annotation -
+      // writable), live $metadata saved as ui_customerreturnmanage_2026-11-12.xml.
+      // Items "Status" column; options = the header Status list (enums>/EDIT_STATUS).
+      itemStatus: "ZZ1_ItemStatus_SDI",
       fundType: null,
       orderIntention: null,
       poReference: null,
@@ -717,7 +721,8 @@ sap.ui.define([
       quantity: "RequestedQuantity",
       batch: "ZZ1_LotNumber_SDI",
       expirationDate: "ZZ1_ExpirationDate_SDI",
-      returnReason: "ReasonCode"
+      returnReason: "ReasonCode",
+      itemStatus: "ZZ1_ItemStatus_SDI"
     },
 
     editUpdateGroup: "vrEdit",

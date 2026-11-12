@@ -77,7 +77,8 @@ sap.ui.define([
       // Return Orders session prompt 3.1/3.2.
       ServiceSchema.itemProperties.batch,
       ServiceSchema.itemProperties.expirationDate,
-      ServiceSchema.itemProperties.returnReason
+      ServiceSchema.itemProperties.returnReason,
+      ServiceSchema.itemProperties.itemStatus
     ];
   }
 
