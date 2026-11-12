@@ -199,6 +199,15 @@ sap.ui.define([
       return fnItemOptOutVisible(bColumnVisible, sHigherLevelItem);
     },
 
+    // Parties row actions: false only for the profile's Sold-To function
+    // (ServiceSchema.partnerFunctions.soldTo). Bind the path with
+    // targetType:'any' - on a boolean property V4 otherwise converts the
+    // code to boolean first and throws ("AG is not a valid boolean value").
+    isNotSoldTo: function (sPartnerFunction) {
+      var sSoldTo = ServiceSchema.partnerFunctions && ServiceSchema.partnerFunctions.soldTo;
+      return !sSoldTo || sPartnerFunction !== sSoldTo;
+    },
+
     categoryText: function (sCategoryKey, aOptions) {
       return fnCategoryText(sCategoryKey, aOptions);
     },

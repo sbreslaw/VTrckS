@@ -38,13 +38,13 @@
                  OPEN_QUESTIONS.md), Delete is real (bound-entity DELETE,
                  gated by the row's own dynamic __EntityControl/Deletable). -->
             <Button icon="sap-icon://edit" type="Transparent" tooltip="{i18n>rowActionEdit}" press=".onPartiesEditRow" />
-            <!-- TODO-VERIFY(sold-to-partner-function): "AG" is assumed to be
-                 the sold-to-party SDDocumentPartnerType/PartnerFunction code
-                 (standard SD convention) - never independently confirmed
-                 live this session (no backend access) - guards against
-                 deleting the order's own mandatory Sold-To row. -->
+            <!-- Hidden on the order's mandatory Sold-To row (formatter.isNotSoldTo,
+                 OrdersSchema.partnerFunctions.soldTo = "AG", live-confirmed
+                 2026-11-11). targetType:'any' passes the raw code: without it
+                 V4 converts PartnerFunction to boolean (visible's type) and
+                 throws, which left the buttons visible on every row. -->
             <Button icon="sap-icon://delete" type="Transparent" tooltip="{i18n>rowActionDelete}" press=".onPartiesDeleteRow"
-              enabled="{__EntityControl/Deletable}" visible="{:= ${PartnerFunction} !== 'AG' }" />
+              enabled="{__EntityControl/Deletable}" visible="{path: 'PartnerFunction', targetType: 'any', formatter: '.formatter.isNotSoldTo'}" />
           </HBox>
           <Text text="{_PartnerFunction/PartnerFunction_Text}" />
           <Text text="{Partner}" />
@@ -54,9 +54,9 @@
                  CustomerSalesArea-backed picker the Provider field already
                  uses) to PATCH this row's own Customer property - gated by
                  the row's own dynamic __EntityControl/Updatable and never
-                 shown for the mandatory Sold-To row (see TODO-VERIFY above). -->
+                 shown for the mandatory Sold-To row (see the Delete button above). -->
             <Button icon="sap-icon://value-help" type="Transparent" tooltip="{i18n>partiesSelectPartner}" press=".onPartiesChangeName"
-              enabled="{__EntityControl/Updatable}" visible="{:= ${PartnerFunction} !== 'AG' }" />
+              enabled="{__EntityControl/Updatable}" visible="{path: 'PartnerFunction', targetType: 'any', formatter: '.formatter.isNotSoldTo'}" />
           </HBox>
           <Text text="{FormattedPostalAddressDesc}" />
           <!-- TODO(main-partner): no "is main partner" flag exists anywhere

@@ -754,6 +754,12 @@ sap.ui.define([
     // AP-contact fallback searches.
     // Partner function of the order's Contact (Master Contact column, Details > General > Contact).
     contactPartnerFunction: "AP",
+    // Sold-To partner function (internal code). Live 2026-11-11 on 518000504:
+    // AG = "Sold-to party" (_PartnerFunction/PartnerFunction_Text). The Parties
+    // row actions never show on it (formatter.isNotSoldTo).
+    partnerFunctions: {
+      soldTo: "AG"
+    },
     // Provider VH's "Contact" search mode (ProviderSearchService.js#loadContactRows)
     // reads HeaderPartner top-level, which works on this service - see
     // ReturnsSchema's own contactSearchSupported: false for the counter-case.
