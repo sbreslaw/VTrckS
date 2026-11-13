@@ -108,19 +108,16 @@
           <!-- ADR-002 hazard #5 (2026-11-04): CustomerReturnItemManageType's own
                Lot Number field is ZZ1_LotNumber_SDI (LotNumber never persisted -
                confirmed backend-side, NOTES.md 2026-11-02; Batch still exists on
-               this entity but is a different, unrelated field). The VH item list
-               itself is still po>/BatchValueHelp (Matnr/Batch, no separate
-               description - see ServiceSchema.providerOrderService.
-               batchValueHelpProperties), bound lazily per row and filtered by the
-               row's Product, same pattern as Order Intention/Fund Type above
-               (Detail.controller.js#_bindBatchValueHelp). -->
-          <Select
-            selectedKey="{path: 'ZZ1_LotNumber_SDI', mode: 'sap.ui.model.BindingMode.OneWay'}"
-            forceSelection="false"
+               this entity but is a different, unrelated field).
+               Code owner 2026-11-13: free text, no value help. Letters, digits and
+               dashes only - validated by Detail.controller.js#onItemLotChange
+               (model/LotNumberRule.js); value is OneWay so only a valid value is written. -->
+          <Input
+            value="{path: 'ZZ1_LotNumber_SDI', mode: 'sap.ui.model.BindingMode.OneWay'}"
+            width="100%"
             visible="{itemsColumns>/lotNumber}"
             editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/lotNumber/editable} !== false }"
-            change=".onBatchChange"
-            modelContextChange=".onBatchModelContextChange" />
+            change=".onItemLotChange" />
           <!-- Return Orders session prompt 3.2, remapped 2026-11-04: ZZ1_ExpirationDate_SDI
                (Edm.Date, no FieldControl annotation) - a plain two-way binding like the
                new ExIS Date header field. -->

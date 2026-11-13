@@ -50,6 +50,7 @@ sap.ui.define([
   "cdc/vaccreq/model/PricingColumns",
   "cdc/vaccreq/model/StatusValueHelp",
   "cdc/vaccreq/model/ReturnReasonLogic",
+  "cdc/vaccreq/model/LotNumberRule",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/ProviderInventoryService",
@@ -62,7 +63,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor, PricingColumns, StatusValueHelp, ReturnReasonLogic,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor,   PricingColumns, StatusValueHelp, ReturnReasonLogic, LotNumberRule,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter, UserFeedback
 ) {
@@ -1584,6 +1585,26 @@ sap.ui.define([
       var oRowContext = oEvent.getSource().getBindingContext();
       var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       oRowContext.setProperty(ServiceSchema.itemProperties.batch, sBatch || "").catch(function (oError) {
+        this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
+      }.bind(this));
+    },
+
+    // Returns free-text Lot Number (sections/returns/Items.fragment.xml, OneWay value).
+    // A value LotNumberRule rejects is not applied: the cell reverts to the saved
+    // value with a Warning, same convention as Qty/ExIS.
+    onItemLotChange: function (oEvent) {
+      var oInput = oEvent.getSource();
+      var oRowContext = oInput.getBindingContext();
+      var oResult = LotNumberRule.check(oEvent.getParameter("value"), ServiceSchema.itemFieldLimits.lotNumberMaxLength);
+      if (oResult.error) {
+        oInput.setValue(oRowContext.getProperty(ServiceSchema.itemProperties.batch) || "");
+        this._setCellSkippedState(oInput, oResult.error, oResult.args);
+        return;
+      }
+      oInput.setValueState("None");
+      oInput.setValue(oResult.value);
+      var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
+      oRowContext.setProperty(ServiceSchema.itemProperties.batch, oResult.value).catch(function (oError) {
         this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
       }.bind(this));
     },

@@ -429,7 +429,9 @@ sap.ui.define([
     itemFieldLimits: {
       exisIdMaxLength: 12,
       ndcMaxLength: 18,
-      qtyMax: 2147483647
+      qtyMax: 2147483647,
+      // Free-text Lot Number is returns-only; orders keep the BatchValueHelp Select.
+      lotNumberMaxLength: null
     },
 
     // Live-test fix (round 19): bound action (design/so.xml ~2178,
