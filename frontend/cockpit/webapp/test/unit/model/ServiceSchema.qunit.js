@@ -27,6 +27,17 @@ sap.ui.define([
     assert.strictEqual(typeof ServiceSchema.use, "function", "use() itself survives");
   });
 
+  // Create-mode section gate (Detail.controller.js#_hasMandatoryHeaderFields):
+  // Provider Orders open the other sections once the Provider is set (Reason is
+  // optional, code owner 2026-11-12); Returns keep Provider/Return Type/Return Reason.
+  QUnit.test("create-mode mandatory header fields per profile", function (assert) {
+    function fields(oSchema) {
+      return oSchema.createMandatoryHeaderFields.map(function (oField) { return oField.field; });
+    }
+    assert.deepEqual(fields(OrdersSchema), ["providerId"], "orders: Provider only");
+    assert.deepEqual(fields(ReturnsSchema), ["providerId", "returnType", "orderReason"], "returns unchanged");
+  });
+
   QUnit.test("both profiles address the session's Contact Person row by key", function (assert) {
     ServiceSchema.use(ReturnsSchema);
     assert.strictEqual(ServiceSchema.buildHeaderPartnerPath("", ServiceSchema.contactPartnerFunction),

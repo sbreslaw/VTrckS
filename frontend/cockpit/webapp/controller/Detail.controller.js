@@ -5321,7 +5321,9 @@ sap.ui.define([
     },
 
     // Orders' header Reason ComboBox (TwoWay, no other handler) - the model
-    // already holds the new value when this fires.
+    // already holds the new value when this fires. Reason is not in
+    // OrdersSchema.createMandatoryHeaderFields today, so this is a no-op
+    // re-check; it keeps the gate correct if the schema lists it again.
     onMandatoryHeaderFieldChange: function () {
       this._updateSectionsGate();
     },

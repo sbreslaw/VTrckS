@@ -123,11 +123,11 @@ sap.ui.define([
     },
 
     // Create mode: header fields that must have a value before any section
-    // other than Details is shown (code-owner requirement, Provider Orders:
-    // Provider, Reason). Same shape as ReturnsSchema.createMandatoryHeaderFields.
+    // other than Details is shown (code-owner requirement; Provider Orders:
+    // Provider only - Reason is optional, 2026-11-12). Same shape as
+    // ReturnsSchema.createMandatoryHeaderFields.
     createMandatoryHeaderFields: [
-      { field: "providerId" },
-      { field: "orderReason", uiField: "orderReason" }
+      { field: "providerId" }
     ],
 
     headerProperties: {
