@@ -394,7 +394,7 @@
 						the metadata (so.xml 2026-10-23). -->
 					<f:FormElement visible="{= ${orderUi>/fields/detailsReturnType/visible} !== false }">
 						<f:label>
-							<Label text="{parts: [{path: 'i18n>detailsReturnTypeTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+							<Label text="{parts: [{path: 'i18n>detailsReturnTypeTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="{sectionFlags>/createMode}">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
@@ -440,7 +440,7 @@
 							<!-- Return Orders session prompt 4.2: typed title ("Vaccine Return reason")
 								when an order type is known, falling back to the plain i18n>otherReason text
 								otherwise (formatter.formatText returns "" for a falsy pattern). -->
-							<Label text="{parts: [{path: 'i18n>detailsOrderReasonTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="false">
+							<Label text="{parts: [{path: 'i18n>detailsOrderReasonTyped'}, {path: 'orderUi>/title'}], formatter: '.formatter.formatText'}" required="{sectionFlags>/createMode}">
 								<layoutData>
 									<l:GridData span="XL4 L4 M4 S12" linebreak="true"/>
 								</layoutData>
