@@ -328,7 +328,9 @@ sap.ui.define([
     itemFieldLimits: {
       exisIdMaxLength: 12,
       ndcMaxLength: 18,
-      qtyMax: null
+      qtyMax: null,
+      // ZZ1_LotNumber_SDI MaxLength 10 (ui_customerreturnmanage_2026-11-12.xml).
+      lotNumberMaxLength: 10
     },
 
     // No UpdatePrices-equivalent bound action documented for this service.
