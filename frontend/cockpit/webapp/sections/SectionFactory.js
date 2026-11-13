@@ -6,8 +6,9 @@ sap.ui.define([
   "sap/m/Title",
   "sap/m/Button",
   "sap/m/MessageToast",
-  "cdc/vaccreq/model/ServiceSchema"
-], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast, ServiceSchema) {
+  "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/sections/SectionCatalog"
+], function (Fragment, Panel, OverflowToolbar, ToolbarSpacer, Title, Button, MessageToast, ServiceSchema, SectionCatalog) {
   "use strict";
 
   // Item Details view session prompt, Step-0: "prefer parameterizing the
@@ -54,7 +55,7 @@ sap.ui.define([
     this._aMeta.forEach(function (oMeta, iIndex) {
       var aToolbarContent = [
           new Title(this._oView.createId(oMeta.id + "-title"), {
-            text: oBundle.getText(oMeta.titleKey),
+            text: oBundle.getText(SectionCatalog.titleKeyFor(oMeta, ServiceSchema.profileId)),
             level: "H2",
             titleStyle: "H4"
           })

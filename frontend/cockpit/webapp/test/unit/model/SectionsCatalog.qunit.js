@@ -136,4 +136,14 @@ sap.ui.define([
     });
     assert.strictEqual(findSection(OrderModeConfig.resolveSections("ZKB", "create"), "partiesInvolved").visible, true, "ZKB create: still visible (unchanged)");
   });
+
+  QUnit.module("SectionCatalog.titleKeyFor");
+
+  QUnit.test("Shipping is titled 'Shipping Assignment' on returns only (2026-11-12)", function (assert) {
+    var oShipping = SectionCatalog.get("shipping");
+    assert.strictEqual(SectionCatalog.titleKeyFor(oShipping, "returns"), "sectionShippingAssignment", "returns");
+    assert.strictEqual(SectionCatalog.titleKeyFor(oShipping, "orders"), "sectionShipping", "orders unchanged");
+    assert.strictEqual(SectionCatalog.titleKeyFor(SectionCatalog.get("items"), "returns"), "sectionItems", "no override -> titleKey");
+    assert.strictEqual(SectionCatalog.titleKeyFor({ titleKey: "itemDetails" }, "returns"), "itemDetails", "non-catalog meta (ItemDetail sections)");
+  });
 });

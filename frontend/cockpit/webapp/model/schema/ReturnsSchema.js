@@ -292,6 +292,11 @@ sap.ui.define([
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
       returnReason: "ReasonCode",
+      // 2026-11-12: custom item status (Edm.String(20), no Computed annotation),
+      // live $metadata saved as ui_customerreturnmanage_2026-11-12.xml.
+      // Items "Status" column - display only per code owner 2026-11-13 (not in
+      // updatableItemProperties / the postItem whitelist).
+      itemStatus: "ZZ1_ItemStatus_SDI",
       fundType: null,
       orderIntention: null,
       poReference: null,

@@ -101,18 +101,8 @@ sap.ui.define([
   ];
 
   var ITEMS_COLUMNS_KEY = "itemsColumns";
-  var ITEMS_COLUMN_KEYS = [
-    "rowAction", "optOut", "itemNumber", "exisId", "brand", "ndcCode", "lotNumber", "expirationDate", "ndcDescription",
-    "qty", "uom", "orderIntention", "fundType", "poReference", "deliveryStatus", "netValue", "rejectionReason"
-  ];
-  var ITEMS_COLUMN_I18N = {
-    rowAction: "colRowAction", optOut: "colOptOutAncillary", itemNumber: "colItemNumber",
-    exisId: "colExisId", brand: "colBrand", ndcCode: "colNdcCode", lotNumber: "colLotNumber",
-    expirationDate: "colExpirationDate", ndcDescription: "colNdcDescription",
-    qty: "itemQty", uom: "itemUom", orderIntention: "colOrderIntention", fundType: "colFundType",
-    poReference: "colPoReference", deliveryStatus: "colDeliveryStatus", netValue: "itemNetAmount",
-    rejectionReason: "colRejectionReason"
-  };
+  // Column keys/labels per service profile: OrderModeConfig.getItemsColumnLayout
+  // (read per call - the Orders and Returns apps share this module graph).
   // Paste-eligible Items columns: column key -> ServiceSchema.itemProperties key of the cell's value binding.
   var PASTE_COLUMNS = { exisId: "exisId", ndcCode: "material", qty: "quantity" };
 
@@ -363,12 +353,16 @@ sap.ui.define([
     // in Items.fragment.xml; only show/hide is persisted, via VariantStore.js,
     // deliberately simpler than the Master table's reorder-capable dialog. ---
 
+    _getItemsColumnLayout: function () {
+      return OrderModeConfig.getItemsColumnLayout(ServiceSchema.profileId);
+    },
+
     _getItemsColumnVisibility: function () {
       var oData = VariantStore.load(ITEMS_COLUMNS_KEY);
       var oSaved = oData.variants && oData.variants.layout;
       var oOrderUi = this.getView().getModel("orderUi").getData();
       var oVisibility = {};
-      ITEMS_COLUMN_KEYS.forEach(function (sKey) {
+      this._getItemsColumnLayout().keys.forEach(function (sKey) {
         // An order-type-hidden column wins over the user's saved layout.
         oVisibility[sKey] = OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible") &&
           (sKey === "rejectionReason" || !(oSaved && oSaved[sKey] === false));
@@ -383,6 +377,8 @@ sap.ui.define([
       var aContexts = oBinding ? oBinding.getContexts(0, oBinding.getLength()) : [];
       var oBundle = this.getResourceBundle();
       var oVisibility = this.getView().getModel("itemsColumns").getData();
+      var oLayout = this._getItemsColumnLayout();
+      var fnInLayout = function (sKey) { return oLayout.keys.indexOf(sKey) !== -1; };
       // DF-1025: the nav text is no longer bound (not in $select) - resolve the code via the VH list.
       var mRejectionText = {};
       this.getView().getModel("rejectionReasons").getProperty("/list").forEach(function (oEntry) {
@@ -390,11 +386,11 @@ sap.ui.define([
           mRejectionText[oEntry.key] = oEntry.text;
         }
       });
-      var aCols = ITEMS_COLUMN_KEYS
+      var aCols = oLayout.keys
         .filter(function (sKey) { return sKey !== "rowAction" && oVisibility[sKey] !== false; })
         .map(function (sKey) {
           return {
-            label: oBundle.getText(ITEMS_COLUMN_I18N[sKey]),
+            label: oBundle.getText(oLayout.i18n[sKey]),
             property: sKey,
             type: "String"
           };
@@ -424,7 +420,12 @@ sap.ui.define([
             ? oCtx.getProperty(ServiceSchema.navigation.itemToDeliveryStatus + "/" + ServiceSchema.itemProperties.deliveryStatusText)
             : "",
           netValue: oCtx.getProperty(ServiceSchema.itemProperties.netAmount),
-          rejectionReason: mRejectionText[oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)] || ""
+          rejectionReason: mRejectionText[oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)] || "",
+          // Returns-only columns (OrderModeConfig.getItemsColumnLayout) - read
+          // only when the active profile's layout has them.
+          itemStatus: fnInLayout("itemStatus") ? (oCtx.getProperty(ServiceSchema.itemProperties.itemStatus) || "") : "",
+          returnReason: fnInLayout("returnReason") ? (oCtx.getProperty(ServiceSchema.itemProperties.returnReason) || "") : "",
+          itemCategory: fnInLayout("itemCategory") ? (oCtx.getProperty(ServiceSchema.itemProperties.itemCategory) || "") : ""
         };
       });
 
@@ -441,14 +442,15 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getResourceBundle();
       var oOrderUi = this.getView().getModel("orderUi").getData();
+      var oLayout = this._getItemsColumnLayout();
       var oWorkingModel = new JSONModel({
-        rows: ITEMS_COLUMN_KEYS.filter(function (sKey) {
+        rows: oLayout.keys.filter(function (sKey) {
           return sKey !== "rowAction" && sKey !== "rejectionReason" &&
             OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
         }).map(function (sKey) {
           return {
             key: sKey,
-            label: oBundle.getText(ITEMS_COLUMN_I18N[sKey]),
+            label: oBundle.getText(oLayout.i18n[sKey]),
             visible: that.getView().getModel("itemsColumns").getProperty("/" + sKey) !== false
           };
         })
@@ -1018,7 +1020,7 @@ sap.ui.define([
     // there's no visible UI change, just a resolved i18n string lookup.
     _getSectionTitle: function (sSectionId) {
       var oMeta = this._aSectionMeta.find(function (oEntry) { return oEntry.id === sSectionId; });
-      return oMeta ? this.getResourceBundle().getText(oMeta.titleKey) : sSectionId;
+      return oMeta ? this.getResourceBundle().getText(SectionCatalog.titleKeyFor(oMeta, ServiceSchema.profileId)) : sSectionId;
     },
 
     onItemsAddMore: function () {
@@ -5053,7 +5055,7 @@ sap.ui.define([
       var oBundle = this.getResourceBundle();
       var aList = this._aSectionMeta.map(function (oMeta) {
         // `gated`: hidden with its panel while sectionFlags>/sectionsGateOpen is false.
-        return { id: oMeta.id, title: oBundle.getText(oMeta.titleKey), visible: true, gated: !oMeta.mandatoryHeader };
+        return { id: oMeta.id, title: oBundle.getText(SectionCatalog.titleKeyFor(oMeta, ServiceSchema.profileId)), visible: true, gated: !oMeta.mandatoryHeader };
       });
       return new JSONModel({ list: aList });
     },

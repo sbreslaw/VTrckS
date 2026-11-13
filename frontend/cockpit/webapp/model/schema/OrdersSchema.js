@@ -360,6 +360,8 @@ sap.ui.define([
       rejectionReason: "SalesDocumentRjcnReason",
       rejectionReasonText: "SalesDocumentRjcnReason_Text",
       returnReason: null,
+      // Returns-only Items "Status" column (ReturnsSchema ZZ1_ItemStatus_SDI).
+      itemStatus: null,
       // MVGR2 - real field (MaterialGroup2), client requirement (2026-08-31):
       // Fund Type (VFC/317/S/L/CHP/SPL/PAN/ARR/N/A - see Enums.js
       // FUND_TYPE/FUND_TYPE_BY_INTENTION), gated by Adult vs Pediatric.
