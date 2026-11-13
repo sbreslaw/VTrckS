@@ -386,11 +386,6 @@ sap.ui.define([
           mRejectionText[oEntry.key] = oEntry.text;
         }
       });
-      // Item Status codes share the header Status option list (enums>/EDIT_STATUS).
-      var mStatusText = {};
-      (this.getView().getModel("enums").getProperty("/EDIT_STATUS") || []).forEach(function (oEntry) {
-        mStatusText[oEntry.key] = oEntry.text;
-      });
       var aCols = oLayout.keys
         .filter(function (sKey) { return sKey !== "rowAction" && oVisibility[sKey] !== false; })
         .map(function (sKey) {
@@ -428,7 +423,7 @@ sap.ui.define([
           rejectionReason: mRejectionText[oCtx.getProperty(ServiceSchema.itemProperties.rejectionReason)] || "",
           // Returns-only columns (OrderModeConfig.getItemsColumnLayout) - read
           // only when the active profile's layout has them.
-          itemStatus: fnInLayout("itemStatus") ? (mStatusText[oCtx.getProperty(ServiceSchema.itemProperties.itemStatus)] || oCtx.getProperty(ServiceSchema.itemProperties.itemStatus) || "") : "",
+          itemStatus: fnInLayout("itemStatus") ? (oCtx.getProperty(ServiceSchema.itemProperties.itemStatus) || "") : "",
           returnReason: fnInLayout("returnReason") ? (oCtx.getProperty(ServiceSchema.itemProperties.returnReason) || "") : "",
           itemCategory: fnInLayout("itemCategory") ? (oCtx.getProperty(ServiceSchema.itemProperties.itemCategory) || "") : ""
         };

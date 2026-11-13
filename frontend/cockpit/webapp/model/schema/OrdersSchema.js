@@ -999,8 +999,7 @@ sap.ui.define([
       quantity: "RequestedQuantity",
       batch: "Batch",
       expirationDate: null,
-      returnReason: null,
-      itemStatus: null
+      returnReason: null
     },
 
     // Update group for all edit-session PATCHes/creates (EditRequestService.js

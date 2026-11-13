@@ -146,17 +146,10 @@
                on this service (ReturnsSchema.itemProperties.itemText), not
                SalesOrderItemText. -->
           <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${CustomerReturnItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
-          <!-- Item Status (ZZ1_ItemStatus_SDI, writable custom field, 2026-11-12):
-               options are the header Status list (enums>/EDIT_STATUS, the
-               po>/OrderStatus VH for this order type). Same editable rule and write
-               paths as Return Reason: a posted row PATCHes through its own group,
-               an unposted row's value is sent by CreateOrderService.postItem. -->
-          <Select selectedKey="{ZZ1_ItemStatus_SDI}" forceSelection="false" width="100%"
-            visible="{itemsColumns>/itemStatus}"
-            items="{enums>/EDIT_STATUS}"
-            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/itemStatus/editable} !== false) }">
-            <core:Item key="{enums>key}" text="{enums>text}" />
-          </Select>
+          <!-- Item Status (ZZ1_ItemStatus_SDI, custom field, 2026-11-12): display
+               only per code owner 2026-11-13 - plain value, no value help, never
+               written by the UI (not in the postItem whitelist). -->
+          <Text text="{ZZ1_ItemStatus_SDI}" visible="{itemsColumns>/itemStatus}" />
           <!-- DF-1025: SalesDocumentRjcnReason is Computed - selectedKey is OneWay (display
                only); writes go through the bound SetRejectionReason/RemoveRejectionReason
                actions in onItemRejectionReasonChange. Items come from the JSON
