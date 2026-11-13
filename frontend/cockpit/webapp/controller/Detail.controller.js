@@ -1925,7 +1925,9 @@ sap.ui.define([
       // A transient row's created() rejection is already surfaced by
       // _onItemCreateActivate. Only independently PATCHed persisted rows need
       // extraction here; both paths still consume the property promises.
-      if (!bPersisted) {
+      // A PATCH rejected because the user cancelled the edit (resetChanges) is
+      // not an error - no message, no popover.
+      if (!bPersisted || (oError && oError.canceled)) {
         return;
       }
       var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), this.getResourceBundle());
