@@ -764,6 +764,12 @@ sap.ui.define([
 
     // No jurisdiction-filter requirement confirmed for the returns Master list.
     showJurisdictionFilter: false,
+    // Master filters on item fields (NDC Code): the header query is an unmanaged
+    // query that rejects item-path filters - _Item/any(item:item/Product eq ...)
+    // returns 501 "Unmanaged query: Filter with path not permitted for
+    // 'C_CUSTOMERRETURNITEMMANAGETP'" (DH1, 2026-11-16). The return numbers are
+    // resolved through the item set (entitySets.item) instead.
+    filterHeadersByItemSet: true,
     statusSource: "e008",
 
     // Returns-only extension (no orders analog): NDC Code Value Help, a
