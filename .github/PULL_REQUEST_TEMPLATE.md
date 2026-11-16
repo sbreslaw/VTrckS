@@ -1,6 +1,8 @@
 ## What / why
 <!-- One paragraph. Reference the task/spec you were given, if any. -->
 
+Closes #<!-- issue number, if this PR resolves a GitHub issue; leave out otherwise -->
+
 ## Evidence
 - Task/spec reference (if provided by the code owner):
 - Live test: <!-- what was exercised on the dev system; network trace / SE16 / VA03 check where relevant -->
