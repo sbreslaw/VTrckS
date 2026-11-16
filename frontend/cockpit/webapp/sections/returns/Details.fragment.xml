@@ -609,11 +609,13 @@
 									<l:GridData span="XL3 L3 M3 S12"/>
 								</layoutData>
 								<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<!-- RET-NoOfBoxes-Dropdown: locked while No. of Boxes is "0" (which sets it
+									to the rule's code, Detail.controller.js#onNoOfBoxesSelectChange). -->
 								<ComboBox
 									width="100%"
 									selectedKey="{ShippingCondition}"
 									visible="{sectionFlags>/details/editing}"
-									editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
+									editable="{parts: [{path: 'ZZ1_NoofBoxes_SDH', targetType: 'any'}, {path: 'orderUi>/fields/detailsShippingCondition/editable'}], formatter: '.formatter.shippingConditionEditable'}"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
 									items="{path: '/ShippingCondition'}">
 									<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />

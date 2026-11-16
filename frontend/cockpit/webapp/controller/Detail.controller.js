@@ -1522,6 +1522,9 @@ sap.ui.define([
     // RET-NoOfBoxes-Dropdown: Returns renders No. of Boxes as a Select over
     // NoOfBoxesRule.options() (enums>/NO_OF_BOXES). selectedKey is OneWay, so
     // only a user pick is written - the item key is already the string value.
+    // A pick that forces a Shipping Condition (0 boxes -> NoOfBoxesRule) writes
+    // it on the same context/group; the ComboBoxes lock through
+    // formatter.shippingConditionEditable, so other picks only unlock them.
     onNoOfBoxesSelectChange: function (oEvent) {
       var that = this;
       var oItem = oEvent.getParameter("selectedItem");
@@ -1529,17 +1532,27 @@ sap.ui.define([
       if (!oItem || !oContext) {
         return;
       }
-      oContext.setProperty(ServiceSchema.headerProperties.noOfBoxes, oItem.getKey()).catch(function (oError) {
-        // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
-        if (oError && oError.canceled) {
-          return;
-        }
-        var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), that.getResourceBundle());
-        aSectionIds.forEach(function (sId) {
-          that._oSectionFactory.expandSection(sId);
+      var fnWrite = function (sProperty, sValue) {
+        oContext.setProperty(sProperty, sValue).catch(function (oError) {
+          // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
+          if (oError && oError.canceled) {
+            return;
+          }
+          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), that.getResourceBundle());
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
         });
-        that._openMessagePopover();
-      });
+      };
+      var sNoOfBoxes = oItem.getKey();
+      var sShippingCondition = NoOfBoxesRule.shippingConditionFor(sNoOfBoxes);
+      var sShippingConditionProperty = ServiceSchema.headerProperties.shippingCondition;
+      fnWrite(ServiceSchema.headerProperties.noOfBoxes, sNoOfBoxes);
+      if (sShippingCondition && sShippingConditionProperty &&
+          oContext.getProperty(sShippingConditionProperty) !== sShippingCondition) {
+        fnWrite(sShippingConditionProperty, sShippingCondition);
+      }
     },
 
     // Return Orders session prompt 3.1: Lot Number options are product-specific - bound per
