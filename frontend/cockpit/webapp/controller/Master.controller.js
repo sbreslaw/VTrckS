@@ -486,26 +486,32 @@ sap.ui.define([
       }
     },
 
+    // Returns: the product list lives on the profile's lookup model ("f4ProductVH";
+    // 404 on the Returns service itself) and has no brand (industryStandardName
+    // null). A null path would become an empty FilterGroupItem name and a
+    // Contains filter on nothing, so the Brand field and column are left out.
     onNdcFilterValueHelpRequest: function () {
       var oProps = ServiceSchema.productProperties;
+      var sBrand = oProps.industryStandardName;
       this._openStandardEntityValueHelp(this.byId("filterNdc"), {
         title: this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("filterNdc"),
+        modelName: ServiceSchema.productLookupModel || undefined,
         entitySet: ServiceSchema.entitySets.product,
         key: oProps.id,
         descriptionKey: oProps.text,
-        select: [oProps.id, oProps.text, oProps.industryStandardName],
-        searchPaths: [oProps.id, oProps.text, oProps.industryStandardName],
+        select: [oProps.id, oProps.text, sBrand].filter(Boolean),
+        searchPaths: [oProps.id, oProps.text, sBrand].filter(Boolean),
         fields: [
           { path: oProps.id, labelKey: "productHelpProductId" },
           { path: oProps.text, labelKey: "productHelpProduct" },
-          { path: oProps.industryStandardName, labelKey: "productHelpBrand" }
-        ],
+          sBrand ? { path: sBrand, labelKey: "productHelpBrand" } : null
+        ].filter(Boolean),
         columns: [
           { path: oProps.id, labelKey: "productHelpProductId", width: "11rem" },
           { path: oProps.text, labelKey: "productHelpProduct", width: "22rem" },
           { path: null, labelKey: "productHelpBaseCategory", width: "10rem" },
-          { path: oProps.industryStandardName, labelKey: "productHelpBrand", width: "10rem" }
-        ]
+          sBrand ? { path: sBrand, labelKey: "productHelpBrand", width: "10rem" } : null
+        ].filter(Boolean)
       });
     },
 
