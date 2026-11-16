@@ -27,4 +27,13 @@ sap.ui.define([
     aFirst.pop();
     assert.strictEqual(NoOfBoxesRule.options().length, 26);
   });
+
+  QUnit.test("0 boxes forces Shipping Condition 01 and locks it; other values do neither", function (assert) {
+    assert.strictEqual(NoOfBoxesRule.shippingConditionFor("0"), "01");
+    assert.strictEqual(NoOfBoxesRule.locksShippingCondition("0"), true);
+    ["1", "25", "", null, undefined, "00", 0].forEach(function (vValue) {
+      assert.strictEqual(NoOfBoxesRule.shippingConditionFor(vValue), null, "forces none for " + JSON.stringify(vValue));
+      assert.strictEqual(NoOfBoxesRule.locksShippingCondition(vValue), false, "does not lock for " + JSON.stringify(vValue));
+    });
+  });
 });

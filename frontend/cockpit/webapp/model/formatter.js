@@ -1,8 +1,9 @@
 sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
+  "cdc/vaccreq/model/NoOfBoxesRule",
   "sap/ui/core/format/DateFormat",
   "sap/base/strings/formatMessage"
-], function (ServiceSchema, DateFormat, formatMessage) {
+], function (ServiceSchema, NoOfBoxesRule, DateFormat, formatMessage) {
   "use strict";
 
   var EM_DASH = "\u2014";
@@ -214,6 +215,13 @@ sap.ui.define([
 
     noOfBoxesValue: function (sValue) {
       return fnNoOfBoxesValue(sValue);
+    },
+
+    // Returns Shipping Condition ComboBoxes: the per-type editable flag, and
+    // locked while No. of Boxes is "0" (NoOfBoxesRule). Bind the No. of Boxes
+    // part with targetType:'any' so the raw string arrives, not a boolean.
+    shippingConditionEditable: function (sNoOfBoxes, vEditableFlag) {
+      return vEditableFlag !== false && !NoOfBoxesRule.locksShippingCondition(sNoOfBoxes);
     },
 
     masterCreatedOn: function (sValue) {
