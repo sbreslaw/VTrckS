@@ -1796,6 +1796,18 @@ sap.ui.define([
         this.byId("filterDeliveryBlockReason").setEnabled(false);
         this.byId("filterDeliveryBlockReason").setTooltip(sTooltip);
       }
+
+      // Filters the profile removes (ServiceSchema.hiddenMasterFilters): hidden in
+      // the filter bar and Adapt Filters, and left out of the filter variants
+      // (_getVariantControlDefs) so their controls stay empty and add no filter.
+      var aHiddenFilters = ServiceSchema.hiddenMasterFilters || [];
+      this._mHiddenFilterControls = {};
+      this.byId("filterBar").getFilterGroupItems().forEach(function (oItem) {
+        if (aHiddenFilters.indexOf(oItem.getName()) !== -1) {
+          oItem.setHiddenFilter(true);
+          this._mHiddenFilterControls[this.getView().getLocalId(oItem.getControl().getId())] = true;
+        }
+      }, this);
     },
 
     // ret-10-28 #3: options now come from the same shared source
@@ -2446,6 +2458,7 @@ sap.ui.define([
     // backed by the app's swappable VariantStore persistence adapter. ---
 
     _getVariantControlDefs: function () {
+      var mHidden = this._mHiddenFilterControls || {};
       return [
         { id: "filterProviderPin", type: "conditions" },
         { id: "filterRequestId", type: "conditions" },
@@ -2460,7 +2473,9 @@ sap.ui.define([
         { id: "filterSalesOrderType", type: "key" },
         { id: "filterStatus", type: "keys" },
         { id: "filterCreatedOn", type: "dynamicDateRange" }
-      ];
+      ].filter(function (oDef) {
+        return !mHidden[oDef.id];
+      });
     },
 
     _captureVariantValues: function () {
