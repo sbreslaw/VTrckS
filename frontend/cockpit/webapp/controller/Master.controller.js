@@ -25,6 +25,7 @@ sap.ui.define([
   "sap/m/CustomListItem",
   "sap/m/HBox",
   "sap/m/MessageToast",
+  "sap/m/MessageBox",
   "sap/m/MenuItem",
   "sap/m/SearchField",
   "sap/m/Token",
@@ -50,7 +51,7 @@ sap.ui.define([
   "cdc/vaccreq/util/UserFeedback"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, InvisibleText, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
-  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MenuItem, SearchField, Token, mLibrary,
+  Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MessageBox, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
   formatter, ServiceSchema, StatusValueHelp, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue, UserFeedback
@@ -67,6 +68,10 @@ sap.ui.define([
   var FIXED_COLUMN_KEYS = ["requestId", "description"];
   var ROW_COUNT_DEBOUNCE_MS = 400;
   var RESIZE_DEBOUNCE_MS = 400;
+  // Items read in one lookup when a profile resolves item filters through the
+  // item set (ServiceSchema.filterHeadersByItemSet); reaching it means the
+  // condition is too broad and the user is asked to refine it.
+  var ITEM_FILTER_LOOKUP_LIMIT = 5000;
   var RangeOperation = compLibrary.valuehelpdialog.ValueHelpRangeOperation;
   var DateRangeKeys = mLibrary.StandardDynamicDateRangeKeys;
   var SortOrder = coreLibrary.SortOrder;
@@ -1149,6 +1154,73 @@ sap.ui.define([
       }
     },
 
+    // NDC Code filter as header filters. A profile whose header query rejects
+    // item-path filters (ServiceSchema.filterHeadersByItemSet, Returns) gets the
+    // order numbers from the item set first, like the Provider PIN filter:
+    // include = any item matches -> key eq ... (or); exclude = no item matches ->
+    // key ne ... (and). Resolves to null when a lookup reaches
+    // ITEM_FILTER_LOOKUP_LIMIT items; a failed lookup rejects with ndcLookup set.
+    _resolveNdcFilters: function () {
+      var aFilters = [];
+      if (!ServiceSchema.filterHeadersByItemSet) {
+        this._pushNdcConditionFilters(aFilters);
+        return Promise.resolve(aFilters);
+      }
+      var sOrderId = ServiceSchema.keys.orderId;
+      var aConditions = this._getInputConditions("filterNdc");
+      // undefined: no such conditions; false: too many items; else distinct order numbers.
+      var fnLoadOrderIds = function (bExclude) {
+        var aItemFilters = aConditions.filter(function (oCondition) {
+          return !!oCondition.exclude === bExclude;
+        }).map(function (oCondition) {
+          return this._createConditionFilter(ServiceSchema.itemProperties.material,
+            Object.assign({}, oCondition, { exclude: false }));
+        }, this).filter(Boolean);
+        if (!aItemFilters.length) {
+          return Promise.resolve(undefined);
+        }
+        var oBinding = this.getOwnerComponent().getModel().bindList("/" + ServiceSchema.entitySets.item,
+          null, null, new Filter({ filters: aItemFilters, and: false }), { $select: sOrderId });
+        // Read the order numbers before destroying the binding (its contexts die with it).
+        return oBinding.requestContexts(0, ITEM_FILTER_LOOKUP_LIMIT).then(function (aContexts) {
+          var vOrderIds = aContexts.length >= ITEM_FILTER_LOOKUP_LIMIT ? false : aContexts.map(function (oContext) {
+            return oContext.getProperty(sOrderId);
+          }).filter(function (sId, iIndex, aIds) {
+            return sId && aIds.indexOf(sId) === iIndex;
+          });
+          oBinding.destroy();
+          return vOrderIds;
+        }, function (oError) {
+          oBinding.destroy();
+          throw oError;
+        });
+      }.bind(this);
+      return Promise.all([fnLoadOrderIds(false), fnLoadOrderIds(true)]).then(function (aOrderIds) {
+        var aInclude = aOrderIds[0];
+        var aExclude = aOrderIds[1];
+        if (aInclude === false || aExclude === false) {
+          return null;
+        }
+        if (aInclude) {
+          aFilters.push(aInclude.length ? new Filter({
+            filters: aInclude.map(function (sId) { return new Filter(sOrderId, FilterOperator.EQ, sId); }),
+            and: false
+          }) : new Filter(sOrderId, FilterOperator.EQ, ""));
+        }
+        if (aExclude && aExclude.length) {
+          aFilters.push(new Filter({
+            filters: aExclude.map(function (sId) { return new Filter(sOrderId, FilterOperator.NE, sId); }),
+            and: true
+          }));
+        }
+        return aFilters;
+      }, function (oError) {
+        var oLookupError = oError instanceof Error ? oError : new Error(String(oError));
+        oLookupError.ndcLookup = true;
+        throw oLookupError;
+      });
+    },
+
     onProviderFilterValueHelpRequest: function () {
       var oProps = ServiceSchema.customerSalesAreaProperties;
       this._openStandardEntityValueHelp(this.byId("filterProvider"), {
@@ -1200,11 +1272,18 @@ sap.ui.define([
       var iSearchRequest = (this._iSearchRequest || 0) + 1;
       this._iSearchRequest = iSearchRequest;
       this._oViewModel.setProperty("/masterBusy", true);
-      this._resolveProviderPinFilters().then(function (aFilters) {
+      Promise.all([this._resolveProviderPinFilters(), this._resolveNdcFilters()]).then(function (aResolved) {
         if (this._iSearchRequest !== iSearchRequest) {
           return;
         }
+        var aFilters = aResolved[0];
+        var aNdcFilters = aResolved[1];
         var oView = this.getView();
+        if (!aNdcFilters) {
+          MessageBox.warning(this.getOwnerComponent().getModel("i18n").getResourceBundle()
+            .getText("ndcFilterTooManyMatches", [ITEM_FILTER_LOOKUP_LIMIT]));
+          return;
+        }
 
       this._pushConditionFilters(aFilters, "filterRequestId");
       this._pushConditionFilters(aFilters, "filterExisId");
@@ -1212,7 +1291,7 @@ sap.ui.define([
       this._pushTypedFilter(aFilters,
         [ServiceSchema.navigation.headerToContactInfo + "/" + ServiceSchema.contactProperties.responsibleEmployee],
         oView.byId("filterEmployeeResponsible").getValue(), RangeOperation.EQ);
-      this._pushNdcConditionFilters(aFilters);
+      Array.prototype.push.apply(aFilters, aNdcFilters);
       // CreatedByUser is IsUpperCase: typed IDs are matched EQ in upper case.
       var oCreatedBy = oView.byId("filterCreatedBy");
       oCreatedBy.setValue(oCreatedBy.getValue().trim().toUpperCase());
@@ -1275,10 +1354,10 @@ sap.ui.define([
       }
 
         this._oViewModel.setProperty("/masterHasSearch", true);
-      }.bind(this)).catch(function () {
+      }.bind(this)).catch(function (oError) {
         if (this._iSearchRequest === iSearchRequest) {
           MessageToast.show(this.getOwnerComponent().getModel("i18n").getResourceBundle()
-            .getText("providerPinHelpLoadError"));
+            .getText(oError && oError.ndcLookup ? "ndcFilterLoadError" : "providerPinHelpLoadError"));
         }
       }.bind(this)).finally(function () {
         if (this._iSearchRequest === iSearchRequest) {
