@@ -169,15 +169,12 @@ sap.ui.define([
 
     _configureFilterSuggestions: function () {
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-      // ADR-002 (Returns_Single_App_Service_Profile) PR1: customerSalesArea/
-      // customerSalesAreaProperties and product/productProperties are both
-      // null on ReturnsSchema (live-confirmed, FLP sandbox 2026-10-27, _RET
-      // crashed here before this fix - Cannot read properties of null) -
-      // Provider and NDC filter suggestions have no equivalent source on this
-      // service profile yet (PR2 concern), so these two configs are only
-      // built when the profile actually declares them. filterProvider/
-      // filterNdc keep their plain Input behavior (no suggestions wired) for
-      // _RET in the meantime - no crash, no dead/silent suggestion list.
+      // ADR-002 (Returns_Single_App_Service_Profile) PR1: the Provider and NDC
+      // configs are only built when the profile declares their entity set and
+      // properties. Both read through the profile's lookup model, like the value
+      // helps: Returns has no CustomerSalesArea or product set of its own (404
+      // "Resource not found for segment", DH1 2026-11-16) and reads them through
+      // "ord" / "f4ProductVH"; Orders' lookup models are "" (the default model).
       var aConfigs = [
         {
           controlId: "filterProviderPin",
@@ -204,6 +201,7 @@ sap.ui.define([
       if (ServiceSchema.entitySets.customerSalesArea && ServiceSchema.customerSalesAreaProperties) {
         aConfigs.push({
           controlId: "filterProvider",
+          modelName: ServiceSchema.providerLookupModel || undefined,
           entitySet: ServiceSchema.entitySets.customerSalesArea,
           key: ServiceSchema.customerSalesAreaProperties.customer,
           description: ServiceSchema.customerSalesAreaProperties.customerName,
@@ -214,6 +212,7 @@ sap.ui.define([
       if (ServiceSchema.entitySets.product && ServiceSchema.productProperties) {
         aConfigs.push({
           controlId: "filterNdc",
+          modelName: ServiceSchema.productLookupModel || undefined,
           entitySet: ServiceSchema.entitySets.product,
           key: ServiceSchema.productProperties.id,
           description: ServiceSchema.productProperties.text,
