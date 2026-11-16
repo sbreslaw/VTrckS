@@ -209,8 +209,15 @@ sap.ui.define([
     // No C_SDCustomerAddressVH-equivalent confirmed on this service.
     shippingAddressValueHelp: null,
 
+    // Created By filter (Master): resolved at runtime from CreatedByUser's
+    // ValueListReferences, like OrdersSchema (D-1171). On this service they point
+    // to the c_customerreturnuservh F4 service (ui_customerreturnmanage_2026-11-12.xml;
+    // live: C_CustomerReturnUserVH, UserID in/out, UserDescription display only).
+    // modelName = component model alias.
     f4Services: {
-      salesDocumentUser: null
+      salesDocumentUser: {
+        modelName: "customerReturnUserVH"
+      }
     },
 
     // Shared CSDL vocabulary terms - not service-specific, identical to OrdersSchema.

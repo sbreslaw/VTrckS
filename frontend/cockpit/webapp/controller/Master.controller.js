@@ -252,15 +252,14 @@ sap.ui.define([
     },
 
     // D-1171: the same value list as F3893's Created By filter - CreatedByUser's
-    // ValueListReferences (c_salesdocumentuservh F4 service), resolved by the meta model.
+    // ValueListReferences (Orders: c_salesdocumentuservh, Returns:
+    // c_customerreturnuservh F4 service), resolved by the meta model.
     _requestCreatedByValueList: function () {
       if (!this._oCreatedByValueListPromise) {
-        // ADR-002 PR1: f4Services.salesDocumentUser is null on ReturnsSchema
-        // (no equivalent F4 service confirmed yet - live-confirmed this
-        // synchronous read used to throw before entering the promise chain,
-        // which the .catch() in _configureFilterSuggestions() could not
-        // catch). Reject instead so the existing .catch() there handles it
-        // exactly like any other "no value list" outcome.
+        // A profile without f4Services.salesDocumentUser has no Created By value
+        // list. Reject (rather than throw synchronously, which the .catch() in
+        // _configureFilterSuggestions() could not catch) so it is handled like
+        // any other "no value list" outcome.
         if (!ServiceSchema.f4Services || !ServiceSchema.f4Services.salesDocumentUser) {
           this._oCreatedByValueListPromise = Promise.reject(
             new Error("No salesDocumentUser F4 service configured for this service profile"));
