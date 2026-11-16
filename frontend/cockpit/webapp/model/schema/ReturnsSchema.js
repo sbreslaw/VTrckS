@@ -770,6 +770,9 @@ sap.ui.define([
     // 'C_CUSTOMERRETURNITEMMANAGETP'" (DH1, 2026-11-16). The return numbers are
     // resolved through the item set (entitySets.item) instead.
     filterHeadersByItemSet: true,
+    // Master filters removed on Returns (code owner, 2026-11-16) - FilterGroupItem
+    // names in Master.view.xml; hidden from the filter bar and Adapt Filters.
+    hiddenMasterFilters: ["shipToParty", "deliveryBlockReason"],
     statusSource: "e008",
 
     // Returns-only extension (no orders analog): NDC Code Value Help, a
