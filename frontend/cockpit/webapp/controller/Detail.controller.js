@@ -51,6 +51,7 @@ sap.ui.define([
   "cdc/vaccreq/model/StatusValueHelp",
   "cdc/vaccreq/model/ReturnReasonLogic",
   "cdc/vaccreq/model/LotNumberRule",
+  "cdc/vaccreq/model/NoOfBoxesRule",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/ProviderInventoryService",
@@ -63,7 +64,7 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor,   PricingColumns, StatusValueHelp, ReturnReasonLogic, LotNumberRule,
+  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor,   PricingColumns,   StatusValueHelp, ReturnReasonLogic, LotNumberRule, NoOfBoxesRule,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter, UserFeedback
 ) {
@@ -1518,6 +1519,42 @@ sap.ui.define([
       oContext.setProperty(ServiceSchema.headerProperties.noOfBoxes, String(oEvent.getParameter("value")));
     },
 
+    // RET-NoOfBoxes-Dropdown: Returns renders No. of Boxes as a Select over
+    // NoOfBoxesRule.options() (enums>/NO_OF_BOXES). selectedKey is OneWay, so
+    // only a user pick is written - the item key is already the string value.
+    // A pick that forces a Shipping Condition (0 boxes -> NoOfBoxesRule) writes
+    // it on the same context/group; the ComboBoxes lock through
+    // formatter.shippingConditionEditable, so other picks only unlock them.
+    onNoOfBoxesSelectChange: function (oEvent) {
+      var that = this;
+      var oItem = oEvent.getParameter("selectedItem");
+      var oContext = this.getView().getBindingContext();
+      if (!oItem || !oContext) {
+        return;
+      }
+      var fnWrite = function (sProperty, sValue) {
+        oContext.setProperty(sProperty, sValue).catch(function (oError) {
+          // Section Cancel (resetChanges) rejects the queued PATCH as canceled.
+          if (oError && oError.canceled) {
+            return;
+          }
+          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), that.getResourceBundle());
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+          that._openMessagePopover();
+        });
+      };
+      var sNoOfBoxes = oItem.getKey();
+      var sShippingCondition = NoOfBoxesRule.shippingConditionFor(sNoOfBoxes);
+      var sShippingConditionProperty = ServiceSchema.headerProperties.shippingCondition;
+      fnWrite(ServiceSchema.headerProperties.noOfBoxes, sNoOfBoxes);
+      if (sShippingCondition && sShippingConditionProperty &&
+          oContext.getProperty(sShippingConditionProperty) !== sShippingCondition) {
+        fnWrite(sShippingConditionProperty, sShippingCondition);
+      }
+    },
+
     // Return Orders session prompt 3.1: Lot Number options are product-specific - bound per
     // row to po>/BatchValueHelp filtered by the row's Product (Matnr), same lazy-per-row
     // pattern as Order Intention above. BatchValueHelpType has no separate description
@@ -2878,7 +2915,8 @@ sap.ui.define([
     // directly without a runtime i18n lookup in the XML.
     _createEnumsModel: function () {
       return new JSONModel({
-        EDIT_STATUS: this._resolveEnumOptions(Enums.EDIT_STATUS)
+        EDIT_STATUS: this._resolveEnumOptions(Enums.EDIT_STATUS),
+        NO_OF_BOXES: NoOfBoxesRule.options()
       });
     },
 

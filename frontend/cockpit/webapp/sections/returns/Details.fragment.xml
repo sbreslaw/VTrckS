@@ -550,9 +550,13 @@
 					<!-- SPACER -->
 
 					<!-- 2026-11-09: remapped per code-owner instruction to this service's own
-						ZZ1_NoofBoxes_SDH custom extension property, replacing CustomerPurchaseOrderSuplmnt
-						(the orders-side field) - same Edm.String(4)->StepInput OneWay+formatter+
-						explicit-change-handler pattern as the orders-side Details.fragment.xml. -->
+						ZZ1_NoofBoxes_SDH custom extension property (Edm.String(4)), replacing
+						CustomerPurchaseOrderSuplmnt (the orders-side field).
+						RET-NoOfBoxes-Dropdown (2026-11-16): a Select over 0..25 (range in
+						model/NoOfBoxesRule.js, enums>/NO_OF_BOXES) replaces the StepInput 1..25.
+						selectedKey is OneWay + .onNoOfBoxesSelectChange, so only a user pick is
+						written; forceSelection="false" keeps a blank document blank instead of
+						silently showing the first option. -->
 					<f:FormElement visible="{orderUi>/fields/detailsNoOfBoxes/visible}">
 						<f:label>
 							<Label text="{i18n>detailsNoOfBoxes}" required="false">
@@ -568,16 +572,17 @@
 									<l:GridData span="XL3 L3 M3 S12"/>
 								</layoutData>
 								<Text text="{ZZ1_NoofBoxes_SDH}" visible="{= !${sectionFlags>/details/editing} }"/>
-								<StepInput
+								<Select
 									width="100%"
-									value="{path: 'ZZ1_NoofBoxes_SDH', formatter: '.formatter.noOfBoxesValue', mode: 'sap.ui.model.BindingMode.OneWay'}"
-									min="1"
-									max="25"
-									step="1"
+									forceSelection="false"
+									selectedKey="{path: 'ZZ1_NoofBoxes_SDH', mode: 'OneWay'}"
 									visible="{sectionFlags>/details/editing}"
 									editable="{= ${orderUi>/fields/detailsNoOfBoxes/editable} !== false }"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
-									change=".onNoOfBoxesChange"/>
+									change=".onNoOfBoxesSelectChange"
+									items="{enums>/NO_OF_BOXES}">
+									<core:Item key="{enums>key}" text="{enums>text}" />
+								</Select>
 							</VBox>
 						</f:fields>
 					</f:FormElement>
@@ -604,11 +609,13 @@
 									<l:GridData span="XL3 L3 M3 S12"/>
 								</layoutData>
 								<Text text="{_ShippingCondition/ShippingCondition_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<!-- RET-NoOfBoxes-Dropdown: locked while No. of Boxes is "0" (which sets it
+									to the rule's code, Detail.controller.js#onNoOfBoxesSelectChange). -->
 								<ComboBox
 									width="100%"
 									selectedKey="{ShippingCondition}"
 									visible="{sectionFlags>/details/editing}"
-									editable="{= ${orderUi>/fields/detailsShippingCondition/editable} !== false }"
+									editable="{parts: [{path: 'ZZ1_NoofBoxes_SDH', targetType: 'any'}, {path: 'orderUi>/fields/detailsShippingCondition/editable'}], formatter: '.formatter.shippingConditionEditable'}"
 									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
 									items="{path: '/ShippingCondition'}">
 									<core:Item key="{ShippingCondition}" text="{ShippingCondition_Text}" />

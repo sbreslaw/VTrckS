@@ -24,6 +24,16 @@ sap.ui.define([
     assert.strictEqual(formatter.yesNo("No", "Yes", "No"), "No", "a type-formatted string is never mistaken for true");
   });
 
+  QUnit.module("formatter.shippingConditionEditable");
+
+  QUnit.test("locked while No. of Boxes is 0, otherwise follows the per-type flag", function (assert) {
+    assert.strictEqual(formatter.shippingConditionEditable("0", undefined), false, "0 boxes locks it");
+    assert.strictEqual(formatter.shippingConditionEditable("0", true), false, "0 boxes beats the flag");
+    assert.strictEqual(formatter.shippingConditionEditable("3", undefined), true, "no flag set - editable");
+    assert.strictEqual(formatter.shippingConditionEditable("", undefined), true, "blank boxes - editable");
+    assert.strictEqual(formatter.shippingConditionEditable("3", false), false, "per-type flag off");
+  });
+
   // Read-only returns Parties table (prompts/E008_Returns_ZKR_Sections_Session_Prompt.md),
   // values as returned live on ZKR 619000510 / 619000507 (2026-11-11).
   QUnit.module("formatter - Parties Involved");
