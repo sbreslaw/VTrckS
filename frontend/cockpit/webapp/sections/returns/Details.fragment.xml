@@ -448,17 +448,18 @@
 								orderReasonText, navigation.headerToOrderReason, entitySets.orderReason) -
 								same convention as orders now (ADR-002 hazard #2 resolved). -->
 							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen
-								and, where the order type shows Return Type, on createState>/returnTypeChosen;
-								unaffected outside createMode (normal Change-Mode editing). -->
+								and, where the order type shows Return Type, on createState>/returnTypeChosen.
+								GH-75 (D-1549): read-only outside create, like Return Type above; item Return
+								Reason changes still rewrite it (Detail.controller.js#onItemReturnReasonChange). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} }"/>
+								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} || !${sectionFlags>/createMode} }"/>
 								<ComboBox
 									width="100%"
 									selectedKey="{path: 'SDDocumentReason', mode: 'OneWay'}"
-									visible="{sectionFlags>/details/editing}"
+									visible="{= ${sectionFlags>/details/editing} &amp;&amp; ${sectionFlags>/createMode} }"
 									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; (${createState>/returnTypeChosen} || ${orderUi>/fields/detailsReturnType/visible} === false)) }"
 									change=".onReturnReasonChange"
 									items="{path: '/SDDocumentReason'}">
