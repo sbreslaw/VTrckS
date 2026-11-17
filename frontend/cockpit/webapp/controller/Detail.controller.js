@@ -5478,6 +5478,7 @@ sap.ui.define([
       this.getView().setBindingContext(oResult.context);
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._setCreateMode(true);
+      this._sOrderStatus = "";
       this._applyOrderUi(sOrderType);
       this._resetTransactionHistoryState("");
       this._resetItemsTableForCreate();
@@ -5565,7 +5566,7 @@ sap.ui.define([
       var oView = this.getView();
       var oNav = oView.getModel("sectionsNav");
       var oFlags = oView.getModel("sectionFlags");
-      var aResolved = OrderModeConfig.resolveSections(sOrderType, sMode);
+      var aResolved = OrderModeConfig.resolveSections(sOrderType, sMode, this._sOrderStatus);
       this._aResolvedSections = aResolved;
       aResolved.forEach(function (oResolved, iIndex) {
         oNav.setProperty("/list/" + iIndex + "/visible", oResolved.visible);
@@ -5695,7 +5696,12 @@ sap.ui.define([
 
     _syncOrderUiFromContext: function () {
       var oContext = this.getView().getBindingContext();
-      this._applyOrderUi(oContext && oContext.getProperty(ServiceSchema.headerProperties.salesOrderType));
+      var sOrderType = oContext && oContext.getProperty(ServiceSchema.headerProperties.salesOrderType);
+      // GH-75: only types with read-only statuses read the header status (Orders never request it).
+      this._sOrderStatus = oContext && OrderModeConfig.resolveOrderType(sOrderType).readOnlyStatuses.length
+        ? oContext.getProperty(ServiceSchema.headerProperties.status) || ""
+        : "";
+      this._applyOrderUi(sOrderType);
     },
 
     _getCreatableOrderTypes: function () {

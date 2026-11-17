@@ -137,6 +137,49 @@ sap.ui.define([
     assert.strictEqual(findSection(OrderModeConfig.resolveSections("ZKB", "create"), "partiesInvolved").visible, true, "ZKB create: still visible (unchanged)");
   });
 
+  QUnit.module("OrderModeConfig.resolveSections — status (GH-75)");
+
+  var CLOSED_STATUSES = ["E0008", "E0009", "E0010"];
+  var OPEN_STATUSES = ["E0001", "E0002", "E0003", "E0004", "E0005", "E0006", "E0007", "", undefined];
+
+  QUnit.test("every return type: a closed status removes Edit from General, Items and Shipping", function (assert) {
+    RETURN_TYPES.forEach(function (sType) {
+      CLOSED_STATUSES.forEach(function (sStatus) {
+        ["display", "edit"].forEach(function (sMode) {
+          var aWithStatus = OrderModeConfig.resolveSections(sType, sMode, sStatus);
+          var aWithout = OrderModeConfig.resolveSections(sType, sMode);
+          ["details", "items", "shipping"].forEach(function (sId) {
+            var sMsg = sType + "/" + sStatus + "/" + sMode + "/" + sId;
+            assert.strictEqual(findSection(aWithStatus, sId).editable, false, sMsg + ": no Edit");
+            assert.strictEqual(findSection(aWithStatus, sId).visible, findSection(aWithout, sId).visible, sMsg + ": visibility unchanged");
+          });
+        });
+      });
+    });
+  });
+
+  QUnit.test("every return type: open or blank status keeps Edit on General and Items, never on Shipping", function (assert) {
+    RETURN_TYPES.forEach(function (sType) {
+      OPEN_STATUSES.forEach(function (sStatus) {
+        var aResolved = OrderModeConfig.resolveSections(sType, "display", sStatus);
+        var sMsg = sType + "/" + sStatus;
+        assert.strictEqual(findSection(aResolved, "details").editable, true, sMsg + ": General Edit");
+        assert.strictEqual(findSection(aResolved, "items").editable, true, sMsg + ": Items Edit");
+        assert.strictEqual(findSection(aResolved, "shipping").editable, false, sMsg + ": no Shipping Edit");
+      });
+    });
+  });
+
+  QUnit.test("Provider Order types ignore the status", function (assert) {
+    ["ZKB", "ZREP"].forEach(function (sType) {
+      var aWithStatus = OrderModeConfig.resolveSections(sType, "display", "E0008");
+      var aWithout = OrderModeConfig.resolveSections(sType, "display");
+      aWithStatus.forEach(function (oSection, i) {
+        assert.strictEqual(oSection.editable, aWithout[i].editable, sType + "/" + oSection.id + ": editability unchanged");
+      });
+    });
+  });
+
   QUnit.module("SectionCatalog.titleKeyFor");
 
   QUnit.test("Shipping is titled 'Shipping Assignment' on returns only (2026-11-12)", function (assert) {
