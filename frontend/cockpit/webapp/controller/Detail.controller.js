@@ -34,6 +34,7 @@ sap.ui.define([
   "sap/ui/core/EventBus",
   "sap/ui/core/Element",
   "sap/ui/core/ResizeHandler",
+  "sap/ui/core/library",
   "sap/ui/model/json/JSONModel",
   "sap/ui/model/Filter",
   "sap/ui/model/FilterOperator",
@@ -52,6 +53,7 @@ sap.ui.define([
   "cdc/vaccreq/model/ReturnReasonLogic",
   "cdc/vaccreq/model/LotNumberRule",
   "cdc/vaccreq/model/NoOfBoxesRule",
+  "cdc/vaccreq/model/ItemsTableAccess",
   "cdc/vaccreq/service/EditRequestService",
   "cdc/vaccreq/service/CreateOrderService",
   "cdc/vaccreq/service/ProviderInventoryService",
@@ -64,11 +66,13 @@ sap.ui.define([
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
-  Messaging, EventBus, Element, ResizeHandler, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor,   PricingColumns,   StatusValueHelp, ReturnReasonLogic, LotNumberRule, NoOfBoxesRule,
+  Messaging, EventBus, Element, ResizeHandler, coreLibrary, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor,   PricingColumns,     StatusValueHelp, ReturnReasonLogic, LotNumberRule, NoOfBoxesRule, ItemsTableAccess,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
   ValueHelpTableFitter, UserFeedback
 ) {
   "use strict";
+
+  var SortOrder = coreLibrary.SortOrder;
 
   // CRUD Task 1 v4 (Create Order field adjustments): hardcoded sample data for
   // the Employee Responsible Value Help stub picker - no real F4 service is
@@ -107,6 +111,8 @@ sap.ui.define([
   // (read per call - the Orders and Returns apps share this module graph).
   // Paste-eligible Items columns: column key -> ServiceSchema.itemProperties key of the cell's value binding.
   var PASTE_COLUMNS = { exisId: "exisId", ndcCode: "material", qty: "quantity" };
+  // Returns grid Items table (VTrckS#69): visible rows follow the item count up to this many.
+  var ITEMS_GRID_MAX_ROWS = 10;
 
   return Controller.extend("cdc.vaccreq.controller.Detail", {
     formatter: formatter,
@@ -375,8 +381,8 @@ sap.ui.define([
     onItemsExport: function (oEvent) {
       var that = this;
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oBinding = oTable.getBinding("items");
-      var aContexts = oBinding ? oBinding.getContexts(0, oBinding.getLength()) : [];
+      var oBinding = ItemsTableAccess.getBinding(oTable);
+      var aContexts = ItemsTableAccess.getContexts(oBinding);
       var oBundle = this.getResourceBundle();
       var oVisibility = this.getView().getModel("itemsColumns").getData();
       var oLayout = this._getItemsColumnLayout();
@@ -566,7 +572,7 @@ sap.ui.define([
         var oItemsTable = this._byIdInSection("items", "itemsTable");
         var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
         if (oAddMoreButton && oAddMoreButton.getEnabled()) {
-          this._addItemsToMinimum(oItemsTable && oItemsTable.getBinding("items"));
+          this._addItemsToMinimum(ItemsTableAccess.getBinding(oItemsTable));
         }
       }
       if (sSectionId === "shipping") {
@@ -682,7 +688,7 @@ sap.ui.define([
       }
       if (sSectionId === "items") {
         var oTable = this._byIdInSection("items", "itemsTable");
-        await this._deleteEmptyItemRows(oTable && oTable.getBinding("items"));
+        await this._deleteEmptyItemRows(ItemsTableAccess.getBinding(oTable));
       }
       if (sSectionId === "details") {
         var oEnrichModel = this.getView().getModel("createEnrich");
@@ -814,9 +820,9 @@ sap.ui.define([
         return !!oRowContext.getProperty(oProps.material) && !oRowContext.getProperty(oProps.higherLevelItem);
       };
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oTableBinding = oTable && oTable.getBinding("items");
+      var oTableBinding = ItemsTableAccess.getBinding(oTable);
       if (oTableBinding) {
-        return Promise.resolve(oTableBinding.getCurrentContexts().filter(fnIsReasonItem));
+        return Promise.resolve(ItemsTableAccess.getContexts(oTableBinding).filter(fnIsReasonItem));
       }
       var oHeaderContext = this.getView().getBindingContext();
       if (!oHeaderContext || this.getView().getModel("sectionFlags").getProperty("/createMode")) {
@@ -852,7 +858,7 @@ sap.ui.define([
         return;
       }
       var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
-      var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
+      var oItemsBinding = ItemsTableAccess.getBinding(oItemsTable);
       if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding, this.getView().getModel("orderUi").getData())) {
         UserFeedback.reportError(MessageExtractor, oBundle.getText("itemsIncompleteItemsError"), this._openMessagePopover.bind(this));
         return;
@@ -1027,7 +1033,7 @@ sap.ui.define([
 
     onItemsAddMore: function () {
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oBinding = oTable && oTable.getBinding("items");
+      var oBinding = ItemsTableAccess.getBinding(oTable);
       if (!oBinding) {
         return;
       }
@@ -1039,7 +1045,7 @@ sap.ui.define([
         return;
       }
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oBinding = oTable && oTable.getBinding("items");
+      var oBinding = ItemsTableAccess.getBinding(oTable);
       if (oBinding) {
         this._bInitialCreateItemRowsPending = false;
         this._addItemRows(oBinding, 10, false);
@@ -1054,7 +1060,7 @@ sap.ui.define([
         var oFlags = this.getView().getModel("sectionFlags");
         var oTable = this._byIdInSection("items", "itemsTable");
         var oAddMoreButton = this._byIdInSection("items", "itemsAddMoreButton");
-        if (!oTable || oTable.getBinding("items") !== oBinding || !oFlags.getProperty("/items/editing") || !oAddMoreButton || !oAddMoreButton.getEnabled()) {
+        if (!oTable || ItemsTableAccess.getBinding(oTable) !== oBinding || !oFlags.getProperty("/items/editing") || !oAddMoreButton || !oAddMoreButton.getEnabled()) {
           return;
         }
         var iRowsToAdd = Math.max(0, 10 - aContexts.length);
@@ -1090,6 +1096,43 @@ sap.ui.define([
         iHeight = oTableDom.getBoundingClientRect().height;
       }
       oViewport.setHeight(Math.ceil(iHeight + iScrollbarHeight + 8) + "px");
+    },
+
+    // Returns grid Items table (VTrckS#69). V4 sorts on the server only, and
+    // ODataListBinding#sort throws for a list under a transient header (create)
+    // or with pending changes (Items edit) - the sort entries are hidden there
+    // (fragment showSortMenuEntry); this guards the remaining paths.
+    onItemsGridSort: function (oEvent) {
+      var oBinding = ItemsTableAccess.getBinding(oEvent.getSource());
+      var oFlags = this.getView().getModel("sectionFlags");
+      if (!oBinding || oFlags.getProperty("/items/editing") || oFlags.getProperty("/createMode") || oBinding.hasPendingChanges()) {
+        oEvent.preventDefault();
+      }
+    },
+
+    // Returns grid Items table: visible rows follow the item count (1..ITEMS_GRID_MAX_ROWS).
+    // Grid rows are recycled while scrolling, so a cell Warning/Error recorded for one
+    // item (_markCellStateRow) is cleared once its row shows another item.
+    onItemsGridRowsUpdated: function (oEvent) {
+      var oTable = oEvent.getSource();
+      var oBinding = ItemsTableAccess.getBinding(oTable);
+      var oRowMode = oTable.getRowMode();
+      var iRowCount = Math.max(1, Math.min(ITEMS_GRID_MAX_ROWS, oBinding ? oBinding.getLength() : 0));
+      if (oRowMode && oRowMode.getRowCount && oRowMode.getRowCount() !== iRowCount) {
+        oRowMode.setRowCount(iRowCount);
+      }
+      oTable.getRows().forEach(function (oRow) {
+        var oContext = oRow.getBindingContext();
+        var sPath = oContext ? oContext.getPath() : null;
+        oRow.getCells().forEach(function (oCell) {
+          var sStatePath = oCell.data("skipCtxPath");
+          if (sStatePath && sStatePath !== sPath) {
+            oCell.setValueState("None");
+            oCell.setValueStateText("");
+            oCell.data("skipCtxPath", null);
+          }
+        });
+      });
     },
 
     _addItemRows: function (oBinding, iCount, bAtEnd) {
@@ -1139,7 +1182,7 @@ sap.ui.define([
     _appendScratchRows: function (oBinding, aRows) {
       oBinding.requestContexts(0, 1).then(function () {
         var oTable = this._byIdInSection("items", "itemsTable");
-        if (!oTable || oTable.getBinding("items") !== oBinding) {
+        if (!oTable || ItemsTableAccess.getBinding(oTable) !== oBinding) {
           return;
         }
         aRows.forEach(function (oRowData) {
@@ -1163,7 +1206,7 @@ sap.ui.define([
 
     _deleteEmptyItemRows: function (oBinding) {
       var oProps = ServiceSchema.itemProperties;
-      var aContexts = oBinding && oBinding.getCurrentContexts ? oBinding.getCurrentContexts() : [];
+      var aContexts = ItemsTableAccess.getContexts(oBinding);
       var aDeletes = aContexts.filter(function (oContext) {
         return oContext.isTransient && oContext.isTransient()
           && !oContext.getProperty(oProps.material)
@@ -1179,14 +1222,12 @@ sap.ui.define([
     // the table, defaulting to "000010" for the first item.
     _computeNextItemNumber: function (oItemsBinding) {
       var iMax = 0;
-      if (oItemsBinding && oItemsBinding.getCurrentContexts) {
-        oItemsBinding.getCurrentContexts().forEach(function (oCtx) {
-          var iNum = parseInt(oCtx.getProperty(ServiceSchema.itemProperties.itemNumber), 10);
-          if (!isNaN(iNum) && iNum > iMax) {
-            iMax = iNum;
-          }
-        });
-      }
+      ItemsTableAccess.getContexts(oItemsBinding).forEach(function (oCtx) {
+        var iNum = parseInt(oCtx.getProperty(ServiceSchema.itemProperties.itemNumber), 10);
+        if (!isNaN(iNum) && iNum > iMax) {
+          iMax = iNum;
+        }
+      });
       return ("000000" + (iMax + 10)).slice(-6);
     },
 
@@ -1339,7 +1380,9 @@ sap.ui.define([
 
     // Shared by typing (onItemNdcChange) and paste. Resolves the typed Product
     // ID before writing it; an empty value must not clear an already-selected
-    // item. Resolves true only when the NDC was found and applied.
+    // item. Resolves true only when the NDC was found and applied. oInput is null
+    // for a paste target scrolled out of the Returns grid (VTrckS#69): the
+    // context is written, there is no cell to update.
     _applyNdcValue: function (oRowContext, oInput, sRawValue) {
       var that = this;
       // Safe normalization only: trim, collapse whitespace, uppercase - the /Product lookup is the validator.
@@ -1347,24 +1390,30 @@ sap.ui.define([
       if (!oRowContext) {
         return Promise.resolve(false);
       }
+      var fnShowValue = function (sShown) {
+        if (oInput) {
+          oInput.setValue(sShown);
+        }
+      };
       var oProps = ServiceSchema.productProperties;
       var sPreviousNdc = oRowContext.getProperty(ServiceSchema.itemProperties.material) || "";
       if (!sValue) {
-        oInput.setValue(sPreviousNdc);
-        if (sPreviousNdc) {
+        fnShowValue(sPreviousNdc);
+        if (sPreviousNdc && oInput) {
           oInput.setValueState("Error");
           oInput.setValueStateText(this.getResourceBundle().getText("ndcCannotClear"));
+          this._markCellStateRow(oInput);
         } else {
           this._setNdcValueState(oInput, true);
         }
         return Promise.resolve(false);
       }
-      oInput.setValue(sValue);
+      fnShowValue(sValue);
       // Only a profile with no NDC lookup wired at all (productProperties
       // null) reverts here - orders and returns both now have a confirmed
       // lookup (see entitySets.product/productLookupModel).
       if (!ServiceSchema.productProperties) {
-        oInput.setValue(sPreviousNdc);
+        fnShowValue(sPreviousNdc);
         this._setNdcValueState(oInput, true);
         return Promise.resolve(false);
       }
@@ -1375,28 +1424,32 @@ sap.ui.define([
         { $select: this._productSelect(oProps) }
       );
       return oLookupBinding.requestContexts(0, 1).then(function (aContexts) {
-        if (oInput.getValue().trim() !== sValue) {
+        if (oInput && oInput.getValue().trim() !== sValue) {
           return false;
         }
         if (aContexts.length) {
           that._applyNdcPick(oRowContext, aContexts[0].getObject());
-          oInput.setValue(aContexts[0].getProperty(oProps.id));
+          fnShowValue(aContexts[0].getProperty(oProps.id));
           that._setNdcValueState(oInput, true);
           return true;
         }
-        oInput.setValue(sPreviousNdc);
+        fnShowValue(sPreviousNdc);
         that._setNdcValueState(oInput, false);
         return false;
       }).catch(function () {
-        oInput.setValue(sPreviousNdc);
+        fnShowValue(sPreviousNdc);
         that._setNdcValueState(oInput, false);
         return false;
       });
     },
 
     _setNdcValueState: function (oInput, bValid) {
+      if (!oInput) {
+        return;
+      }
       oInput.setValueState(bValid ? "None" : "Error");
       oInput.setValueStateText(bValid ? "" : this.getResourceBundle().getText("ndcInvalidSelection"));
+      this._markCellStateRow(oInput, bValid);
     },
 
 
@@ -1419,10 +1472,11 @@ sap.ui.define([
       })[0];
     },
 
+    // Rendered rows only: on the Returns grid a scrolled-out row has no control (undefined).
     _getRowForContext: function (oRowContext) {
       var oTable = this._byIdInSection("items", "itemsTable");
       var sPath = oRowContext && oRowContext.getPath();
-      return oTable && oTable.getItems().filter(function (oItem) {
+      return ItemsTableAccess.getRowControls(oTable).filter(function (oItem) {
         var oContext = oItem.getBindingContext();
         return oContext && oContext.getPath() === sPath;
       })[0];
@@ -1697,16 +1751,21 @@ sap.ui.define([
     // Shared by typing (onProdQtyChange) and paste. An invalid value leaves
     // the cell unchanged with a Warning and returns null; otherwise returns the
     // write promise. bDeferRefresh lets a multi-row paste refresh once at the end.
+    // oInput is null for a paste target scrolled out of the Returns grid (VTrckS#69).
     _applyQtyValue: function (oRowContext, oInput, sRawValue, bDeferRefresh) {
       var that = this;
       var sQty = this._parseQtyValue(sRawValue);
       if (sQty === null) {
-        var oValueBinding = oInput.getBinding("value");
-        oInput.setValue(oValueBinding.getType().formatValue(oValueBinding.getValue(), "string"));
-        this._setCellSkippedState(oInput, "pasteSkippedInvalid");
+        if (oInput) {
+          var oValueBinding = oInput.getBinding("value");
+          oInput.setValue(oValueBinding.getType().formatValue(oValueBinding.getValue(), "string"));
+          this._setCellSkippedState(oInput, "pasteSkippedInvalid");
+        }
         return null;
       }
-      oInput.setValueState("None");
+      if (oInput) {
+        oInput.setValueState("None");
+      }
       var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       // ZZVFCQTY/ZZ317QTY/etc. are Edm.Int32 (design/so.xml) - RequestedQuantity
       // is Edm.Decimal; sending a decimal string for an Int32 property fails
@@ -1764,7 +1823,9 @@ sap.ui.define([
         this._setCellSkippedState(oInput, "pasteSkippedTooLong", [iMaxLength]);
         return false;
       }
-      oInput.setValueState("None");
+      if (oInput) {
+        oInput.setValueState("None");
+      }
       var bPersisted = !!(oRowContext.isTransient && !oRowContext.isTransient());
       oRowContext.setProperty(ServiceSchema.itemProperties.exisId, sValue).catch(function (oError) {
         this._handleItemFieldUpdateError(oError, oRowContext, bPersisted);
@@ -1781,8 +1842,19 @@ sap.ui.define([
     },
 
     _setCellSkippedState: function (oInput, sTextKey, aArgs) {
+      if (!oInput) {
+        return;
+      }
       oInput.setValueState("Warning");
       oInput.setValueStateText(this.getResourceBundle().getText(sTextKey, aArgs));
+      this._markCellStateRow(oInput);
+    },
+
+    // Records which item a cell's Warning/Error belongs to; the Returns grid recycles
+    // row controls while scrolling and onItemsGridRowsUpdated clears a stale state.
+    _markCellStateRow: function (oInput, bClear) {
+      var oContext = !bClear && oInput.getBindingContext();
+      oInput.data("skipCtxPath", oContext ? oContext.getPath() : null);
     },
 
     // Maps a row's paste-eligible Inputs by column key: { exisId: {input, index}, ... }.
@@ -1830,40 +1902,65 @@ sap.ui.define([
       }
       oEvent.preventDefault();
       var oBundle = this.getResourceBundle();
-      var aColumns = oTable.getColumns();
+      var oProps = ServiceSchema.itemProperties;
       var iStartIndex = mCursorCells[sStartKey].index;
+      // A cell's visible binding is its column's (itemsColumns>/<key>); a grid row
+      // holds cells for visible columns only, so cell index != column index (VTrckS#69).
       var aPlan = Object.keys(mCursorCells).filter(function (sKey) {
-        var iIndex = mCursorCells[sKey].index;
-        return iIndex >= iStartIndex && aColumns[iIndex] && aColumns[iIndex].getVisible();
+        return mCursorCells[sKey].index >= iStartIndex && mCursorCells[sKey].input.getVisible();
       }).sort(function (sA, sB) {
         return mCursorCells[sA].index - mCursorCells[sB].index;
       });
       var bPlanHasNdc = aPlan.indexOf("ndcCode") !== -1;
-      var aItems = oTable.getItems();
+      // Plan keys open on the cursor row. Apart from HigherLevelItem (and, for the
+      // NDC, isTransient) their editability is row-independent, so this also
+      // stands for grid rows scrolled out of view, which have no cells.
+      var mCursorOpen = {};
+      aPlan.forEach(function (sKey) {
+        mCursorOpen[sKey] = that._isPasteCellOpen(mCursorCells[sKey].input);
+      });
+      var oStartBinding = ItemsTableAccess.getBinding(oTable);
+      var aRows = ItemsTableAccess.getRowControls(oTable);
+      var aContexts = ItemsTableAccess.getContexts(oStartBinding);
+      var sCursorPath = oRow.getBindingContext() && oRow.getBindingContext().getPath();
+      var iCursor = aContexts.map(function (oCtx) { return oCtx.getPath(); }).indexOf(sCursorPath);
       var aTargets = [];
-      for (var i = aItems.indexOf(oRow); i < aItems.length && aTargets.length < aClipRows.length; i += 1) {
-        var oContext = aItems[i].getBindingContext();
-        var mCells = this._getItemsPasteCells(aItems[i]);
-        // Ancillary child rows and rows whose NDC is fixed are not open rows - skipped without consuming a clipboard row.
-        if (!oContext || oContext.getProperty(ServiceSchema.itemProperties.higherLevelItem)
-            || (bPlanHasNdc && !this._isPasteCellOpen(mCells.ndcCode && mCells.ndcCode.input))
-            || !aPlan.some(function (sKey) { return mCells[sKey] && that._isPasteCellOpen(mCells[sKey].input); })) {
+      for (var i = iCursor; i >= 0 && i < aContexts.length && aTargets.length < aClipRows.length; i += 1) {
+        var oContext = aContexts[i];
+        var oItem = aRows.filter(function (oRowControl) { return oRowControl.getBindingContext() === oContext; })[0];
+        if (oContext.getProperty(oProps.higherLevelItem)) {
           continue;
         }
-        aTargets.push({ item: aItems[i], context: oContext, cells: mCells });
+        if (oItem) {
+          var mCells = this._getItemsPasteCells(oItem);
+          // Ancillary child rows and rows whose NDC is fixed are not open rows - skipped without consuming a clipboard row.
+          if ((bPlanHasNdc && !this._isPasteCellOpen(mCells.ndcCode && mCells.ndcCode.input))
+              || !aPlan.some(function (sKey) { return mCells[sKey] && that._isPasteCellOpen(mCells[sKey].input); })) {
+            continue;
+          }
+          aTargets.push({ item: oItem, context: oContext, cells: mCells });
+        } else {
+          // Grid row scrolled out of view: same row-level rules as the cells' editable expressions.
+          if (bPlanHasNdc && !(mCursorOpen.ndcCode && oContext.isTransient && oContext.isTransient())) {
+            continue;
+          }
+          aTargets.push({ item: null, context: oContext, cells: {}, unrendered: true, open: mCursorOpen });
+        }
       }
       if (!aTargets.length) {
         MessageToast.show(oBundle.getText("pasteNothing", [oBundle.getText("pasteReasonNoRows")]));
         return;
       }
-      var oStartBinding = oTable.getBinding("items");
       var oStats = { rows: 0, skipped: 0, refreshes: [] };
       oTable.setBusy(true);
       aTargets.reduce(function (pChain, oTarget, iRow) {
         return pChain.then(function () {
           // A row completing mid-paste can rebind the table to the create session; stop rather than write to stale rows.
-          if (oTable.getBinding("items") !== oStartBinding || oTarget.item.bIsDestroyed
-              || oTarget.item.getBindingContext() !== oTarget.context) {
+          if (ItemsTableAccess.getBinding(oTable) !== oStartBinding) {
+            return;
+          }
+          if (oTarget.item ? (oTarget.item.bIsDestroyed || oTarget.item.getBindingContext() !== oTarget.context)
+              : ItemsTableAccess.getContexts(oStartBinding).indexOf(oTarget.context) === -1) {
             return;
           }
           return that._pasteItemsRow(oTarget, aPlan, aClipRows[iRow], oStats);
@@ -1918,16 +2015,18 @@ sap.ui.define([
           if (sKey === "ndcCode" || !mValues[sKey]) {
             return;
           }
-          if (!bNdcOk || !oCell || !that._isPasteCellOpen(oCell.input)) {
+          var bOpen = oTarget.unrendered ? !!oTarget.open[sKey] : !!oCell && that._isPasteCellOpen(oCell.input);
+          if (!bNdcOk || !bOpen) {
             oStats.skipped += 1;
             return;
           }
+          var oCellInput = oCell ? oCell.input : null;
           var bApplied;
           if (sKey === "exisId") {
-            bApplied = that._applyExisValue(oContext, oCell.input, mValues[sKey]);
+            bApplied = that._applyExisValue(oContext, oCellInput, mValues[sKey]);
           } else {
             var bPersisted = !!(oContext.isTransient && !oContext.isTransient());
-            var pWrite = that._applyQtyValue(oContext, oCell.input, mValues[sKey], true);
+            var pWrite = that._applyQtyValue(oContext, oCellInput, mValues[sKey], true);
             bApplied = !!pWrite;
             if (pWrite && bPersisted) {
               oStats.refreshes.push(pWrite);
@@ -2234,7 +2333,7 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getResourceBundle();
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oOldItemsBinding = oTable && oTable.getBinding("items");
+      var oOldItemsBinding = ItemsTableAccess.getBinding(oTable);
       var oHeaderContext = this.getView().getBindingContext();
       if (oTable) {
         oTable.setBusy(true);
@@ -2289,7 +2388,7 @@ sap.ui.define([
     _migrateRemainingScratchRows: function (oOldItemsBinding, oAlreadyPostedContext) {
       var that = this;
       var oHeaderContext = this.getView().getBindingContext();
-      var aContexts = (oOldItemsBinding && oOldItemsBinding.getCurrentContexts) ? oOldItemsBinding.getCurrentContexts() : [];
+      var aContexts = ItemsTableAccess.getContexts(oOldItemsBinding);
       var aOthers = aContexts.filter(function (oCtx) {
         return oCtx !== oAlreadyPostedContext && oCtx.isTransient && oCtx.isTransient();
       });
@@ -2335,7 +2434,7 @@ sap.ui.define([
       // (_postFirstItemRow) also rely on the returned promise to know the
       // newly-posted row's own key is now backend-confirmed before letting
       // the user edit it further (live-tested 404 race).
-      var oBinding = oTable.getBinding("items");
+      var oBinding = ItemsTableAccess.getBinding(oTable);
       if (!oBinding) {
         this._recreatePendingIncompleteRows(oBinding);
         return Promise.resolve();
@@ -2386,8 +2485,8 @@ sap.ui.define([
         return;
       }
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oOldBinding = oTable && oTable.getBinding("items");
-      var aRowData = (oOldBinding && oOldBinding.getCurrentContexts ? oOldBinding.getCurrentContexts() : [])
+      var oOldBinding = ItemsTableAccess.getBinding(oTable);
+      var aRowData = ItemsTableAccess.getContexts(oOldBinding)
         .map(function (oCtx) { return CreateOrderService.cleanItemPayload(oCtx.getObject() || {}); })
         .concat(this._aPendingIncompleteRows || []);
       this._aPendingIncompleteRows = [];
@@ -2399,7 +2498,7 @@ sap.ui.define([
       oTable.setBindingContext(this.getView().getBindingContext());
       this._sItemsUpdateGroup = ServiceSchema.createUpdateGroup;
       this._rebindItemsGroup(this._sItemsUpdateGroup);
-      var oNewBinding = oTable.getBinding("items");
+      var oNewBinding = ItemsTableAccess.getBinding(oTable);
       if (oNewBinding) {
         aRowData.forEach(function (oRowData, iIndex) {
           oRowData.RequestedQuantity = oRowData.RequestedQuantity || "0";
@@ -2430,8 +2529,8 @@ sap.ui.define([
     // to use for this).
     _computeAncillaryParents: function () {
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oBinding = oTable && oTable.getBinding("items");
-      var aContexts = (oBinding && oBinding.getCurrentContexts) ? oBinding.getCurrentContexts() : [];
+      var oBinding = ItemsTableAccess.getBinding(oTable);
+      var aContexts = ItemsTableAccess.getContexts(oBinding);
       var oParents = {};
       aContexts.forEach(function (oCtx) {
         var sParent = oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem);
@@ -2447,7 +2546,7 @@ sap.ui.define([
     // since check/uncheck is exactly what adds/removes ancillary child rows.
     _refreshItemsBinding: function () {
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oBinding = oTable && oTable.getBinding("items");
+      var oBinding = ItemsTableAccess.getBinding(oTable);
       if (!oBinding) {
         return Promise.resolve();
       }
@@ -2467,7 +2566,7 @@ sap.ui.define([
     // after every full items-list (re)fetch, since any such GET response
     // always reads these six fields back as 0 (see FundLogicService.js).
     _reapplyFundAllocations: function (oBinding) {
-      var aContexts = (oBinding && oBinding.getCurrentContexts) ? oBinding.getCurrentContexts() : [];
+      var aContexts = ItemsTableAccess.getContexts(oBinding);
       aContexts.forEach(function (oCtx) {
         FundLogicService.reapplyAllocation(oCtx);
       });
@@ -2535,7 +2634,12 @@ sap.ui.define([
       if (sKey) {
         oAction.setParameter(oActions.setRejectionReasonParameter, sKey);
       }
+      // Busy on the row where it is a Control (sap.m ColumnListItem); a grid's
+      // sap.ui.table.Row is an Element without busy state - use the table (VTrckS#69).
       var oRow = oSelect.getParent();
+      if (!oRow || typeof oRow.setBusy !== "function") {
+        oRow = this._byIdInSection("items", "itemsTable");
+      }
       oRow.setBusy(true);
       function syncFromServer() {
         var oCtx = oSelect.getBindingContext();
@@ -2553,11 +2657,13 @@ sap.ui.define([
           that._openMessagePopover();
         })
         .then(function () {
+          if (!oRow.isDestroyed()) {
+            oRow.setBusy(false);
+          }
           if (oSelect.isDestroyed()) {
             return;
           }
           syncFromServer();
-          oRow.setBusy(false);
         });
     },
 
@@ -2648,11 +2754,11 @@ sap.ui.define([
       if (!oTable) {
         return aReasons;
       }
-      var oItemsBinding = oTable.getBinding("items");
+      var oItemsBinding = ItemsTableAccess.getBinding(oTable);
       if (!oItemsBinding) {
         return aReasons;
       }
-      var aContexts = oItemsBinding.getCurrentContexts();
+      var aContexts = ItemsTableAccess.getContexts(oItemsBinding);
       aContexts.forEach(function (oCtx) {
         // Only include items with Product (completed), skip child rows
         if (oCtx.getProperty(ServiceSchema.itemProperties.material) && !oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem)) {
@@ -2796,8 +2902,8 @@ sap.ui.define([
     // that must be deleted alongside a primary item being deleted.
     _getAncillaryChildContexts: function (sParentItemNumber) {
       var oTable = this._byIdInSection("items", "itemsTable");
-      var oBinding = oTable && oTable.getBinding("items");
-      var aContexts = (oBinding && oBinding.getCurrentContexts) ? oBinding.getCurrentContexts() : [];
+      var oBinding = ItemsTableAccess.getBinding(oTable);
+      var aContexts = ItemsTableAccess.getContexts(oBinding);
       return aContexts.filter(function (oCtx) {
         return sParentItemNumber && oCtx.getProperty(ServiceSchema.itemProperties.higherLevelItem) === sParentItemNumber;
       });
@@ -4453,7 +4559,7 @@ sap.ui.define([
       if (!oTable) {
         return;
       }
-      var oBindingInfo = oTable.getBindingInfo("items");
+      var oBindingInfo = ItemsTableAccess.getBindingInfo(oTable);
       if (!oBindingInfo) {
         return;
       }
@@ -4474,14 +4580,55 @@ sap.ui.define([
       // all null/undefined on ReturnsSchema (order-specific custom fields,
       // no Returns equivalent) - filter before join, or a null entry becomes
       // an empty $select segment (trailing/duplicate commas, parser error).
-      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: ["SAP__Messages"].concat(FundLogicService.getZzFields().filter(function (sField) { return !!sField; })).join(",") });
-      oTable.bindItems(oBindingInfo);
-      // bindItems() always creates a fresh binding instance - re-attach here
+      var aSelect = ["SAP__Messages"].concat(FundLogicService.getZzFields().filter(function (sField) { return !!sField; }));
+      var bGrid = ItemsTableAccess.isGrid(oTable);
+      if (bGrid) {
+        // VTrckS#69: a grid table creates cells for visible columns only, so a
+        // column hidden via Personalize would drop out of autoExpandSelect's
+        // $select while the controller still reads it - select them explicitly.
+        aSelect = aSelect.concat(this._getItemsGridSelect()).filter(function (sName, iIndex, aAll) {
+          return aAll.indexOf(sName) === iIndex;
+        });
+      }
+      oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: aSelect.join(",") });
+      ItemsTableAccess.bind(oTable, oBindingInfo);
+      // bind() always creates a fresh binding instance - re-attach here
       // (see _onItemCreateActivate) rather than relying on one set up once.
-      var oNewBinding = oTable.getBinding("items");
+      var oNewBinding = ItemsTableAccess.getBinding(oTable);
       if (oNewBinding) {
         oNewBinding.attachCreateActivate(this._onItemCreateActivate, this);
       }
+      if (bGrid) {
+        // The fresh binding is unsorted - clear the columns' sort indicators to match.
+        oTable.getColumns().forEach(function (oColumn) {
+          oColumn.setSortOrder(SortOrder.None);
+          // Deprecated, but the 1.136 header renderer still needs it for the sort icon.
+          oColumn.setSorted(false);
+        });
+      }
+    },
+
+    // Every Returns grid column property (ItemsTableAccess.SORT_PROPERTY_KEYS) plus
+    // HigherLevelItem, resolved from ServiceSchema at call time; null names dropped.
+    _getItemsGridSelect: function () {
+      var oProps = ServiceSchema.itemProperties;
+      var mKeys = ItemsTableAccess.SORT_PROPERTY_KEYS;
+      return Object.keys(mKeys).map(function (sColumnKey) {
+        return oProps[mKeys[sColumnKey]];
+      }).concat(oProps.higherLevelItem).filter(function (sName) {
+        return !!sName;
+      });
+    },
+
+    // VTrckS#69: grid column sortProperty from ServiceSchema at call time. The column
+    // key is the column's visible binding path ("{itemsColumns>/ndcCode}" -> "ndcCode");
+    // a column without a mapping (rowAction) stays unsortable.
+    _applyItemsGridSortProperties: function (oTable) {
+      var oProps = ServiceSchema.itemProperties;
+      oTable.getColumns().forEach(function (oColumn) {
+        var sSchemaKey = ItemsTableAccess.SORT_PROPERTY_KEYS[(oColumn.getBindingPath("visible") || "").replace(/^\//, "")];
+        oColumn.setSortProperty((sSchemaKey && oProps[sSchemaKey]) || "");
+      });
     },
 
     // SectionFactory.js content-loaded hook \u2014 fires once per section the
@@ -4507,10 +4654,13 @@ sap.ui.define([
         }
       } else if (sSectionId === "items") {
         this._rebindItemsGroup(this._sItemsUpdateGroup);
-        // sap.m.Table#paste ignores pastes into an <input>, so cell pastes are caught by a delegate instead.
+        // sap.m.Table#paste and sap.ui.table.Table#onpaste both ignore pastes into an <input>, so cell pastes are caught by a delegate instead.
         var oItemsTable = this._byIdInSection("items", "itemsTable");
         if (oItemsTable) {
           oItemsTable.addEventDelegate({ onpaste: this.onItemsCellPaste }, this);
+          if (ItemsTableAccess.isGrid(oItemsTable)) {
+            this._applyItemsGridSortProperties(oItemsTable);
+          }
         }
         this._addInitialCreateItemRows();
         // 3.3: the Items panel's own contexts are the most convenient point
@@ -4937,7 +5087,7 @@ sap.ui.define([
       }
 
       var oItemsTable = this._byIdInSection("items", "itemsTable");
-      var oItemsBinding = oItemsTable && oItemsTable.getBinding("items");
+      var oItemsBinding = ItemsTableAccess.getBinding(oItemsTable);
       if (!CreateOrderService.hasMinItems(oItemsBinding)) {
         this._bStartNewAfterSave = false;
         this.byId("newOrderBtn").setEnabled(true);

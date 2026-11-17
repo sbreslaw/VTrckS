@@ -24,7 +24,8 @@ sap.ui.define([
       return oResponse.text();
     }).then(function (sXml) {
       var oDoc = new DOMParser().parseFromString(sXml, "application/xml");
-      return Array.prototype.map.call(oDoc.getElementsByTagName("Column"), function (oColumn) {
+      // NS-agnostic: the returns fragment uses sap.ui.table's t:Column (VTrckS#69).
+      return Array.prototype.map.call(oDoc.getElementsByTagNameNS("*", "Column"), function (oColumn) {
         var aMatch = /itemsColumns>\/(\w+)/.exec(oColumn.getAttribute("visible") || "");
         return aMatch ? aMatch[1] : null;
       });

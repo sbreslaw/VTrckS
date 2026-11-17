@@ -1,4 +1,4 @@
-<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core">
+<core:FragmentDefinition xmlns="sap.m" xmlns:core="sap.ui.core" xmlns:t="sap.ui.table" xmlns:rowmodes="sap.ui.table.rowmodes">
   <!-- ADR-002 (Returns_Single_App_Service_Profile) decision 3: profile-
        selected sub-fragment variant - loaded instead of the plain
        Items.fragment.xml by SectionFactory.js when ServiceSchema.profileId
@@ -7,7 +7,11 @@
        Quantity, Unit, NDC Description, Status, Rejection Reason, Return Reason,
        Item Category, ExIS Line Number - the same keys/order as
        OrderModeConfig.getItemsColumnLayout("returns") (Personalize, export).
-       Cells below must stay in column order. -->
+       Cells below must stay in column order.
+       VTrckS#69: grid table (sap.ui.table.Table) - columns can be resized,
+       reordered and (Items display mode only) sorted. Rows are virtual: only the
+       visible rows have controls, so Detail.controller.js reads and binds this
+       table through model/ItemsTableAccess.js. -->
   <!-- CRUD Task 1 v3 (In-Place Create): the update group for this nested
        "_Item" navigation must match the header context's own group (edit
        session vs. transient create), which XML binding parameters can't
@@ -24,171 +28,224 @@
       <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
     </OverflowToolbar>
     <VBox id="itemsViewport" class="detailItemsViewport">
-    <Table id="itemsTable" width="100%" items="{_Item}" class="detailItemsTable" fixedLayout="true"
-      updateFinished=".onItemsTableUpdateFinished">
-    <!-- Column widths are % (sum 100) so the table fits its container; hidden columns' share is redistributed. -->
-    <columns>
-      <Column width="3%" visible="{itemsColumns>/rowAction}"><Text text="{i18n>colAction}" wrapping="true" /></Column>
-      <!-- optOut (ZZ1_SKIPADDANC_SDI), orderIntention/fundType (MaterialGroup1/2) and
-           deliveryStatus (_DeliveryStatus) are absent on CustomerReturnItemManageType -
-           not rendered at all (a hidden Column still puts its cell's property into
-           autoExpandSelect's $select). Brand, PO Reference and Net Amount are not in the
-           returns column list (code owner, 2026-11-12). -->
-      <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
-      <Column width="5%" visible="{itemsColumns>/itemNumber}"><Text text="{i18n>colItemNumberFull}" wrapping="true" /></Column>
-      <Column width="12%" visible="{itemsColumns>/ndcCode}"><Text text="{i18n>colNdcCode}" wrapping="true" /></Column>
-      <Column width="8%" visible="{itemsColumns>/lotNumber}"><Text text="{i18n>colLotNumber}" wrapping="true" /></Column>
-      <Column width="8%" visible="{itemsColumns>/expirationDate}"><Text text="{i18n>colExpirationDate}" wrapping="true" /></Column>
-      <Column width="5%" hAlign="End" visible="{itemsColumns>/qty}"><Text text="{i18n>colQuantity}" wrapping="true" /></Column>
-      <Column width="4%" visible="{itemsColumns>/uom}"><Text text="{i18n>colUnit}" wrapping="true" /></Column>
-      <Column width="13%" visible="{itemsColumns>/ndcDescription}"><Text text="{i18n>colNdcDescriptionFull}" wrapping="true" /></Column>
-      <Column width="9%" visible="{itemsColumns>/itemStatus}"><Text text="{i18n>colStatus}" wrapping="true" /></Column>
-      <Column width="9%" visible="{itemsColumns>/rejectionReason}"><Text text="{i18n>colRejectionReason}" wrapping="true" /></Column>
-      <Column width="9%" visible="{itemsColumns>/returnReason}"><Text text="{i18n>colReturnReason}" wrapping="true" /></Column>
-      <Column width="6%" visible="{itemsColumns>/itemCategory}"><Text text="{i18n>colItemCategory}" wrapping="true" /></Column>
-      <Column width="9%" visible="{itemsColumns>/exisId}"><Text text="{i18n>colExisLineNumber}" wrapping="true" /></Column>
-    </columns>
-    <items>
-      <ColumnListItem>
-        <cells>
-          <MenuButton text="" icon="sap-icon://menu2" type="Transparent" visible="{itemsColumns>/rowAction}">
-            <menu>
-              <Menu>
-                <!-- Ancillary Items & Opt-Out session prompt §3.2: an
-                     auto-inserted ancillary child row (HigherLevelItem set)
-                     is fully read-only - no Edit navigation, no Fund Split
-                     (it has no fund of its own to split). Delete is
-                     deliberately left untouched below - children stay
-                     manually deletable per §3.4. -->
-                <MenuItem text="{i18n>rowActionEdit}" press=".onItemsEditPress"
-                  enabled="{= ${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} }" />
-                <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
-                  enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
-                <!-- Fund Split menu item removed for _RET: no Fund Type
-                     (MaterialGroup2) concept exists on this service, and a bare
-                     %{MaterialGroup2} reference here - even in this always-visible
-                     rowAction column - was enough to pull the property into the
-                     whole row template's autoExpandSelect $select and crash it. -->
-              </Menu>
-            </menu>
-          </MenuButton>
-          <!-- §3.3: the real opt-out flag (ZZ1_SKIPADDANC_SDI, NOT the
-               unused ZZ1_OptOutAncillary_SDI - see ServiceSchema.js). Only
-               enabled on a PARENT row that actually has ancillary children
-               (itemsMeta>/childParents, keyed by SalesOrderItem - recomputed
-               after every real-list load/refresh, see
-               Detail.controller.js#_computeAncillaryParents); a child row
-               itself never gets an opt-out control. -->
-          <!-- optOut CheckBox removed for _RET: ZZ1_SKIPADDANC_SDI does not exist
-               on CustomerReturnItemManageType - see Column removal note above. -->
-          <!-- Item Number Link -> ItemDetail, mode=display (Session Prompt "Display/Edit
-               Consistency" 4.4) - independent of /items/editing, works from both display
-               and edit; a child (ancillary) row's link still navigates to its own
-               read-only detail. -->
-          <!-- ADR-002 hazard #3: item key is CustomerReturnItem on this
-               service (ReturnsSchema.itemProperties.itemNumber), not
-               SalesOrderItem. -->
-          <Link text="{CustomerReturnItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
-            press=".onItemNumberPress" />
-          <!-- NDC is editable only until the row is posted (item number assigned); after that it is fixed. -->
-          <Input value="{path: 'Product', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/ndcCode}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !!${@$ui5.context.isTransient} &amp;&amp; ${orderUi>/columns/ndcCode/editable} !== false }"
-            showValueHelp="true"
-            showSuggestion="true" filterSuggests="false" startSuggestion="2"
-            valueHelpRequest=".onItemNdcValueHelpRequest"
-            suggest=".onItemNdcSuggest"
-            suggestionItemSelected=".onItemNdcSuggestionSelected"
-            change=".onItemNdcChange">
-            <!-- Live-test (9-30-001 follow-up): suggestionItems is no longer
-                 declared here - a static nested aggregation with an absolute
-                 path polluted the outer _Item list's own $select (confirmed
-                 live 404 on "Product_Text") - now bound lazily by
-                 Detail.controller.js#onItemNdcSuggest on first use. -->
-          </Input>
-          <!-- ADR-002 hazard #5 (2026-11-04): CustomerReturnItemManageType's own
-               Lot Number field is ZZ1_LotNumber_SDI (LotNumber never persisted -
-               confirmed backend-side, NOTES.md 2026-11-02; Batch still exists on
-               this entity but is a different, unrelated field).
-               Code owner 2026-11-13: free text, no value help. Letters, digits and
-               dashes only - validated by Detail.controller.js#onItemLotChange
-               (model/LotNumberRule.js); value is OneWay so only a valid value is written. -->
-          <Input
-            value="{path: 'ZZ1_LotNumber_SDI', mode: 'sap.ui.model.BindingMode.OneWay'}"
-            width="100%"
-            visible="{itemsColumns>/lotNumber}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/lotNumber/editable} !== false }"
-            change=".onItemLotChange" />
-          <!-- Return Orders session prompt 3.2, remapped 2026-11-04: ZZ1_ExpirationDate_SDI
-               (Edm.Date, no FieldControl annotation) - a plain two-way binding like the
-               new ExIS Date header field. -->
-          <DatePicker
-            value="{path: 'ZZ1_ExpirationDate_SDI', type: 'sap.ui.model.odata.type.Date'}"
-            visible="{itemsColumns>/expirationDate}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/expirationDate/editable} !== false }" />
-          <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
-               gets a promise to await before refreshing the list for recalculated
-               ancillary quantities); a two-way binding's own internal PATCH here would
-               race that refresh exactly like the opt-out checkbox's did. -->
-          <Input value="{path: 'RequestedQuantity', type: 'sap.ui.model.odata.type.Decimal', formatOptions: {maxFractionDigits: 0, preserveDecimals: false, groupingEnabled: false}, mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
-            editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/qty/editable} !== false }" type="Number" textAlign="End" change=".onProdQtyChange"/>
-          <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
-               read-only - the prior editable Input (worked around a "Sales
-               unit EA is not defined" SaveChanges error, see createPayloadUom
-               comment history) is no longer needed now that
-               onItemNdcValueHelpRequest auto-defaults this from the selected
-               NDC's own Product.BaseUnit (ServiceSchema.productProperties.
-               baseUnit) instead of always defaulting to the hardcoded "EA". -->
-          <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
-          <!-- ADR-002 hazard #4: item description is CustomerReturnItemText
-               on this service (ReturnsSchema.itemProperties.itemText), not
-               SalesOrderItemText. -->
-          <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${CustomerReturnItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
-          <!-- Item Status (ZZ1_ItemStatus_SDI, custom field, 2026-11-12): display
-               only per code owner 2026-11-13 - plain value, no value help, never
-               written by the UI (not in the postItem whitelist). -->
-          <Text text="{ZZ1_ItemStatus_SDI}" visible="{itemsColumns>/itemStatus}" />
-          <!-- DF-1025: SalesDocumentRjcnReason is Computed - selectedKey is OneWay (display
-               only); writes go through the bound SetRejectionReason/RemoveRejectionReason
-               actions in onItemRejectionReasonChange. Items come from the JSON
-               "rejectionReasons" model: an absolute OData list nested in this row template
-               would pollute _Item's autoExpandSelect $select. Existing-order edit mode
-               invokes the bound action directly; create mode also honors its session's
-               dynamic operation controls. -->
-          <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
-            visible="{itemsColumns>/rejectionReason}"
-            items="{rejectionReasons>/list}"
-            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (!${sectionFlags>/createMode} || %{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason}) &amp;&amp; ${orderUi>/columns/rejectionReason/editable} !== false) }"
-            change=".onItemRejectionReasonChange">
-            <core:Item key="{rejectionReasons>key}" text="{rejectionReasons>text}" />
-          </Select>
-          <!-- Return Reason: item-level reason code (ReasonCode), bound to the same
-               SDDocumentReason VH as the header Return Reason. Display shows text via
-               the shared /SDDocumentReason map (loaded for the header Select).
-               In create/edit mode, Select with change handler for rule 2.1.2.
-               Editable once the row has an NDC (like Lot Number), also before the
-               row is posted: ReasonCode is a plain property (no bound action, unlike
-               Rejection Reason above), so an unposted row's value is sent with
-               the rest of the row by CreateOrderService.postItem. Rows without an
-               NDC are not counted in the header recompute (_getItemReasonsArray). -->
-          <Select selectedKey="{path: 'ReasonCode', mode: 'sap.ui.model.BindingMode.TwoWay'}" forceSelection="false" width="100%"
-            visible="{itemsColumns>/returnReason}"
-            items="{/SDDocumentReason}"
-            editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
-            change=".onItemReturnReasonChange">
-            <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-          </Select>
-          <!-- Item Category (CustomerReturnItemCategory): Computed, code only - the
-               service has no text for it (ui_customerreturnmanage_2026-11-12.xml). -->
-          <Text text="{CustomerReturnItemCategory}" visible="{itemsColumns>/itemCategory}" />
-          <!-- ExIS Line Number: ExisItemNumber (CustomerReturnItemManageType,
-               MaxLength 12; ReturnsSchema.js itemProperties.exisId). Paste maps
-               clipboard columns to the paste cells in table order: NDC, Qty, ExIS. -->
-          <Input value="{ExisItemNumber}" visible="{itemsColumns>/exisId}" change=".onItemExisChange"
-            enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
-        </cells>
-      </ColumnListItem>
-    </items>
-    </Table>
+    <t:Table id="itemsTable" width="100%" rows="{_Item}" class="detailItemsTable detailItemsGrid"
+      selectionMode="None" enableColumnReordering="true"
+      sort=".onItemsGridSort" rowsUpdated=".onItemsGridRowsUpdated">
+    <!-- Column widths are % so the table fits its container; NDC Description has no width
+         and takes the remaining space. A user resize sets px (sap.ui.table.Column width). -->
+    <!-- optOut (ZZ1_SKIPADDANC_SDI), orderIntention/fundType (MaterialGroup1/2) and
+         deliveryStatus (_DeliveryStatus) are absent on CustomerReturnItemManageType -
+         not rendered at all. A grid creates cells for visible columns only, so
+         Detail.controller.js#_rebindItemsGroup selects every column property
+         explicitly. Brand, PO Reference and Net Amount are not in the returns
+         column list (code owner, 2026-11-12). -->
+    <!-- rowCount is kept at the item count (1-10) by Detail.controller.js#onItemsGridRowsUpdated.
+         Grid rows have a fixed height, so the display-only Texts do not wrap (ellipsis;
+         the column can be resized). -->
+    <t:rowMode><rowmodes:Fixed rowCount="10" /></t:rowMode>
+    <t:columns>
+      <t:Column width="3%" visible="{itemsColumns>/rowAction}" resizable="true">
+        <t:label><Text text="{i18n>colAction}" wrapping="true" /></t:label>
+        <t:template>
+            <MenuButton text="" icon="sap-icon://menu2" type="Transparent" visible="{itemsColumns>/rowAction}">
+              <menu>
+                <Menu>
+                  <!-- Ancillary Items & Opt-Out session prompt §3.2: an
+                       auto-inserted ancillary child row (HigherLevelItem set)
+                       is fully read-only - no Edit navigation, no Fund Split
+                       (it has no fund of its own to split). Delete is
+                       deliberately left untouched below - children stay
+                       manually deletable per §3.4. -->
+                  <MenuItem text="{i18n>rowActionEdit}" press=".onItemsEditPress"
+                    enabled="{= ${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} }" />
+                  <MenuItem text="{i18n>rowActionDelete}" press=".onItemsDeleteRow"
+                    enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) }" />
+                  <!-- Fund Split menu item removed for _RET: no Fund Type
+                       (MaterialGroup2) concept exists on this service, and a bare
+                       %{MaterialGroup2} reference here - even in this always-visible
+                       rowAction column - was enough to pull the property into the
+                       whole row template's autoExpandSelect $select and crash it. -->
+                </Menu>
+              </menu>
+            </MenuButton>
+        </t:template>
+      </t:Column>
+            <!-- §3.3: the real opt-out flag (ZZ1_SKIPADDANC_SDI, NOT the
+                 unused ZZ1_OptOutAncillary_SDI - see ServiceSchema.js). Only
+                 enabled on a PARENT row that actually has ancillary children
+                 (itemsMeta>/childParents, keyed by SalesOrderItem - recomputed
+                 after every real-list load/refresh, see
+                 Detail.controller.js#_computeAncillaryParents); a child row
+                 itself never gets an opt-out control. -->
+            <!-- optOut CheckBox removed for _RET: ZZ1_SKIPADDANC_SDI does not exist
+                 on CustomerReturnItemManageType - see Column removal note above. -->
+      <t:Column width="5%" visible="{itemsColumns>/itemNumber}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colItemNumberFull}" wrapping="true" /></t:label>
+        <t:template>
+          <!-- §3.1: items now post to the sticky session immediately and get a real, backend-assigned SalesOrderItem - shown in createMode too now; the per-row cell (below) still hides it while the row's own create() is still in flight (@$ui5.context.isTransient). -->
+            <!-- Item Number Link -> ItemDetail, mode=display (Session Prompt "Display/Edit
+                 Consistency" 4.4) - independent of /items/editing, works from both display
+                 and edit; a child (ancillary) row's link still navigates to its own
+                 read-only detail. -->
+            <!-- ADR-002 hazard #3: item key is CustomerReturnItem on this
+                 service (ReturnsSchema.itemProperties.itemNumber), not
+                 SalesOrderItem. -->
+            <Link text="{CustomerReturnItem}" visible="{= ${itemsColumns>/itemNumber} &amp;&amp; !${@$ui5.context.isTransient} }"
+              press=".onItemNumberPress" />
+        </t:template>
+      </t:Column>
+      <t:Column width="12%" visible="{itemsColumns>/ndcCode}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colNdcCode}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- NDC is editable only until the row is posted (item number assigned); after that it is fixed. -->
+            <Input value="{path: 'Product', mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/ndcCode}"
+              editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; !!${@$ui5.context.isTransient} &amp;&amp; ${orderUi>/columns/ndcCode/editable} !== false }"
+              showValueHelp="true"
+              showSuggestion="true" filterSuggests="false" startSuggestion="2"
+              valueHelpRequest=".onItemNdcValueHelpRequest"
+              suggest=".onItemNdcSuggest"
+              suggestionItemSelected=".onItemNdcSuggestionSelected"
+              change=".onItemNdcChange">
+              <!-- Live-test (9-30-001 follow-up): suggestionItems is no longer
+                   declared here - a static nested aggregation with an absolute
+                   path polluted the outer _Item list's own $select (confirmed
+                   live 404 on "Product_Text") - now bound lazily by
+                   Detail.controller.js#onItemNdcSuggest on first use. -->
+            </Input>
+        </t:template>
+      </t:Column>
+      <t:Column width="8%" visible="{itemsColumns>/lotNumber}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colLotNumber}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- ADR-002 hazard #5 (2026-11-04): CustomerReturnItemManageType's own
+                 Lot Number field is ZZ1_LotNumber_SDI (LotNumber never persisted -
+                 confirmed backend-side, NOTES.md 2026-11-02; Batch still exists on
+                 this entity but is a different, unrelated field).
+                 Code owner 2026-11-13: free text, no value help. Letters, digits and
+                 dashes only - validated by Detail.controller.js#onItemLotChange
+                 (model/LotNumberRule.js); value is OneWay so only a valid value is written. -->
+            <Input
+              value="{path: 'ZZ1_LotNumber_SDI', mode: 'sap.ui.model.BindingMode.OneWay'}"
+              width="100%"
+              visible="{itemsColumns>/lotNumber}"
+              editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/lotNumber/editable} !== false }"
+              change=".onItemLotChange" />
+        </t:template>
+      </t:Column>
+      <t:Column width="8%" visible="{itemsColumns>/expirationDate}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colExpirationDate}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- Return Orders session prompt 3.2, remapped 2026-11-04: ZZ1_ExpirationDate_SDI
+                 (Edm.Date, no FieldControl annotation) - a plain two-way binding like the
+                 new ExIS Date header field. -->
+            <DatePicker
+              value="{path: 'ZZ1_ExpirationDate_SDI', type: 'sap.ui.model.odata.type.Date'}"
+              visible="{itemsColumns>/expirationDate}"
+              editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/expirationDate/editable} !== false }" />
+        </t:template>
+      </t:Column>
+      <t:Column width="5%" hAlign="End" visible="{itemsColumns>/qty}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colQuantity}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- value is OneWay - onProdQtyChange does its own explicit setProperty (so it
+                 gets a promise to await before refreshing the list for recalculated
+                 ancillary quantities); a two-way binding's own internal PATCH here would
+                 race that refresh exactly like the opt-out checkbox's did. -->
+            <Input value="{path: 'RequestedQuantity', type: 'sap.ui.model.odata.type.Decimal', formatOptions: {maxFractionDigits: 0, preserveDecimals: false, groupingEnabled: false}, mode: 'sap.ui.model.BindingMode.OneWay'}" visible="{itemsColumns>/qty}"
+              editable="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/qty/editable} !== false }" type="Number" textAlign="End" change=".onProdQtyChange"/>
+        </t:template>
+      </t:Column>
+      <t:Column width="4%" visible="{itemsColumns>/uom}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colUnit}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- Session Prompt (Detail View Adjustments) 3.7: reverted back to
+                 read-only - the prior editable Input (worked around a "Sales
+                 unit EA is not defined" SaveChanges error, see createPayloadUom
+                 comment history) is no longer needed now that
+                 onItemNdcValueHelpRequest auto-defaults this from the selected
+                 NDC's own Product.BaseUnit (ServiceSchema.productProperties.
+                 baseUnit) instead of always defaulting to the hardcoded "EA". -->
+            <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" wrapping="false" />
+        </t:template>
+      </t:Column>
+      <t:Column minWidth="120" visible="{itemsColumns>/ndcDescription}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colNdcDescriptionFull}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- ADR-002 hazard #4: item description is CustomerReturnItemText
+                 on this service (ReturnsSchema.itemProperties.itemText), not
+                 SalesOrderItemText. -->
+            <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${CustomerReturnItemText} || '') }" visible="{itemsColumns>/ndcDescription}" wrapping="false" />
+        </t:template>
+      </t:Column>
+      <t:Column width="9%" visible="{itemsColumns>/itemStatus}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colStatus}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- Item Status (ZZ1_ItemStatus_SDI, custom field, 2026-11-12): display
+                 only per code owner 2026-11-13 - plain value, no value help, never
+                 written by the UI (not in the postItem whitelist). -->
+            <Text text="{ZZ1_ItemStatus_SDI}" visible="{itemsColumns>/itemStatus}" wrapping="false" />
+        </t:template>
+      </t:Column>
+      <t:Column width="9%" visible="{itemsColumns>/rejectionReason}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colRejectionReason}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- DF-1025: SalesDocumentRjcnReason is Computed - selectedKey is OneWay (display
+                 only); writes go through the bound SetRejectionReason/RemoveRejectionReason
+                 actions in onItemRejectionReasonChange. Items come from the JSON
+                 "rejectionReasons" model: an absolute OData list nested in this row template
+                 would pollute _Item's autoExpandSelect $select. Existing-order edit mode
+                 invokes the bound action directly; create mode also honors its session's
+                 dynamic operation controls. -->
+            <Select selectedKey="{path: 'SalesDocumentRjcnReason', mode: 'sap.ui.model.BindingMode.OneWay'}" forceSelection="false" width="100%"
+              visible="{itemsColumns>/rejectionReason}"
+              items="{path: 'rejectionReasons>/list', templateShareable: false}"
+              editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !${@$ui5.context.isTransient} &amp;&amp; !%{HigherLevelItem} &amp;&amp; (!${sectionFlags>/createMode} || %{__OperationControl/SetRejectionReason} || %{__OperationControl/RemoveRejectionReason}) &amp;&amp; ${orderUi>/columns/rejectionReason/editable} !== false) }"
+              change=".onItemRejectionReasonChange">
+              <core:Item key="{rejectionReasons>key}" text="{rejectionReasons>text}" />
+            </Select>
+        </t:template>
+      </t:Column>
+      <t:Column width="9%" visible="{itemsColumns>/returnReason}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colReturnReason}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- Return Reason: item-level reason code (ReasonCode), bound to the same
+                 SDDocumentReason VH as the header Return Reason. Display shows text via
+                 the shared /SDDocumentReason map (loaded for the header Select).
+                 In create/edit mode, Select with change handler for rule 2.1.2.
+                 Editable once the row has an NDC (like Lot Number), also before the
+                 row is posted: ReasonCode is a plain property (no bound action, unlike
+                 Rejection Reason above), so an unposted row's value is sent with
+                 the rest of the row by CreateOrderService.postItem. Rows without an
+                 NDC are not counted in the header recompute (_getItemReasonsArray). -->
+            <Select selectedKey="{path: 'ReasonCode', mode: 'sap.ui.model.BindingMode.TwoWay'}" forceSelection="false" width="100%"
+              visible="{itemsColumns>/returnReason}"
+              items="{path: '/SDDocumentReason', templateShareable: false}"
+              editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
+              change=".onItemReturnReasonChange">
+              <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+            </Select>
+        </t:template>
+      </t:Column>
+      <t:Column width="6%" visible="{itemsColumns>/itemCategory}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colItemCategory}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- Item Category (CustomerReturnItemCategory): Computed, code only - the
+                 service has no text for it (ui_customerreturnmanage_2026-11-12.xml). -->
+            <Text text="{CustomerReturnItemCategory}" visible="{itemsColumns>/itemCategory}" wrapping="false" />
+        </t:template>
+      </t:Column>
+      <t:Column width="9%" visible="{itemsColumns>/exisId}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
+        <t:label><Text text="{i18n>colExisLineNumber}" wrapping="true" /></t:label>
+        <t:template>
+            <!-- ExIS Line Number: ExisItemNumber (CustomerReturnItemManageType,
+                 MaxLength 12; ReturnsSchema.js itemProperties.exisId). Paste maps
+                 clipboard columns to the paste cells in table order: NDC, Qty, ExIS. -->
+            <Input value="{ExisItemNumber}" visible="{itemsColumns>/exisId}" change=".onItemExisChange"
+              enabled="{= ${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/exisId/editable} !== false }" />
+        </t:template>
+      </t:Column>
+    </t:columns>
+    </t:Table>
     </VBox>
     <Button id="itemsAddMoreButton" text="{i18n>itemsAddMore}" width="100%" class="detailItemsAddMore"
       visible="{sectionFlags>/items/editing}"

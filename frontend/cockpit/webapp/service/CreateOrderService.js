@@ -5,8 +5,9 @@ sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/Enums",
   "cdc/vaccreq/model/MessageExtractor",
-  "cdc/vaccreq/model/OrderModeConfig"
-], function (Messaging, Filter, FilterOperator, ServiceSchema, Enums, MessageExtractor, OrderModeConfig) {
+  "cdc/vaccreq/model/OrderModeConfig",
+  "cdc/vaccreq/model/ItemsTableAccess"
+], function (Messaging, Filter, FilterOperator, ServiceSchema, Enums, MessageExtractor, OrderModeConfig, ItemsTableAccess) {
   "use strict";
 
   // CRUD Task 1 v5 (design/E008_CRUD1_v5_Sticky_Amendment.md) — reinstates
@@ -495,7 +496,8 @@ sap.ui.define([
       if (!oItemsBinding) {
         return Enums.MIN_ITEMS <= 0;
       }
-      var aContexts = oItemsBinding.getCurrentContexts ? oItemsBinding.getCurrentContexts() : [];
+      // All loaded rows, not just the rendered window (Returns grid table, VTrckS#69).
+      var aContexts = ItemsTableAccess.getContexts(oItemsBinding);
       var iValid = aContexts.filter(function (oCtx) {
         var sNdc = oCtx.getProperty(ServiceSchema.itemProperties.material);
         var fQty = parseFloat(oCtx.getProperty(ServiceSchema.itemProperties.quantity));
@@ -508,13 +510,13 @@ sap.ui.define([
     // shown for this order type (Return orders: PROVIDER_ORDER_UI_HIDDEN, OrderModeConfig.js)
     // - a hidden column can never be completed, so it must not block Save.
     hasIncompleteItems: function (oItemsBinding, oOrderUi) {
-      if (!oItemsBinding || !oItemsBinding.getCurrentContexts) {
+      if (!oItemsBinding) {
         return false;
       }
       var oProps = ServiceSchema.itemProperties;
       var bCheckFundType = OrderModeConfig.uiFlag(oOrderUi, "columns", "fundType", "visible");
       var bCheckOrderIntention = OrderModeConfig.uiFlag(oOrderUi, "columns", "orderIntention", "visible");
-      return oItemsBinding.getCurrentContexts().some(function (oContext) {
+      return ItemsTableAccess.getContexts(oItemsBinding).some(function (oContext) {
         if (oContext.getProperty(oProps.higherLevelItem)) {
           return false;
         }
@@ -635,7 +637,7 @@ sap.ui.define([
           var oStickyPlainContext = oModel.bindContext(ServiceSchema.buildHeaderPath(""), undefined, {
             $$updateGroupId: CREATE_GROUP
           }).getBoundContext();
-          var aScratchItemContexts = (oItemsBinding && oItemsBinding.getCurrentContexts) ? oItemsBinding.getCurrentContexts() : [];
+          var aScratchItemContexts = ItemsTableAccess.getContexts(oItemsBinding);
           aScratchItemContexts = aScratchItemContexts.filter(function (oItemContext) {
             return !!oItemContext.getProperty(ServiceSchema.itemProperties.material);
           });
