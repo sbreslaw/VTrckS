@@ -100,6 +100,7 @@ sap.ui.define([
       // this.getView().getModel("view") has not happened yet and returns undefined.
       this._oViewModel = this.getOwnerComponent().getModel("view");
       this.getView().setModel(new JSONModel({ byOrder: {} }), "masterContacts");
+      this.getView().setModel(new JSONModel({ options: [] }), "masterStatus");
       this._mMasterContactRequests = {};
       this._aColumnDefs = this._getColumnDefs();
       this._applyFilterAvailability();
@@ -1816,9 +1817,12 @@ sap.ui.define([
     // the union of the category's authorized order types - matches the VH
     // logic of the corresponding Status field in Details, per the issue text.
     // onSearch (below) is unchanged - it keeps filtering statusProperties.code
-    // EQ key, exactly as before.
+    // EQ key, exactly as before. GH-73: the same options also feed the Status
+    // column (masterStatus>/options), which maps Returns' bare status code to
+    // its text.
     _populateStatusCodes: function () {
       var oStatus = this.byId("filterStatus");
+      var oStatusModel = this.getView().getModel("masterStatus");
       oStatus.removeAllItems();
       var aOrderTypes = this._getAuthorizedOrderTypes("READ").map(function (oType) {
         return oType.orderType;
@@ -1827,6 +1831,7 @@ sap.ui.define([
         aOptions.forEach(function (oOption) {
           oStatus.addItem(new Item({ key: oOption.key, text: oOption.text }));
         });
+        oStatusModel.setProperty("/options", aOptions);
       });
     },
 
@@ -1935,19 +1940,14 @@ sap.ui.define([
         {
           key: "status", i18nKey: "colStatus", hAlign: "Begin", width: "10rem",
           createCell: function () {
-            // ADR-002 PR1: headerProperties.userStatus (UserStatusDerived, a
-            // combined "code description" string parsed by masterStatusText) is
-            // null on ReturnsSchema - same {path: null} "[object Object]" bug as
-            // the description column above. statusProperties.text
-            // (OverallSDProcessStatus_Text) is NOT a header-entity property -
-            // it only exists on the separate status value-help entity set
-            // (see _populateStatusCodes below), expanding it off the header
-            // 404s ("does not point to a property"). Returns has no inline
-            // status-text field at all, so show the real header-level status
-            // CODE (headerProperties.status) as-is - PR2 follow-up could map
-            // it through the already-loaded filterStatus value list for a
-            // friendlier label. targetType "any" avoids a Raw-type
-            // FormatException on an unformatted raw string bind.
+            // headerProperties.userStatus is set on both profiles. GH-73:
+            // Returns' header status is a bare code with no text on the
+            // entity, shown as the text of the loaded status options
+            // (_populateStatusCodes); Orders' combined "code description"
+            // UserStatusDerived never matches a code and keeps the
+            // masterStatusText result. A profile without userStatus shows the
+            // raw headerProperties.status code (targetType "any" avoids a
+            // Raw-type FormatException on an unformatted raw string bind).
             if (!ServiceSchema.headerProperties.userStatus) {
               return new Text({
                 wrapping: false,
@@ -1956,7 +1956,13 @@ sap.ui.define([
             }
             return new Text({
               wrapping: false,
-              text: { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.masterStatusText.bind(formatter) }
+              text: {
+                parts: [
+                  { path: ServiceSchema.headerProperties.userStatus },
+                  { path: "masterStatus>/options" }
+                ],
+                formatter: formatter.statusOptionText.bind(formatter)
+              }
             });
           }
         },

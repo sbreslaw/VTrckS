@@ -89,6 +89,17 @@ sap.ui.define([
     return sCode || "Draft";
   }
 
+  // GH-73: Returns store a bare status code (headerProperties.status, e.g. "E0001")
+  // with no text on the entity - show the text of the matching loaded status
+  // option. Anything else (Orders' combined "code text" UserStatusDerived, an
+  // unknown code, options not loaded yet, no status) keeps fnStatusText.
+  function fnStatusOptionText(sValue, aOptions) {
+    var oOption = sValue && Array.isArray(aOptions) && aOptions.find(function (oEntry) {
+      return oEntry && oEntry.key === sValue;
+    });
+    return oOption ? oOption.text : fnStatusText(sValue);
+  }
+
   function fnStatusCode(sCode) {
     if (!!sCode) {
       let _code = sCode.split(' ')[0];
@@ -391,6 +402,10 @@ sap.ui.define([
 
     detailStatusState: function (sCode) {
       return fnStatusState(sCode);
+    },
+
+    statusOptionText: function (sValue, aOptions) {
+      return fnStatusOptionText(sValue, aOptions);
     },
 
     // Section Panel title = "<order type title> <section text>" (e.g.

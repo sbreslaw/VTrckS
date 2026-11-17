@@ -24,6 +24,23 @@ sap.ui.define([
     assert.strictEqual(formatter.yesNo("No", "Yes", "No"), "No", "a type-formatted string is never mistaken for true");
   });
 
+  // GH-73: Returns store a bare status code (live po>/OrderStatus texts,
+  // 2026-11-17); Orders keep their combined "code text" UserStatusDerived.
+  QUnit.module("formatter.statusOptionText");
+
+  QUnit.test("a code of the loaded options shows its text; anything else keeps the status text rule", function (assert) {
+    var aOptions = [{ key: "E0001", text: "Open" }, { key: "E0008", text: "Approved" }];
+    assert.strictEqual(formatter.statusOptionText("E0001", aOptions), "Open");
+    assert.strictEqual(formatter.statusOptionText("E0008", aOptions), "Approved");
+    assert.strictEqual(formatter.statusOptionText("E0099", aOptions), "E0099", "unknown code - the code itself");
+    assert.strictEqual(formatter.statusOptionText("", aOptions), "Draft", "no status");
+    assert.strictEqual(formatter.statusOptionText(null, aOptions), "Draft", "no status (null)");
+    assert.strictEqual(formatter.statusOptionText("1A In Process - Request", aOptions), "In Process - Request",
+      "Orders' combined string is unchanged");
+    assert.strictEqual(formatter.statusOptionText("E0001", undefined), "E0001", "options not loaded yet");
+    assert.strictEqual(formatter.statusOptionText("E0001", []), "E0001", "no options (load failed)");
+  });
+
   QUnit.module("formatter.shippingConditionEditable");
 
   QUnit.test("locked while No. of Boxes is 0, otherwise follows the per-type flag", function (assert) {

@@ -5789,17 +5789,24 @@ sap.ui.define([
         formatter: formatter.detailTitle.bind(formatter)
       });
 
-      // ADR-002 PR1: headerProperties.userStatus is null on ReturnsSchema (no
-      // user-settable status concept on CustomerReturnManageType) - passing a
-      // null path straight to bindProperty throws synchronously inside UI5's
-      // BindingInfo.extractModelName ("Cannot read properties of null
-      // (reading 'indexOf')"), live-confirmed on every Returns Detail
-      // navigation (exceptions.txt 2026-10-27). Same fallback pattern as the
-      // detailTitle contact-info binding above: a JSON model path that always
-      // resolves to undefined when there's nothing real to bind.
+      // A null headerProperties.userStatus path passed straight to bindProperty
+      // throws inside UI5's BindingInfo.extractModelName ("Cannot read
+      // properties of null (reading 'indexOf')", exceptions.txt 2026-10-27), so
+      // a profile without it falls back to a JSON model path that always
+      // resolves to undefined (same pattern as the detailTitle contact-info
+      // binding above). GH-73: Returns' header status is a bare code,
+      // shown as the text of the order type's status options
+      // (_loadOrderStatusVH); Orders' combined UserStatusDerived string never
+      // matches a code and keeps the detailStatusText result.
       oView.byId("detailStatus")
         .bindProperty("text", ServiceSchema.headerProperties.userStatus
-          ? { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.detailStatusText.bind(formatter) }
+          ? {
+            parts: [
+              { path: ServiceSchema.headerProperties.userStatus },
+              { path: "enums>/EDIT_STATUS" }
+            ],
+            formatter: formatter.statusOptionText.bind(formatter)
+          }
           : { path: "orderUi>/noContact" })
         .bindProperty("status", ServiceSchema.headerProperties.userStatus
           ? { path: ServiceSchema.headerProperties.userStatus, formatter: formatter.detailStatusState.bind(formatter) }
