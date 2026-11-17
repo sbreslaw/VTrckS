@@ -108,7 +108,13 @@ sap.ui.define([
     ])
   };
 
-  // ADR-002 (Returns_Single_App_Service_Profile) PR1: ONE consistent hide set
+    // GH-75 (D-1549): header statuses (ZZ1_Headerstatus_SDH, status profile
+    // ZRETURN1 - Approved, Complete, Cancelled) in which a return is display
+    // only. resolveSections() turns every section's Edit off for them. UI gating
+    // only: the service has no status-driven control (TODO-VERIFY backend lock).
+    var RETURNS_READ_ONLY_STATUSES = ["E0008", "E0009", "E0010"];
+
+    // ADR-002 (Returns_Single_App_Service_Profile) PR1: ONE consistent hide set
   // shared by every _RET order type (ZISL/ZXFR/ZWST/ZKR) - replaces the
   // previous per-type ad-hoc duplication (which had drifted inconsistent:
   // detailsShippingCondition was wrongly hidden on 3 of 4 types despite being
@@ -157,7 +163,8 @@ sap.ui.define([
     // hidden in create (createCapable:false in the catalog is informational only).
     // Every other PROVIDER_ORDER_UI_HIDDEN section stays hidden for _RET.
     sections: Object.assign({}, PROVIDER_ORDER_UI_HIDDEN.sections, {
-      shipping: { visible: true, locked: false },
+      // GH-75: no Edit on Shipping Assignment for any return status.
+      shipping: { visible: true, locked: false, editable: false },
       priceTotals: { visible: true, locked: false, editable: false, expanded: false },
       orgData: { visible: true, locked: false, editable: false, expanded: false },
       partiesInvolved: { visible: true, locked: false, editable: false, expanded: false, byMode: { create: { visible: false } } }
@@ -183,6 +190,7 @@ sap.ui.define([
       orderType: "ZKB",
       titleKey: "orderTypeZkb",
       defaults: {},
+      readOnlyStatuses: [],
       // Create-mode Status default (createEnrich>/status, a po>/OrderStatus
       // key): E0001 = "1A In Process - Request". Display only - Provider
       // Orders have no writable header status (UserStatusDerived is
@@ -203,6 +211,7 @@ sap.ui.define([
       orderType: "ZREP",
       titleKey: "orderTypeZrep",
       defaults: {},
+      readOnlyStatuses: [],
       // E0001 = "2A Open - Replacement" (see ZKB). Replaces "2A", a pre-E000x
       // code that matched no status key, so the Select started blank.
       createStatusDefault: "E0001",
@@ -230,6 +239,7 @@ sap.ui.define([
       orderType: "ZISL",
       titleKey: "orderTypeZisl",
       defaults: {},
+      readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       createStatusDefault: "2A",
       createStatusOptions: [],
       editStatusOptions: [],
@@ -257,6 +267,7 @@ sap.ui.define([
       orderType: "ZXFR",
       titleKey: "orderTypeZxfr",
       defaults: {},
+      readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       createStatusDefault: "2A",
       createStatusOptions: [],
       editStatusOptions: [],
@@ -281,6 +292,7 @@ sap.ui.define([
       orderType: "ZWST",
       titleKey: "orderTypeZwst",
       defaults: {},
+      readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       createStatusDefault: "2A",
       createStatusOptions: [],
       editStatusOptions: [],
@@ -304,6 +316,7 @@ sap.ui.define([
       orderType: "ZKR",
       titleKey: "orderTypeZkr",
       defaults: {},
+      readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       createStatusDefault: "2A",
       createStatusOptions: [],
       editStatusOptions: [],
@@ -392,6 +405,7 @@ sap.ui.define([
       editStatusOptions: JSON.parse(JSON.stringify(oConfig.editStatusOptions)),
       categoryOptions: JSON.parse(JSON.stringify(oConfig.categoryOptions)),
       createCategoryDefaultKey: oConfig.createCategoryDefaultKey,
+      readOnlyStatuses: (oConfig.readOnlyStatuses || []).slice(),
       ui: JSON.parse(JSON.stringify(oConfig.ui))
     };
   }
@@ -445,9 +459,13 @@ sap.ui.define([
   // A per-type (or `byMode`) `expanded` boolean beats the two global maps
   // (lets one type keep a section collapsed in create mode although
   // SECTION_CREATE_EXPANDED expands it for every other type).
-  function resolveSections(vOrderType, sMode) {
+  // GH-75: the optional `sStatus` (the order's header status) makes every
+  // section non-editable when the type lists it in `readOnlyStatuses`; an
+  // omitted or empty status has no effect.
+  function resolveSections(vOrderType, sMode, sStatus) {
     var oConfig = ORDER_TYPES[normalizeOrderType(vOrderType)];
     var oPerType = (oConfig.ui && oConfig.ui.sections) || {};
+    var bReadOnlyStatus = !!sStatus && (oConfig.readOnlyStatuses || []).indexOf(sStatus) !== -1;
     return SectionCatalog.all().map(function (oCatalogEntry) {
       var oOverride = oPerType[oCatalogEntry.id] || {};
       var oModeOverride = (oOverride.byMode && oOverride.byMode[sMode]) || {};
@@ -462,7 +480,7 @@ sap.ui.define([
       return {
         id: oCatalogEntry.id,
         visible: (oModeOverride.visible !== undefined ? oModeOverride.visible : oOverride.visible) !== false,
-        editable: (oModeOverride.editable !== undefined ? oModeOverride.editable : oOverride.editable) !== false,
+        editable: !bReadOnlyStatus && (oModeOverride.editable !== undefined ? oModeOverride.editable : oOverride.editable) !== false,
         locked: !!oOverride.locked,
         expanded: bExpanded
       };

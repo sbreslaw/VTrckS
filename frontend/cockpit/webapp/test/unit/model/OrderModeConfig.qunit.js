@@ -15,6 +15,21 @@ sap.ui.define([
     });
   });
 
+  // GH-75: closed return statuses (Approved, Complete, Cancelled) are display only.
+  QUnit.test("readOnlyStatuses: return types list the closed statuses, Provider Orders none", function (assert) {
+    OrderModeConfig.getCategoryOrderTypes("_RET").forEach(function (sType) {
+      assert.deepEqual(OrderModeConfig.resolveOrderType(sType).readOnlyStatuses, ["E0008", "E0009", "E0010"], sType);
+    });
+    OrderModeConfig.getCategoryOrderTypes("_ORD").forEach(function (sType) {
+      assert.deepEqual(OrderModeConfig.resolveOrderType(sType).readOnlyStatuses, [], sType);
+    });
+  });
+
+  QUnit.test("readOnlyStatuses: the returned list is a copy", function (assert) {
+    OrderModeConfig.resolveOrderType("ZKR").readOnlyStatuses.push("E0001");
+    assert.deepEqual(OrderModeConfig.resolveOrderType("ZKR").readOnlyStatuses, ["E0008", "E0009", "E0010"]);
+  });
+
   QUnit.module("OrderModeConfig.getItemsColumnLayout");
 
   // Column keys in the order the profile's Items fragment renders them
