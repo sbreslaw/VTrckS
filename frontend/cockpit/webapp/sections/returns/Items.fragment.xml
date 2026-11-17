@@ -39,7 +39,9 @@
          Detail.controller.js#_rebindItemsGroup selects every column property
          explicitly. Brand, PO Reference and Net Amount are not in the returns
          column list (code owner, 2026-11-12). -->
-    <!-- rowCount is kept at the item count (1-10) by Detail.controller.js#onItemsGridRowsUpdated. -->
+    <!-- rowCount is kept at the item count (1-10) by Detail.controller.js#onItemsGridRowsUpdated.
+         Grid rows have a fixed height, so the display-only Texts do not wrap (ellipsis;
+         the column can be resized). -->
     <t:rowMode><rowmodes:Fixed rowCount="10" /></t:rowMode>
     <t:columns>
       <t:Column width="3%" visible="{itemsColumns>/rowAction}" resizable="true">
@@ -163,7 +165,7 @@
                  onItemNdcValueHelpRequest auto-defaults this from the selected
                  NDC's own Product.BaseUnit (ServiceSchema.productProperties.
                  baseUnit) instead of always defaulting to the hardcoded "EA". -->
-            <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" />
+            <Text text="{RequestedQuantityUnit}" visible="{itemsColumns>/uom}" wrapping="false" />
         </t:template>
       </t:Column>
       <t:Column minWidth="120" visible="{itemsColumns>/ndcDescription}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
@@ -172,7 +174,7 @@
             <!-- ADR-002 hazard #4: item description is CustomerReturnItemText
                  on this service (ReturnsSchema.itemProperties.itemText), not
                  SalesOrderItemText. -->
-            <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${CustomerReturnItemText} || '') }" visible="{itemsColumns>/ndcDescription}" />
+            <Text text="{= (${HigherLevelItem} ? '    ' : '') + (${CustomerReturnItemText} || '') }" visible="{itemsColumns>/ndcDescription}" wrapping="false" />
         </t:template>
       </t:Column>
       <t:Column width="9%" visible="{itemsColumns>/itemStatus}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
@@ -181,7 +183,7 @@
             <!-- Item Status (ZZ1_ItemStatus_SDI, custom field, 2026-11-12): display
                  only per code owner 2026-11-13 - plain value, no value help, never
                  written by the UI (not in the postItem whitelist). -->
-            <Text text="{ZZ1_ItemStatus_SDI}" visible="{itemsColumns>/itemStatus}" />
+            <Text text="{ZZ1_ItemStatus_SDI}" visible="{itemsColumns>/itemStatus}" wrapping="false" />
         </t:template>
       </t:Column>
       <t:Column width="9%" visible="{itemsColumns>/rejectionReason}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
@@ -229,7 +231,7 @@
         <t:template>
             <!-- Item Category (CustomerReturnItemCategory): Computed, code only - the
                  service has no text for it (ui_customerreturnmanage_2026-11-12.xml). -->
-            <Text text="{CustomerReturnItemCategory}" visible="{itemsColumns>/itemCategory}" />
+            <Text text="{CustomerReturnItemCategory}" visible="{itemsColumns>/itemCategory}" wrapping="false" />
         </t:template>
       </t:Column>
       <t:Column width="9%" visible="{itemsColumns>/exisId}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
