@@ -2522,6 +2522,21 @@ sap.ui.define([
       this._rebindItemsGroup(this._sItemsUpdateGroup);
     },
 
+    // GH-77: create mode pins the Items table to its own context (scratch or
+    // create session) and update group. An existing order's table must inherit
+    // the view's order context and edit in editUpdateGroup again - otherwise item
+    // edits PATCH the finished session (404) or queue in vrCreate (never sent).
+    _releaseItemsTable: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!oTable) {
+        return;
+      }
+      oTable.setBindingContext(undefined);
+      if (ItemsTableAccess.needsGroupRebind(oTable, this._sItemsUpdateGroup)) {
+        this._rebindItemsGroup(this._sItemsUpdateGroup);
+      }
+    },
+
     // Re-derives the {"<parentItemNumber>": true} childParents map (itemsMeta
     // model) off the Items table's CURRENT contexts - called after every real-
     // list (re)bind/refresh, never cached/guessed from the SKIPANC marker (see
@@ -5310,6 +5325,7 @@ sap.ui.define([
       this._loadHeaderNotes(this.getView().getBindingContext());
       this._loadDetailContact(sId);
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
+      this._releaseItemsTable();
       this._bindDetailHeader();
       this._computeHeaderTaxAmount();
       this._oSectionFactory.rebind();
