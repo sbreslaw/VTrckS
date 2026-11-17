@@ -491,9 +491,14 @@ sap.ui.define([
     // only one Contact Person row is allowed and the backend pre-creates it).
     createPartnerAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreatePartner",
 
+    // GH-73: the Master Status filter (Master.controller.js#onSearch) sends the
+    // statusValueHelp codes (po>/OrderStatus, "E0001"...), which are stored in
+    // ZZ1_Headerstatus_SDH - OverallSDProcessStatus (MaxLength 1) never matched
+    // them (live 2026-11-17: 0 hits vs 69). The entity has no status text
+    // property (2026-11-12 metadata: Label annotation only).
     statusProperties: {
-      code: "OverallSDProcessStatus",
-      text: "OverallSDProcessStatus_Text"
+      code: "ZZ1_Headerstatus_SDH",
+      text: null
     },
 
     // ret-10-28 #2: see OrdersSchema.js providerLookupModel comment - "ord"
@@ -510,8 +515,8 @@ sap.ui.define([
     // 2026-11-09: remapped per code-owner instruction - VH options now source
     // from po>/OrderStatus (zui_providerorder_srv), same shared service/entity
     // set already used by orders' own statusValueHelp, instead of this
-    // service's own OverallSDProcessStatus. statusProperties above (the real
-    // header display/filter field) is unchanged.
+    // service's own OverallSDProcessStatus. Its codes are the values of
+    // ZZ1_Headerstatus_SDH (headerProperties.status, statusProperties.code).
     statusValueHelp: {
       model: "po",
       entitySet: "OrderStatus",
