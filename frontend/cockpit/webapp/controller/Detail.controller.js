@@ -2634,7 +2634,12 @@ sap.ui.define([
       if (sKey) {
         oAction.setParameter(oActions.setRejectionReasonParameter, sKey);
       }
+      // Busy on the row where it is a Control (sap.m ColumnListItem); a grid's
+      // sap.ui.table.Row is an Element without busy state - use the table (VTrckS#69).
       var oRow = oSelect.getParent();
+      if (!oRow || typeof oRow.setBusy !== "function") {
+        oRow = this._byIdInSection("items", "itemsTable");
+      }
       oRow.setBusy(true);
       function syncFromServer() {
         var oCtx = oSelect.getBindingContext();
@@ -2652,11 +2657,13 @@ sap.ui.define([
           that._openMessagePopover();
         })
         .then(function () {
+          if (!oRow.isDestroyed()) {
+            oRow.setBusy(false);
+          }
           if (oSelect.isDestroyed()) {
             return;
           }
           syncFromServer();
-          oRow.setBusy(false);
         });
     },
 
