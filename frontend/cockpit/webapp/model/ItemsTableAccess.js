@@ -14,6 +14,12 @@ sap.ui.define([], function () {
     return isGrid(oTable) ? "rows" : "items";
   }
 
+  // GH-77: create mode leaves the Items binding in its own group (vrCreate/$auto).
+  function needsGroupRebind(oTable, sGroupId) {
+    var oBinding = oTable && oTable.getBinding(aggregation(oTable));
+    return !!oBinding && typeof oBinding.getUpdateGroupId === "function" && oBinding.getUpdateGroupId() !== sGroupId;
+  }
+
   return {
     SORT_PROPERTY_KEYS: {
       itemNumber: "itemNumber",
@@ -31,6 +37,8 @@ sap.ui.define([], function () {
     },
 
     isGrid: isGrid,
+
+    needsGroupRebind: needsGroupRebind,
 
     getBinding: function (oTable) {
       return oTable ? oTable.getBinding(aggregation(oTable)) : undefined;
