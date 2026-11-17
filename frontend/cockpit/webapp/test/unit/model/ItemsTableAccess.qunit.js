@@ -51,6 +51,25 @@ sap.ui.define([
     assert.deepEqual(ItemsTableAccess.getContexts(undefined), []);
   });
 
+  // GH-77: create mode leaves the Items binding in vrCreate/$auto.
+  QUnit.test("needsGroupRebind: only a binding in another update group", function (assert) {
+    function tableWith(oBinding) {
+      return {
+        isA: function (sName) { return sName === "sap.ui.table.Table"; },
+        getBinding: function () { return oBinding; }
+      };
+    }
+    function binding(sGroupId) {
+      return { getUpdateGroupId: function () { return sGroupId; } };
+    }
+    assert.strictEqual(ItemsTableAccess.needsGroupRebind(tableWith(binding("vrCreate")), "vrEdit"), true, "vrCreate");
+    assert.strictEqual(ItemsTableAccess.needsGroupRebind(tableWith(binding("$auto")), "vrEdit"), true, "$auto");
+    assert.strictEqual(ItemsTableAccess.needsGroupRebind(tableWith(binding("vrEdit")), "vrEdit"), false, "already vrEdit");
+    assert.strictEqual(ItemsTableAccess.needsGroupRebind(tableWith(undefined), "vrEdit"), false, "no binding");
+    assert.strictEqual(ItemsTableAccess.needsGroupRebind(tableWith({}), "vrEdit"), false, "binding without getUpdateGroupId");
+    assert.strictEqual(ItemsTableAccess.needsGroupRebind(null, "vrEdit"), false, "no table");
+  });
+
   QUnit.test("getContexts returns every loaded context in view order", function (assert) {
     var oBinding = {
       getAllCurrentContexts: function () {
