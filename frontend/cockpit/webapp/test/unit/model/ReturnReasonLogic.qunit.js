@@ -2,8 +2,9 @@
 sap.ui.define([
   "cdc/vaccreq/model/ServiceSchema",
   "cdc/vaccreq/model/schema/ReturnsSchema",
-  "cdc/vaccreq/model/ReturnReasonLogic"
-], function (ServiceSchema, ReturnsSchema, ReturnReasonLogic) {
+  "cdc/vaccreq/model/ReturnReasonLogic",
+  "cdc/vaccreq/model/formatter"
+], function (ServiceSchema, ReturnsSchema, ReturnReasonLogic, formatter) {
   "use strict";
 
   // ReturnReasonLogic reads the "Multiple Values" code from the active
@@ -70,5 +71,36 @@ sap.ui.define([
 
   QUnit.test("an empty header reason never overwrites items", function (assert) {
     assert.strictEqual(ReturnReasonLogic.itemReasonAfterHeaderChange(""), undefined);
+  });
+
+  // GH-75: Items edit rewrites the header code, so the General display must
+  // derive its text from the code - the header's loaded nav text never follows.
+  QUnit.module("Returns Details: header Return Reason display (GH-75)", oUseReturns);
+
+  QUnit.test("display Text binds the code and the reason list, not the loaded nav text", function (assert) {
+    return fetch(sap.ui.require.toUrl("cdc/vaccreq/sections/returns/Details.fragment.xml")).then(function (oResponse) {
+      return oResponse.text();
+    }).then(function (sXml) {
+      var oDoc = new DOMParser().parseFromString(sXml, "application/xml");
+      var oCombo = Array.prototype.filter.call(oDoc.getElementsByTagNameNS("*", "ComboBox"), function (oNode) {
+        return oNode.getAttribute("change") === ".onReturnReasonChange";
+      })[0];
+      var oText = oCombo && Array.prototype.filter.call(oCombo.parentNode.children, function (oNode) {
+        return oNode.localName === "Text";
+      })[0];
+      var sText = oText ? oText.getAttribute("text") : "";
+      assert.notStrictEqual(sText.indexOf("path: '" + ReturnsSchema.headerProperties.orderReason + "'"), -1, "binds the header code");
+      assert.notStrictEqual(sText.indexOf("returnReasons>/list"), -1, "binds the reason list");
+      assert.notStrictEqual(sText.indexOf(".formatter.categoryText"), -1, "derives the text with categoryText");
+      assert.strictEqual(sText.indexOf(ReturnsSchema.navigation.headerToOrderReason + "/"), -1, "no loaded nav text");
+    });
+  });
+
+  QUnit.test("categoryText maps the header code to its list text", function (assert) {
+    var aList = [{ key: "100", text: "Broken Vial/Syringe" }, { key: G99, text: "Multiple Reasons" }];
+    assert.strictEqual(formatter.categoryText(G99, aList), "Multiple Reasons");
+    assert.strictEqual(formatter.categoryText("100", aList), "Broken Vial/Syringe");
+    assert.strictEqual(formatter.categoryText("999", aList), "999", "unknown code shown as is");
+    assert.strictEqual(formatter.categoryText("", aList), "", "blank stays blank");
   });
 });
