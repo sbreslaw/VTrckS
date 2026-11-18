@@ -22,9 +22,9 @@ sap.ui.define([
     }
   });
 
-  // Records every bindContext/execute; mOptions: executeError, pending, resetThrows.
+  // Records every bindContext/execute; mOptions: executeError, pending, resetThrows, submitError.
   function stubModel(mOptions) {
-    var oLog = { bound: [], reset: [], destroyed: 0 };
+    var oLog = { bound: [], reset: [], destroyed: 0, sequence: [] };
     var oModel = {
       log: oLog,
       bindContext: function (sPath, oContext, mParameters) {
@@ -34,6 +34,7 @@ sap.ui.define([
           execute: function (sGroupId, bIgnoreETag) {
             oEntry.group = sGroupId;
             oEntry.ignoreETag = bIgnoreETag;
+            oLog.sequence.push("execute " + sPath);
             return mOptions.executeError ? Promise.reject(mOptions.executeError) : Promise.resolve();
           },
           getBoundContext: function () {
@@ -45,11 +46,16 @@ sap.ui.define([
         };
         return oBinding;
       },
+      submitBatch: function (sGroupId) {
+        oLog.sequence.push("submitBatch " + sGroupId);
+        return mOptions.submitError ? Promise.reject(mOptions.submitError) : Promise.resolve();
+      },
       hasPendingChanges: function () {
         return !!mOptions.pending;
       },
       resetChanges: function (sGroupId) {
         oLog.reset.push(sGroupId);
+        oLog.sequence.push("resetChanges " + sGroupId);
         if (mOptions.resetThrows) {
           throw new Error("change requests are running");
         }
@@ -111,21 +117,22 @@ sap.ui.define([
     });
   });
 
-  QUnit.test("discardSession: unbound DiscardChanges, never rejects", function (assert) {
+  QUnit.test("discardSession: queued writes first, then unbound DiscardChanges alone; never rejects", function (assert) {
     var fnConsoleError = console.error;
     var aLogged = [];
     console.error = function () { aLogged.push(arguments[0]); };
     var oModel = stubModel({ pending: true });
-    var oFailing = stubModel({ pending: true, resetThrows: true, executeError: new Error("no session") });
+    var oFailing = stubModel({ pending: true, resetThrows: true, submitError: new Error("batch"), executeError: new Error("no session") });
     return EditRequestService.discardSession(oModel).then(function () {
       var oAction = oModel.log.bound[0];
-      assert.deepEqual(oModel.log.reset, ["$auto"], "pending immediate changes reset first");
+      assert.deepEqual(oModel.log.sequence, ["submitBatch $auto", "resetChanges $auto", "execute " + ReturnsSchema.discardAction + "(...)"],
+        "queued writes sent in their own change set before the discard");
       assert.strictEqual(oAction.path, ReturnsSchema.discardAction + "(...)", "unbound discard action");
       assert.strictEqual(oAction.context, undefined, "not bound to a context");
       assert.strictEqual(oAction.group, "$auto", "immediate group");
       return EditRequestService.discardSession(oFailing);
     }).then(function () {
-      assert.strictEqual(oFailing.log.bound.length, 1, "discard still sent when resetChanges throws");
+      assert.strictEqual(oFailing.log.bound.length, 1, "discard still sent when the flush fails and resetChanges throws");
       assert.strictEqual(aLogged.length, 1, "a failed discard is logged, not thrown");
       assert.strictEqual(oFailing.log.destroyed, 1, "action binding destroyed");
     }).finally(function () {

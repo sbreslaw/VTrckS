@@ -92,13 +92,19 @@ sap.ui.define([
       });
     },
 
-    // Best effort, never rejects. resetChanges throws while a request of the
-    // group is still running (e.g. a field's PATCH sent right before Cancel) -
-    // DiscardChanges reverts the whole session server-side anyway.
+    // Best effort, never rejects. Writes still queued in the group are sent
+    // first, closing their change set (submitBatch) - the backend rejects a
+    // DiscardChanges that shares one ("Discard not alone in changeset", 400 for
+    // the whole $batch). resetChanges throws while a request of the group is
+    // still running - DiscardChanges reverts the whole session anyway.
     discardSession: function (oModel) {
       var sGroupId = ServiceSchema.itemInteractiveGroup;
       var oAction;
       return Promise.resolve().then(function () {
+        return oModel.submitBatch(sGroupId);
+      }).catch(function () {
+        // failed writes are reported where they were made
+      }).then(function () {
         try {
           if (oModel.hasPendingChanges(sGroupId)) {
             oModel.resetChanges(sGroupId);
