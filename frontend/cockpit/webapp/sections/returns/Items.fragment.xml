@@ -207,7 +207,7 @@
         </t:template>
       </t:Column>
       <t:Column width="9%" visible="{itemsColumns>/returnReason}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
-        <t:label><Text text="{i18n>colReturnReason}" wrapping="true" /></t:label>
+        <t:label><Text text="{parts: [{path: 'i18n>colReturnReasonTyped'}, {path: 'orderUi>/tag'}], formatter: '.formatter.formatText'}" wrapping="true" /></t:label>
         <t:template>
             <!-- Return Reason: item-level reason code (ReasonCode), bound to the same
                  SDDocumentReason VH as the header Return Reason. Display shows text via
