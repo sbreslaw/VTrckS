@@ -119,16 +119,6 @@ sap.ui.define([
     });
   });
 
-  QUnit.test("saveSession: a write still rejected after the flush fails the save", function (assert) {
-    var oModel = stubModel({ pending: true });
-    return EditRequestService.saveSession(headerContext(oModel)).then(function () {
-      assert.ok(false, "must reject");
-    }, function (oError) {
-      assert.strictEqual(oError.isConflict, false, "not a conflict");
-      assert.strictEqual(oModel.log.bound.length, 0, "SaveChanges not sent");
-    });
-  });
-
   QUnit.test("discardSession: queued writes first, then unbound DiscardChanges alone; never rejects", function (assert) {
     var fnConsoleError = console.error;
     var aLogged = [];

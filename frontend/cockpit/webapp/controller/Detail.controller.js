@@ -673,7 +673,17 @@ sap.ui.define([
         return;
       }
       this._oItemsEditSession = null;
-      oSession.plainContext.getModel().detachSessionTimeout(this._onItemsSessionTimeout, this);
+      var oModel = oSession.plainContext.getModel();
+      oModel.detachSessionTimeout(this._onItemsSessionTimeout, this);
+      // A rejected in-session write stays pending and UI5 would repeat it with
+      // the group's next request - without the session, where it commits.
+      try {
+        if (oModel.hasPendingChanges(ServiceSchema.itemInteractiveGroup)) {
+          oModel.resetChanges(ServiceSchema.itemInteractiveGroup);
+        }
+      } catch (oResetError) {
+        // still running: it belongs to the closed session and fails there
+      }
       oSession.plainContext.getBinding().destroy();
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       if (bRebind) {

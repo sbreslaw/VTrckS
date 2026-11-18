@@ -101,16 +101,12 @@ sap.ui.define([
       });
     },
 
-    // A write still rejected after the flush fails the save (as save() above)
-    // instead of committing the rest without it.
+    // Writes still queued are sent first, then SaveChanges alone. A rejected
+    // write was already reported when it was made (as in the standard app, the
+    // session holds only accepted changes); _closeItemsEditSession resets it.
     saveSession: function (oHeaderContext) {
       var oModel = oHeaderContext.getModel();
       return flushImmediateWrites(oModel).then(function () {
-        if (oModel.hasPendingChanges(ServiceSchema.itemInteractiveGroup)) {
-          var oRejected = new Error("Save failed: one or more changes were rejected");
-          oRejected.isConflict = false;
-          throw oRejected;
-        }
         var oAction = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
           $select: "SAP__Messages"
         });
