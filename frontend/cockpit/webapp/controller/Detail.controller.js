@@ -403,11 +403,15 @@ sap.ui.define([
           mRejectionText[oEntry.key] = oEntry.text;
         }
       });
+      var sOrderTag = this.getView().getModel("orderUi").getProperty("/tag");
       var aCols = oLayout.keys
         .filter(function (sKey) { return sKey !== "rowAction" && oVisibility[sKey] !== false; })
         .map(function (sKey) {
           return {
-            label: oBundle.getText(oLayout.i18n[sKey]),
+            // GH-82: the reason column carries the order-type tag, as on screen.
+            label: sKey === "returnReason"
+              ? oBundle.getText("colReturnReasonTyped", [sOrderTag])
+              : oBundle.getText(oLayout.i18n[sKey]),
             property: sKey,
             type: "String"
           };
@@ -5952,7 +5956,10 @@ sap.ui.define([
       this._applySectionResolution(oMode.orderType, this._currentSectionMode()).forEach(function (oResolved) {
         mSections[oResolved.id] = { visible: oResolved.visible, editable: oResolved.editable, locked: oResolved.locked };
       });
-      oView.getModel("orderUi").setData(Object.assign({ title: this.getResourceBundle().getText(oMode.titleKey) }, oMode.ui, { sections: mSections }));
+      oView.getModel("orderUi").setData(Object.assign({
+        title: this.getResourceBundle().getText(oMode.titleKey),
+        tag: this.getResourceBundle().getText(oMode.tagKey)
+      }, oMode.ui, { sections: mSections }));
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
       this._loadOrderStatusVH(oMode.orderType);
       this._loadCategoryOptions(oMode);
