@@ -362,21 +362,21 @@ sap.ui.define([
     // --- Items section: Export to Excel + a lightweight visibility-only
     // Personalize dialog (Phase 2 Prompt v2, item F). Column order stays fixed
     // in Items.fragment.xml; only show/hide is persisted, via VariantStore.js,
-    // deliberately simpler than the Master table's reorder-capable dialog. ---
+    // deliberately simpler than the Master table's reorder-capable dialog.
+    // GH-83: the button is disabled and a saved layout is not applied (_getItemsColumnVisibility). ---
 
     _getItemsColumnLayout: function () {
       return OrderModeConfig.getItemsColumnLayout(ServiceSchema.profileId);
     },
 
     _getItemsColumnVisibility: function () {
-      var oData = VariantStore.load(ITEMS_COLUMNS_KEY);
-      var oSaved = oData.variants && oData.variants.layout;
       var oOrderUi = this.getView().getModel("orderUi").getData();
       var oVisibility = {};
+      // GH-83: Personalize is disabled and the Items layouts changed since it was
+      // used - a saved column layout no longer applies. Restore the saved-layout
+      // read when the dialog is re-enabled.
       this._getItemsColumnLayout().keys.forEach(function (sKey) {
-        // An order-type-hidden column wins over the user's saved layout.
-        oVisibility[sKey] = OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible") &&
-          (sKey === "rejectionReason" || !(oSaved && oSaved[sKey] === false));
+        oVisibility[sKey] = OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
       });
       return oVisibility;
     },
