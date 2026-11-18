@@ -240,7 +240,9 @@ sap.ui.define([
       titleKey: "orderTypeZisl",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
-      createStatusDefault: "2A",
+      // GH-81: create starts on E0003 "Pending Grantee Approval" (ZRETURN1);
+      // seeded and saved by CreateOrderService.enter().
+      createStatusDefault: "E0003",
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
@@ -268,7 +270,9 @@ sap.ui.define([
       titleKey: "orderTypeZxfr",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
-      createStatusDefault: "2A",
+      // GH-81: create starts on E0003 "Pending Grantee Approval" (ZRETURN1);
+      // seeded and saved by CreateOrderService.enter().
+      createStatusDefault: "E0003",
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
@@ -293,7 +297,9 @@ sap.ui.define([
       titleKey: "orderTypeZwst",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
-      createStatusDefault: "2A",
+      // GH-81: create starts on E0003 "Pending Grantee Approval" (ZRETURN1);
+      // seeded and saved by CreateOrderService.enter().
+      createStatusDefault: "E0003",
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
@@ -317,7 +323,9 @@ sap.ui.define([
       titleKey: "orderTypeZkr",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
-      createStatusDefault: "2A",
+      // GH-81: create starts on E0001 "Open" (ZRETURN1); seeded and saved by
+      // CreateOrderService.enter().
+      createStatusDefault: "E0001",
       createStatusOptions: [],
       editStatusOptions: [],
       categoryOptions: [],
