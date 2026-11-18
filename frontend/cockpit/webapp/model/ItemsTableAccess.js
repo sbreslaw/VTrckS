@@ -20,6 +20,34 @@ sap.ui.define([], function () {
     return !!oBinding && typeof oBinding.getUpdateGroupId === "function" && oBinding.getUpdateGroupId() !== sGroupId;
   }
 
+  // GH-71: content height (px) of the sap.m.Table Items viewport - the whole table up to
+  // iMaxRows items, else the header plus the first iMaxRows items with their pop-in rows.
+  // null while the table is not laid out (no DOM, or hidden/collapsed: every rect is 0).
+  function viewportContentHeight(oTable, iMaxRows) {
+    var oTableDom = oTable && oTable.getDomRef();
+    var oRect = oTableDom && oTableDom.getBoundingClientRect();
+    if (!oRect || !oRect.width || !oRect.height) {
+      return null;
+    }
+    var aItems = oTable.getItems();
+    if (aItems.length <= iMaxRows) {
+      return oRect.height;
+    }
+    var oHeader = oTableDom.querySelector(".sapMListTblHeader");
+    var iHeight = oHeader ? oHeader.getBoundingClientRect().height : 0;
+    aItems.slice(0, iMaxRows).forEach(function (oItem) {
+      var oItemDom = oItem.getDomRef();
+      if (oItemDom) {
+        iHeight += oItemDom.getBoundingClientRect().height;
+        var oPopinRow = oItemDom.nextElementSibling;
+        if (oPopinRow && oPopinRow.classList.contains("sapMListTblSubRow")) {
+          iHeight += oPopinRow.getBoundingClientRect().height;
+        }
+      }
+    });
+    return iHeight;
+  }
+
   return {
     SORT_PROPERTY_KEYS: {
       itemNumber: "itemNumber",
@@ -39,6 +67,8 @@ sap.ui.define([], function () {
     isGrid: isGrid,
 
     needsGroupRebind: needsGroupRebind,
+
+    viewportContentHeight: viewportContentHeight,
 
     getBinding: function (oTable) {
       return oTable ? oTable.getBinding(aggregation(oTable)) : undefined;

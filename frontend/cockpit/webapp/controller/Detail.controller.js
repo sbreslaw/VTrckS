@@ -113,6 +113,8 @@ sap.ui.define([
   var PASTE_COLUMNS = { exisId: "exisId", ndcCode: "material", qty: "quantity" };
   // Returns grid Items table (VTrckS#69): visible rows follow the item count up to this many.
   var ITEMS_GRID_MAX_ROWS = 10;
+  // Provider Orders Items table (sap.m.Table): the viewport scrolls after this many rows (GH-71).
+  var ITEMS_VIEWPORT_MAX_ROWS = 10;
 
   return Controller.extend("cdc.vaccreq.controller.Detail", {
     formatter: formatter,
@@ -1072,30 +1074,26 @@ sap.ui.define([
     },
 
     onItemsTableUpdateFinished: function (oEvent) {
-      var oTable = oEvent.getSource();
+      this._sizeItemsViewport(oEvent.getSource(), true);
+    },
+
+    // GH-71: pins the sap.m.Table Items viewport to its first ITEMS_VIEWPORT_MAX_ROWS rows.
+    // A hidden or collapsed table measures 0: keep the last height then, unless the items
+    // changed (bItemsChanged) - that height is stale, so fall back to the CSS height (auto).
+    _sizeItemsViewport: function (oTable, bItemsChanged) {
       var oViewport = this._byIdInSection("items", "itemsViewport");
-      var oTableDom = oTable.getDomRef();
-      if (!oViewport || !oTableDom) {
+      if (!oViewport || !oTable || ItemsTableAccess.isGrid(oTable)) {
         return;
       }
-      var oHeader = oTableDom.querySelector(".sapMListTblHeader");
-      var iHeight = oHeader ? oHeader.getBoundingClientRect().height : 0;
-      var aItems = oTable.getItems();
-      aItems.slice(0, 10).forEach(function (oItem) {
-        var oItemDom = oItem.getDomRef();
-        if (oItemDom) {
-          iHeight += oItemDom.getBoundingClientRect().height;
-          var oPopinRow = oItemDom.nextElementSibling;
-          if (oPopinRow && oPopinRow.classList.contains("sapMListTblSubRow")) {
-            iHeight += oPopinRow.getBoundingClientRect().height;
-          }
+      var iHeight = ItemsTableAccess.viewportContentHeight(oTable, ITEMS_VIEWPORT_MAX_ROWS);
+      if (iHeight === null) {
+        if (bItemsChanged) {
+          oViewport.setHeight("");
         }
-      });
+        return;
+      }
       var oViewportDom = oViewport.getDomRef();
       var iScrollbarHeight = oViewportDom && oViewportDom.scrollWidth > oViewportDom.clientWidth ? 16 : 0;
-      if (aItems.length <= 10) {
-        iHeight = oTableDom.getBoundingClientRect().height;
-      }
       oViewport.setHeight(Math.ceil(iHeight + iScrollbarHeight + 8) + "px");
     },
 
@@ -4676,6 +4674,13 @@ sap.ui.define([
           oItemsTable.addEventDelegate({ onpaste: this.onItemsCellPaste }, this);
           if (ItemsTableAccess.isGrid(oItemsTable)) {
             this._applyItemsGridSortProperties(oItemsTable);
+          } else {
+            // GH-71: re-measure when the panel shows the table again (gate opened, end of an expand/collapse animation).
+            oItemsTable.addEventDelegate({
+              onAfterRendering: function () {
+                this._sizeItemsViewport(oItemsTable, false);
+              }
+            }, this);
           }
         }
         this._addInitialCreateItemRows();
