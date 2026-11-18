@@ -70,6 +70,48 @@ sap.ui.define([
     assert.strictEqual(ItemsTableAccess.needsGroupRebind(null, "vrEdit"), false, "no table");
   });
 
+  // GH-71: the Orders Items viewport height (Detail.controller.js#_sizeItemsViewport).
+  QUnit.test("viewportContentHeight: whole table up to the cap, header + capped rows above, null when not laid out", function (assert) {
+    function rect(iWidth, iHeight) {
+      return { getBoundingClientRect: function () { return { width: iWidth, height: iHeight }; } };
+    }
+    function rowDom(iHeight, iPopinHeight) {
+      var oDom = rect(800, iHeight);
+      if (iPopinHeight) {
+        oDom.nextElementSibling = rect(800, iPopinHeight);
+        oDom.nextElementSibling.classList = { contains: function (sClass) { return sClass === "sapMListTblSubRow"; } };
+      } else {
+        oDom.nextElementSibling = { classList: { contains: function () { return false; } } };
+      }
+      return oDom;
+    }
+    function table(oTableDom, aItemDoms) {
+      return {
+        getDomRef: function () { return oTableDom; },
+        getItems: function () {
+          return aItemDoms.map(function (oDom) { return { getDomRef: function () { return oDom; } }; });
+        }
+      };
+    }
+    function tableDom(iWidth, iHeight, iHeaderHeight) {
+      var oDom = rect(iWidth, iHeight);
+      oDom.querySelector = function (sSelector) { return sSelector === ".sapMListTblHeader" ? rect(iWidth, iHeaderHeight) : null; };
+      return oDom;
+    }
+    var aRows = [];
+    for (var i = 0; i < 12; i += 1) {
+      aRows.push(i === 4 ? null : rowDom(30, i === 1 ? 20 : 0));
+    }
+
+    assert.strictEqual(ItemsTableAccess.viewportContentHeight(null, 10), null, "no table");
+    assert.strictEqual(ItemsTableAccess.viewportContentHeight(table(null, []), 10), null, "no DOM");
+    assert.strictEqual(ItemsTableAccess.viewportContentHeight(table(tableDom(0, 0, 0), aRows), 10), null, "hidden: 0 x 0");
+    assert.strictEqual(ItemsTableAccess.viewportContentHeight(table(tableDom(800, 0, 0), aRows), 10), null, "collapsed: height 0");
+    assert.strictEqual(ItemsTableAccess.viewportContentHeight(table(tableDom(800, 150, 40), aRows.slice(0, 3)), 10), 150, "3 items: the whole table");
+    assert.strictEqual(ItemsTableAccess.viewportContentHeight(table(tableDom(800, 600, 40), aRows), 10), 40 + 9 * 30 + 20,
+      "12 items: header + first 10 rows (row 5 without DOM skipped) + the pop-in of row 2");
+  });
+
   QUnit.test("getContexts returns every loaded context in view order", function (assert) {
     var oBinding = {
       getAllCurrentContexts: function () {
