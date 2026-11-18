@@ -295,10 +295,13 @@ sap.ui.define([
       oInitialData[ServiceSchema.headerProperties.shippingCondition] = ServiceSchema.defaultShippingCondition;
       oInitialData[ServiceSchema.headerProperties.deliveryStatus] = ServiceSchema.defaultDeliveryStatus;
       oInitialData[ServiceSchema.headerProperties.deliveryBlockStatus] = ServiceSchema.defaultDeliveryBlockStatus;
-      // defaultStatus is Returns-only (ReturnsSchema.js) - guarded so an
-      // undefined value (Orders, no such key) never sets a literal "undefined".
+      // GH-81: a profile with a writable header status (ServiceSchema.defaultStatus
+      // set - Returns only; Orders have none, so OverallSDProcessStatus is never
+      // seeded) starts on the order type's createStatusDefault (OrderModeConfig);
+      // the profile value is the fallback. Replayed at Save (_replayHeaderProperties).
       if (ServiceSchema.defaultStatus !== undefined) {
-        oInitialData[ServiceSchema.headerProperties.status] = ServiceSchema.defaultStatus;
+        oInitialData[ServiceSchema.headerProperties.status] =
+          OrderModeConfig.resolveOrderType(sOrderType).createStatusDefault || ServiceSchema.defaultStatus;
       }
       Object.keys(oModeDefaults || {}).forEach(function (sDefaultKey) {
         var sProperty = ServiceSchema.headerProperties[sDefaultKey];

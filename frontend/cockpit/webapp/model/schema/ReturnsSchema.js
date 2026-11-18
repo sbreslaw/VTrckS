@@ -452,8 +452,9 @@ sap.ui.define([
     // same code/convention as orders (OrdersSchema.js), so the Category field
     // displays correctly immediately at create instead of only after Save.
     defaultCategory: "UI",
-    // 2026-11-09 per code-owner instruction - seeded the same way as
-    // defaultCategory above (CreateOrderService.js#enter()).
+    // Writable header status: when set, CreateOrderService.enter() seeds the
+    // order type's OrderModeConfig.createStatusDefault (GH-81); this value is
+    // the fallback for a type without one. Code owner 2026-11-09.
     defaultStatus: "E0001",
     // TODO-VERIFY: a valid default ShippingCondition code for returns create
     // was not independently confirmed this session - left null rather than
@@ -723,7 +724,7 @@ sap.ui.define([
       returnType: "ZZ1_VaccineReturnType_SDH",
       exisDate: "CustomerPurchaseOrderDate",
       noOfBoxes: "ZZ1_NoofBoxes_SDH",
-      // 2026-11-09: lets the defaultStatus seed above replay/persist at create.
+      // 2026-11-09: lets the create status seed (CreateOrderService.enter) replay/persist at create.
       status: "ZZ1_Headerstatus_SDH"
     },
 
