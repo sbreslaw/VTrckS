@@ -649,13 +649,27 @@ sap.ui.define([
         oContext.getModel().attachSessionTimeout(that._onItemsSessionTimeout, that);
         that._sItemsUpdateGroup = ServiceSchema.itemInteractiveGroup;
         that._rebindItemsGroup(that._sItemsUpdateGroup);
+        // Read the rows inside the session before the edit starts: a read
+        // still unsent when Cancel discards the session fails "session not
+        // found", and UI5 then drops whatever session is current by then.
+        var oItemsBinding = ItemsTableAccess.getBinding(that._byIdInSection("items", "itemsTable"));
+        if (oItemsBinding) {
+          return oItemsBinding.requestContexts(0, 10).then(function () {
+            return true;
+          }, function () {
+            return true;
+          });
+        }
         return true;
       }, function (oError) {
         fnSetOtherEditEnabled(true);
-        var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), that.getResourceBundle());
-        aSectionIds.forEach(function (sId) {
-          that._oSectionFactory.expandSection(sId);
-        });
+        // The model already reports a failed bound action (target: the order).
+        if (!oError.$reported) {
+          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), that.getResourceBundle());
+          aSectionIds.forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+        }
         that._openMessagePopover();
         return false;
       }).finally(function () {
