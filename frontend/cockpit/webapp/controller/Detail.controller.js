@@ -1091,6 +1091,8 @@ sap.ui.define([
       if (!oContext) {
         return;
       }
+      // GH-92: each Save starts with an empty message store.
+      Messaging.removeAllMessages();
       var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
       var oItemsBinding = ItemsTableAccess.getBinding(oItemsTable);
       if (sSectionId === "items" && CreateOrderService.hasIncompleteItems(oItemsBinding, this.getView().getModel("orderUi").getData())) {
@@ -5423,6 +5425,8 @@ sap.ui.define([
         this.byId("newOrderBtn").setEnabled(true);
         return;
       }
+      // GH-92: each Save starts with an empty message store.
+      Messaging.removeAllMessages();
 
       if (!sProviderId) {
         this._bStartNewAfterSave = false;
