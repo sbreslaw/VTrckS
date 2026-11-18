@@ -1197,7 +1197,7 @@ sap.ui.define([
         path: sPath,
         parameters: {
           $$updateGroupId: ServiceSchema.editUpdateGroup,
-          $select: ServiceSchema.headerProperties.salesOrderType
+          $select: [ServiceSchema.headerProperties.salesOrderType].concat(this._productLookupHeaderSelect()).join(",")
         },
         events: {
           dataReceived: this._syncOrderUiFromContext.bind(this)
@@ -3446,6 +3446,17 @@ sap.ui.define([
       return this.getOwnerComponent().getModel(ServiceSchema.productLookupModel || undefined);
     },
 
+    // GH-86: _productLookupFilters reads these header fields synchronously; on a
+    // return only the collapsed Org Data panel binds them (loaded on expand), so
+    // the header $select loads them.
+    _productLookupHeaderSelect: function () {
+      if (!ServiceSchema.f4Product) {
+        return [];
+      }
+      return [ServiceSchema.headerProperties.salesOrganization, ServiceSchema.headerProperties.distributionChannel]
+        .filter(function (sProp) { return !!sProp; });
+    },
+
     // Soft pre-filter (same idiom as Provider's oArea.salesOrganization
     // filter) - only applies when this profile's product lookup is keyed by
     // SalesOrganization/DistributionChannel (ServiceSchema.f4Product, returns
@@ -5617,7 +5628,7 @@ sap.ui.define([
       this._setCreateMode(false);
       var sHeaderSelect = ["SAP__Messages", ServiceSchema.headerProperties.salesOrderType].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
         return ServiceSchema.updatableHeaderProperties[sKey];
-      })).filter(function (sProp) { return !!sProp; }).join(",");
+      })).concat(this._productLookupHeaderSelect()).filter(function (sProp) { return !!sProp; }).join(",");
       this.getView().bindElement({
         path: ServiceSchema.buildHeaderPath(sId),
         // Header property bindings (Order Reason/ExIS ID Input & ComboBox) have
