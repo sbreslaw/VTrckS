@@ -130,4 +130,12 @@ sap.ui.define([
       assert.ok(typeof sProperty === "string" && sProperty.length > 0, sKey + " -> " + sSchemaKey + " -> " + sProperty);
     });
   });
+
+  QUnit.test("GH-91: every grid-selected key is a Returns column; Item Category is not", function (assert) {
+    var aReturnsKeys = OrderModeConfig.getItemsColumnLayout("returns").keys;
+    Object.keys(ItemsTableAccess.SORT_PROPERTY_KEYS).forEach(function (sKey) {
+      assert.ok(aReturnsKeys.indexOf(sKey) !== -1, sKey + " is a Returns column");
+    });
+    assert.strictEqual(ItemsTableAccess.SORT_PROPERTY_KEYS.itemCategory, undefined, "Item Category is not selected");
+  });
 });

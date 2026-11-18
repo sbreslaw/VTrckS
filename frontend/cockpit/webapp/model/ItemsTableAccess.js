@@ -60,7 +60,6 @@ sap.ui.define([], function () {
       itemStatus: "itemStatus",
       rejectionReason: "rejectionReason",
       returnReason: "returnReason",
-      itemCategory: "itemCategory",
       exisId: "exisId"
     },
 

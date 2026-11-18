@@ -59,11 +59,13 @@ sap.ui.define([
     });
   }
 
-  QUnit.test("returns: exactly the code owner's 13 columns, in order (2026-11-12)", function (assert) {
-    assert.deepEqual(OrderModeConfig.getItemsColumnLayout("returns").keys, [
+  QUnit.test("returns: the code owner's 12 columns, in order (2026-11-12, GH-91 without Item Category)", function (assert) {
+    var oLayout = OrderModeConfig.getItemsColumnLayout("returns");
+    assert.deepEqual(oLayout.keys, [
       "rowAction", "itemNumber", "ndcCode", "lotNumber", "expirationDate", "qty", "uom", "ndcDescription",
-      "itemStatus", "rejectionReason", "returnReason", "itemCategory", "exisId"
+      "itemStatus", "rejectionReason", "returnReason", "exisId"
     ]);
+    assert.strictEqual(oLayout.i18n.itemCategory, undefined, "no Item Category label");
   });
 
   QUnit.test("orders layout unchanged; unknown profile falls back to it", function (assert) {
