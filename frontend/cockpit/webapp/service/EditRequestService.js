@@ -15,6 +15,29 @@ sap.ui.define([
   // ETag/412, this module is a thin wrapper around the update group only. See
   // NOTES.md "CRUD Task 2 v2" entry for the closing judgment line.
   var UPDATE_GROUP = "vrEdit";
+  // GH-87: the Items edit session's own actions (PrepareForEdit/SaveChanges/
+  // DiscardChanges) - a deferred group submitted per action, so each is alone
+  // in its $batch; the backend rejects a session action that shares a change
+  // set with writes ("Discard not alone in changeset", 400 for the whole batch).
+  var SESSION_ACTION_GROUP = "vrItemsSession";
+
+  // Sends the writes still queued in the immediate group and waits for them,
+  // so a following session action is ordered after them.
+  function flushImmediateWrites(oModel) {
+    return Promise.resolve().then(function () {
+      return oModel.submitBatch(ServiceSchema.itemInteractiveGroup);
+    }).catch(function () {
+      // failed writes are reported where they were made
+    });
+  }
+
+  function executeSessionAction(oModel, oAction, bIgnoreETag) {
+    var pExecute = oAction.execute(SESSION_ACTION_GROUP, bIgnoreETag);
+    oModel.submitBatch(SESSION_ACTION_GROUP).catch(function () {
+      // surfaced via pExecute
+    });
+    return pExecute;
+  }
 
   var EditRequestService = {
     UPDATE_GROUP: UPDATE_GROUP,
@@ -59,19 +82,18 @@ sap.ui.define([
     },
 
     // GH-87: Returns Items edit session (ServiceSchema.itemsEditAction ...
-    // saveAction / discardAction, all in the immediate itemInteractiveGroup);
-    // Details and the other sections stay sessionless. Resolves the session
-    // object CreateOrderService.postItem accepts. If-Match:* - the Items rows
-    // are re-read inside the session right after it opens.
+    // saveAction / discardAction); its writes run in the immediate
+    // itemInteractiveGroup. Details and the other sections stay sessionless.
+    // Resolves the session object CreateOrderService.postItem accepts.
+    // If-Match:* - the Items rows are re-read inside the session right after it opens.
     openSession: function (oHeaderContext) {
       var oModel = oHeaderContext.getModel();
-      var sGroupId = ServiceSchema.itemInteractiveGroup;
       var oAction = oModel.bindContext(ServiceSchema.itemsEditAction + "(...)", oHeaderContext);
-      return oAction.execute(sGroupId, true).then(function () {
+      return executeSessionAction(oModel, oAction, true).then(function () {
         return {
           opened: true,
           plainContext: oModel.bindContext(oHeaderContext.getPath(), undefined, {
-            $$updateGroupId: sGroupId
+            $$updateGroupId: ServiceSchema.itemInteractiveGroup
           }).getBoundContext()
         };
       }).finally(function () {
@@ -79,32 +101,35 @@ sap.ui.define([
       });
     },
 
+    // A write still rejected after the flush fails the save (as save() above)
+    // instead of committing the rest without it.
     saveSession: function (oHeaderContext) {
-      var oAction = oHeaderContext.getModel().bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
-        $select: "SAP__Messages"
-      });
-      return oAction.execute(ServiceSchema.itemInteractiveGroup, true).then(function () {
-        oAction.destroy();
-      }, function (oError) {
-        oAction.destroy();
-        oError.isConflict = EditRequestService._isConflictError(oError);
-        throw oError;
+      var oModel = oHeaderContext.getModel();
+      return flushImmediateWrites(oModel).then(function () {
+        if (oModel.hasPendingChanges(ServiceSchema.itemInteractiveGroup)) {
+          var oRejected = new Error("Save failed: one or more changes were rejected");
+          oRejected.isConflict = false;
+          throw oRejected;
+        }
+        var oAction = oModel.bindContext(ServiceSchema.saveAction + "(...)", oHeaderContext, {
+          $select: "SAP__Messages"
+        });
+        return executeSessionAction(oModel, oAction, true).then(function () {
+          oAction.destroy();
+        }, function (oError) {
+          oAction.destroy();
+          oError.isConflict = EditRequestService._isConflictError(oError);
+          throw oError;
+        });
       });
     },
 
-    // Best effort, never rejects. Writes still queued in the group are sent
-    // first, closing their change set (submitBatch) - the backend rejects a
-    // DiscardChanges that shares one ("Discard not alone in changeset", 400 for
-    // the whole $batch). resetChanges throws while a request of the group is
-    // still running - DiscardChanges reverts the whole session anyway.
+    // Best effort, never rejects. resetChanges throws while a request of the
+    // group is still running - DiscardChanges reverts the whole session anyway.
     discardSession: function (oModel) {
       var sGroupId = ServiceSchema.itemInteractiveGroup;
       var oAction;
-      return Promise.resolve().then(function () {
-        return oModel.submitBatch(sGroupId);
-      }).catch(function () {
-        // failed writes are reported where they were made
-      }).then(function () {
+      return flushImmediateWrites(oModel).then(function () {
         try {
           if (oModel.hasPendingChanges(sGroupId)) {
             oModel.resetChanges(sGroupId);
@@ -113,7 +138,7 @@ sap.ui.define([
           // see above
         }
         oAction = oModel.bindContext(ServiceSchema.discardAction + "(...)");
-        return oAction.execute(sGroupId);
+        return executeSessionAction(oModel, oAction);
       }).catch(function (oError) {
         console.error("EditRequestService: DiscardChanges failed", oError && oError.message, oError);
       }).then(function () {

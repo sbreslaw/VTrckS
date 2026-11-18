@@ -11,6 +11,7 @@ sap.ui.define([
   // SaveChanges / DiscardChanges, all in the immediate group).
   var sPreviousProfile;
   var HEADER_PATH = "/CustomerReturnManage(CustomerReturn='1')";
+  var SESSION_GROUP = "vrItemsSession";
 
   QUnit.module("EditRequestService - Items edit session (GH-87)", {
     beforeEach: function () {
@@ -71,18 +72,18 @@ sap.ui.define([
     };
   }
 
-  QUnit.test("openSession: PrepareForEdit on the order, If-Match *, immediate group", function (assert) {
+  QUnit.test("openSession: PrepareForEdit on the order, If-Match *, alone in its batch", function (assert) {
     var oModel = stubModel({});
     var oHeader = headerContext(oModel);
     return EditRequestService.openSession(oHeader).then(function (oSession) {
       var oAction = oModel.log.bound[0];
       assert.strictEqual(oAction.path, ReturnsSchema.itemsEditAction + "(...)", "bound edit action");
       assert.strictEqual(oAction.context, oHeader, "bound to the order");
-      assert.strictEqual(oAction.group, "$auto", "immediate group");
+      assert.deepEqual(oModel.log.sequence, ["execute " + oAction.path, "submitBatch " + SESSION_GROUP], "own deferred group, submitted");
       assert.strictEqual(oAction.ignoreETag, true, "If-Match *");
       assert.strictEqual(oSession.opened, true, "session object postItem accepts");
       assert.strictEqual(oSession.plainContext.path, HEADER_PATH, "plain context on the order");
-      assert.strictEqual(oModel.log.bound[1].parameters.$$updateGroupId, "$auto", "plain context in the immediate group");
+      assert.strictEqual(oModel.log.bound[1].parameters.$$updateGroupId, "$auto", "session writes in the immediate group");
       assert.strictEqual(oModel.log.destroyed, 1, "action binding destroyed");
     });
   });
@@ -99,13 +100,14 @@ sap.ui.define([
     });
   });
 
-  QUnit.test("saveSession: SaveChanges with messages, If-Match *; a 412 is a conflict", function (assert) {
+  QUnit.test("saveSession: queued writes first, then SaveChanges alone; a 412 is a conflict", function (assert) {
     var oModel = stubModel({});
     return EditRequestService.saveSession(headerContext(oModel)).then(function () {
       var oAction = oModel.log.bound[0];
       assert.strictEqual(oAction.path, ReturnsSchema.saveAction + "(...)", "bound save action");
       assert.strictEqual(oAction.parameters.$select, "SAP__Messages", "messages selected");
-      assert.strictEqual(oAction.group, "$auto", "immediate group");
+      assert.deepEqual(oModel.log.sequence, ["submitBatch $auto", "execute " + oAction.path, "submitBatch " + SESSION_GROUP],
+        "writes flushed, then the save in its own batch");
       assert.strictEqual(oAction.ignoreETag, true, "If-Match *");
       var oConflict = new Error("Precondition failed");
       oConflict.status = 412;
@@ -117,6 +119,16 @@ sap.ui.define([
     });
   });
 
+  QUnit.test("saveSession: a write still rejected after the flush fails the save", function (assert) {
+    var oModel = stubModel({ pending: true });
+    return EditRequestService.saveSession(headerContext(oModel)).then(function () {
+      assert.ok(false, "must reject");
+    }, function (oError) {
+      assert.strictEqual(oError.isConflict, false, "not a conflict");
+      assert.strictEqual(oModel.log.bound.length, 0, "SaveChanges not sent");
+    });
+  });
+
   QUnit.test("discardSession: queued writes first, then unbound DiscardChanges alone; never rejects", function (assert) {
     var fnConsoleError = console.error;
     var aLogged = [];
@@ -125,11 +137,10 @@ sap.ui.define([
     var oFailing = stubModel({ pending: true, resetThrows: true, submitError: new Error("batch"), executeError: new Error("no session") });
     return EditRequestService.discardSession(oModel).then(function () {
       var oAction = oModel.log.bound[0];
-      assert.deepEqual(oModel.log.sequence, ["submitBatch $auto", "resetChanges $auto", "execute " + ReturnsSchema.discardAction + "(...)"],
-        "queued writes sent in their own change set before the discard");
+      assert.deepEqual(oModel.log.sequence, ["submitBatch $auto", "resetChanges $auto", "execute " + ReturnsSchema.discardAction + "(...)",
+        "submitBatch " + SESSION_GROUP], "writes flushed, leftovers reset, then the discard in its own batch");
       assert.strictEqual(oAction.path, ReturnsSchema.discardAction + "(...)", "unbound discard action");
       assert.strictEqual(oAction.context, undefined, "not bound to a context");
-      assert.strictEqual(oAction.group, "$auto", "immediate group");
       return EditRequestService.discardSession(oFailing);
     }).then(function () {
       assert.strictEqual(oFailing.log.bound.length, 1, "discard still sent when the flush fails and resetChanges throws");
