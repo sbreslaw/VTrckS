@@ -189,6 +189,7 @@ sap.ui.define([
     ZKB: {
       orderType: "ZKB",
       titleKey: "orderTypeZkb",
+      tagKey: "orderTagZkb", // GH-82: short type name for typed labels (orderUi>/tag)
       defaults: {},
       readOnlyStatuses: [],
       // Create-mode Status default (createEnrich>/status, a po>/OrderStatus
@@ -210,6 +211,7 @@ sap.ui.define([
     ZREP: {
       orderType: "ZREP",
       titleKey: "orderTypeZrep",
+      tagKey: "orderTagZrep",
       defaults: {},
       readOnlyStatuses: [],
       // E0001 = "2A Open - Replacement" (see ZKB). Replaces "2A", a pre-E000x
@@ -238,6 +240,7 @@ sap.ui.define([
     ZISL: {
       orderType: "ZISL",
       titleKey: "orderTypeZisl",
+      tagKey: "orderTagZisl",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       // GH-81: create starts on E0003 "Pending Grantee Approval" (ZRETURN1);
@@ -268,6 +271,7 @@ sap.ui.define([
     ZXFR: {
       orderType: "ZXFR",
       titleKey: "orderTypeZxfr",
+      tagKey: "orderTagZxfr",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       // GH-81: create starts on E0003 "Pending Grantee Approval" (ZRETURN1);
@@ -295,6 +299,7 @@ sap.ui.define([
     ZWST: {
       orderType: "ZWST",
       titleKey: "orderTypeZwst",
+      tagKey: "orderTagZwst",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       // GH-81: create starts on E0003 "Pending Grantee Approval" (ZRETURN1);
@@ -321,6 +326,7 @@ sap.ui.define([
     ZKR: {
       orderType: "ZKR",
       titleKey: "orderTypeZkr",
+      tagKey: "orderTagZkr",
       defaults: {},
       readOnlyStatuses: RETURNS_READ_ONLY_STATUSES,
       // GH-81: create starts on E0001 "Open" (ZRETURN1); seeded and saved by
@@ -407,6 +413,7 @@ sap.ui.define([
     return {
       orderType: sOrderType,
       titleKey: oConfig.titleKey,
+      tagKey: oConfig.tagKey,
       defaults: Object.assign({}, oConfig.defaults),
       createStatusDefault: oConfig.createStatusDefault,
       createStatusOptions: JSON.parse(JSON.stringify(oConfig.createStatusOptions)),
