@@ -8,7 +8,9 @@ sap.ui.define([
   "cdc/vaccreq/test/unit/model/LotNumberRule.qunit",
   "cdc/vaccreq/test/unit/model/NoOfBoxesRule.qunit",
   "cdc/vaccreq/test/unit/model/ItemsTableAccess.qunit",
-  "cdc/vaccreq/test/unit/controller/ItemsPersonalize.qunit"
+  "cdc/vaccreq/test/unit/controller/ItemsPersonalize.qunit",
+  "cdc/vaccreq/test/unit/controller/ItemsEditSession.qunit",
+  "cdc/vaccreq/test/unit/service/EditRequestService.qunit"
 ], function () {
   "use strict";
   // Just requiring the modules above is enough to run their QUnit.module/test

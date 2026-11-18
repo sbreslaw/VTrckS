@@ -77,6 +77,14 @@ sap.ui.define([
       "/HeaderPartner(SalesOrder='',PartnerFunction='AP')", "orders session row");
   });
 
+  // GH-87: only Returns run Items edit in an edit session.
+  QUnit.test("Items edit session action: Returns PrepareForEdit, Orders none (GH-87)", function (assert) {
+    ServiceSchema.use(ReturnsSchema);
+    assert.strictEqual(ServiceSchema.itemsEditAction, "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.PrepareForEdit", "returns");
+    ServiceSchema.use(OrdersSchema);
+    assert.strictEqual(ServiceSchema.itemsEditAction, null, "orders: sessionless Items edit");
+  });
+
   QUnit.test("item payload whitelist follows the active profile", function (assert) {
     var oRow = {};
     oRow[ReturnsSchema.itemProperties.returnReason] = "200";
