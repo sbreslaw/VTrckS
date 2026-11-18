@@ -472,6 +472,9 @@ sap.ui.define([
 
     createAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.CreateWithCustomerReturnType",
     saveAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.SaveChanges",
+    // GH-87: Items edit runs in an edit session (PrepareForEdit ... SaveChanges/
+    // DiscardChanges) - a combined item create outside a session dumps.
+    itemsEditAction: "com.sap.gateway.srvd.ui_customerreturnmanage.v0001.PrepareForEdit",
     discardAction: "/DiscardChanges",
 
     // No confirmed default SalesOrganization/DistributionChannel/Division

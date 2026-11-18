@@ -644,6 +644,8 @@ sap.ui.define([
     // header-only order with zero items (hasMinItems() enforces this
     // client-side first).
     saveAction: "com.sap.gateway.srvd.c_salesordermanage_sd.v0001.SaveChanges",
+    // GH-87: Orders Items edit stays sessionless (vrEdit).
+    itemsEditAction: null,
 
     // Unbound DiscardAction (design/so.xml ~line 2251/2692, ActionImport
     // "DiscardChanges" — no bound "_it" parameter exists for it at all). v5
