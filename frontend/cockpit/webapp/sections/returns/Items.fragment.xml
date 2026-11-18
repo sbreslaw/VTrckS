@@ -5,7 +5,7 @@
        is "returns". Returns has its own column set and order (code owner,
        2026-11-12): Action, Item Number, NDC Code, Lot Number, Expiration Date,
        Quantity, Unit, NDC Description, Status, Rejection Reason, Return Reason,
-       Item Category, ExIS Line Number - the same keys/order as
+       ExIS Line Number - the same keys/order as
        OrderModeConfig.getItemsColumnLayout("returns") (Personalize, export).
        Cells below must stay in column order.
        VTrckS#69: grid table (sap.ui.table.Table) - columns can be resized,
@@ -225,14 +225,6 @@
               change=".onItemReturnReasonChange">
               <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
             </Select>
-        </t:template>
-      </t:Column>
-      <t:Column width="6%" visible="{itemsColumns>/itemCategory}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
-        <t:label><Text text="{i18n>colItemCategory}" wrapping="true" /></t:label>
-        <t:template>
-            <!-- Item Category (CustomerReturnItemCategory): Computed, code only - the
-                 service has no text for it (ui_customerreturnmanage_2026-11-12.xml). -->
-            <Text text="{CustomerReturnItemCategory}" visible="{itemsColumns>/itemCategory}" wrapping="false" />
         </t:template>
       </t:Column>
       <t:Column width="9%" visible="{itemsColumns>/exisId}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">

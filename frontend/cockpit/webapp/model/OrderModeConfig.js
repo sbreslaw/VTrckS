@@ -530,7 +530,8 @@ sap.ui.define([
   // fragment renders its columns in this same order. Orders: unchanged.
   // Returns (code owner, 2026-11-12): exactly Action, Item Number, NDC Code,
   // Lot Number, Expiration Date, Quantity, Unit, NDC Description, Status,
-  // Rejection Reason, Return Reason, Item Category, ExIS Line Number.
+  // Rejection Reason, Return Reason, ExIS Line Number.
+  // GH-91: Item Category removed (D-1573).
   var ITEMS_COLUMN_LAYOUT_BY_PROFILE = {
     orders: {
       keys: [
@@ -549,13 +550,13 @@ sap.ui.define([
     returns: {
       keys: [
         "rowAction", "itemNumber", "ndcCode", "lotNumber", "expirationDate", "qty", "uom", "ndcDescription",
-        "itemStatus", "rejectionReason", "returnReason", "itemCategory", "exisId"
+        "itemStatus", "rejectionReason", "returnReason", "exisId"
       ],
       i18n: {
         rowAction: "colAction", itemNumber: "colItemNumberFull", ndcCode: "colNdcCode", lotNumber: "colLotNumber",
         expirationDate: "colExpirationDate", qty: "colQuantity", uom: "colUnit", ndcDescription: "colNdcDescriptionFull",
         itemStatus: "colStatus", rejectionReason: "colRejectionReason", returnReason: "colReturnReason",
-        itemCategory: "colItemCategory", exisId: "colExisLineNumber"
+        exisId: "colExisLineNumber"
       }
     }
   };

@@ -445,8 +445,7 @@ sap.ui.define([
           // Returns-only columns (OrderModeConfig.getItemsColumnLayout) - read
           // only when the active profile's layout has them.
           itemStatus: fnInLayout("itemStatus") ? (oCtx.getProperty(ServiceSchema.itemProperties.itemStatus) || "") : "",
-          returnReason: fnInLayout("returnReason") ? (oCtx.getProperty(ServiceSchema.itemProperties.returnReason) || "") : "",
-          itemCategory: fnInLayout("itemCategory") ? (oCtx.getProperty(ServiceSchema.itemProperties.itemCategory) || "") : ""
+          returnReason: fnInLayout("returnReason") ? (oCtx.getProperty(ServiceSchema.itemProperties.returnReason) || "") : ""
         };
       });
 
