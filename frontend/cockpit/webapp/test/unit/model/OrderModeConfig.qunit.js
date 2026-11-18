@@ -15,6 +15,18 @@ sap.ui.define([
     });
   });
 
+  // GH-81: Returns create starts on (and saves) the order type's status -
+  // E0001 Open for ZKR, E0003 Pending Grantee Approval for ZISL/ZXFR/ZWST.
+  QUnit.test("Return types: create-mode status E0001 for ZKR, E0003 for ZISL/ZXFR/ZWST (GH-81)", function (assert) {
+    assert.strictEqual(OrderModeConfig.resolveOrderType("ZKR").createStatusDefault, "E0001", "ZKR");
+    ["ZISL", "ZXFR", "ZWST"].forEach(function (sType) {
+      assert.strictEqual(OrderModeConfig.resolveOrderType(sType).createStatusDefault, "E0003", sType);
+    });
+    OrderModeConfig.getCategoryOrderTypes("_RET").forEach(function (sType) {
+      assert.ok(/^E00(0[1-9]|10)$/.test(OrderModeConfig.resolveOrderType(sType).createStatusDefault), sType + ": a ZRETURN1 status code");
+    });
+  });
+
   // GH-75: closed return statuses (Approved, Complete, Cancelled) are display only.
   QUnit.test("readOnlyStatuses: return types list the closed statuses, Provider Orders none", function (assert) {
     OrderModeConfig.getCategoryOrderTypes("_RET").forEach(function (sType) {

@@ -27,6 +27,35 @@ sap.ui.define([
     assert.strictEqual(typeof ServiceSchema.use, "function", "use() itself survives");
   });
 
+  // GH-81: CreateOrderService.enter() seeds the order type's createStatusDefault
+  // only on a profile with a writable header status (Returns); Orders seed none.
+  QUnit.test("create seed: Returns start on the type's status, Orders seed none (GH-81)", function (assert) {
+    function seed(sOrderType) {
+      var oData;
+      var oModel = {
+        bindList: function () {
+          return {
+            create: function (oInitialData) {
+              oData = oInitialData;
+              return { created: function () { return Promise.resolve(); } };
+            }
+          };
+        }
+      };
+      CreateOrderService.enter(oModel, sOrderType, {});
+      return oData;
+    }
+
+    ServiceSchema.use(ReturnsSchema);
+    assert.strictEqual(seed("ZKR")[ReturnsSchema.headerProperties.status], "E0001", "ZKR");
+    ["ZISL", "ZXFR", "ZWST"].forEach(function (sType) {
+      assert.strictEqual(seed(sType)[ReturnsSchema.headerProperties.status], "E0003", sType);
+    });
+
+    ServiceSchema.use(OrdersSchema);
+    assert.notOk(Object.prototype.hasOwnProperty.call(seed("ZKB"), OrdersSchema.headerProperties.status), "orders: no status seeded");
+  });
+
   // Create-mode section gate (Detail.controller.js#_hasMandatoryHeaderFields):
   // Provider Orders open the other sections once the Provider is set (Reason is
   // optional, code owner 2026-11-12); Returns keep Provider/Return Type/Return Reason.
