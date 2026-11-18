@@ -11,6 +11,7 @@ sap.ui.define([
   "cdc/vaccreq/test/unit/controller/ItemsPersonalize.qunit",
   "cdc/vaccreq/test/unit/controller/ProductLookupFilters.qunit",
   "cdc/vaccreq/test/unit/controller/ItemsEditSession.qunit",
+  "cdc/vaccreq/test/unit/controller/SaveMessageReset.qunit",
   "cdc/vaccreq/test/unit/service/EditRequestService.qunit"
 ], function () {
   "use strict";
