@@ -167,6 +167,8 @@ sap.ui.define([
       // transient createMode scratch context (client requirement 2026-10-01).
       this.getView().setModel(new JSONModel({ providerChosen: false, returnTypeChosen: false, deliveryStatusText: "", deliveryBlockStatusText: "" }), "createState");
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
+      // GH-87: open Items edit session (Returns), see _openItemsEditSession.
+      this._oItemsEditSession = null;
       // 3.3: client-side-only SUM of item TaxAmount - never a real header
       // property, see _computeHeaderTaxAmount.
       this.getView().setModel(new JSONModel({ taxAmount: 0 }), "headerCalc");
@@ -288,6 +290,7 @@ sap.ui.define([
       }
       var oEnrichModel = this.getView().getModel("createEnrich");
       return oContext.getModel().hasPendingChanges(ServiceSchema.editUpdateGroup) ||
+        !!this._oItemsEditSession ||
         oEnrichModel.getProperty("/notes") !== oEnrichModel.getProperty("/notesOriginal");
     },
 
@@ -315,6 +318,9 @@ sap.ui.define([
       this._bStartNewAfterSave = false;
       if (!bCreateMode) {
         Promise.resolve(oContext && EditRequestService.cancel(oContext)).then(function () {
+          // GH-87: the edit session must be gone before create opens its own.
+          return this._discardItemsEditSession();
+        }.bind(this)).then(function () {
           this._destroyNotesWriteBinding();
           Messaging.removeAllMessages();
           this._oRouter.navTo("create", { orderType: this._getNewOrderType() }, false);
@@ -562,6 +568,20 @@ sap.ui.define([
       if (!oContext || oFlags.getProperty("/" + sSectionId + "/editing")) {
         return;
       }
+      if (sSectionId === "items" && ServiceSchema.itemsEditAction) {
+        this._openItemsEditSession(oContext).then(function (bOpened) {
+          if (bOpened) {
+            this._startSectionEdit(sSectionId, oContext);
+          }
+        }.bind(this));
+        return;
+      }
+      this._startSectionEdit(sSectionId, oContext);
+    },
+
+    _startSectionEdit: function (sSectionId, oContext) {
+      var oFlags = this.getView().getModel("sectionFlags");
+      this._bItemsSessionLost = false;
       // Serialize: disable every other live section's Edit while this one is open.
       this._aSectionMeta.forEach(function (oMeta) {
         if (oMeta.editLive && oMeta.id !== sSectionId) {
@@ -588,6 +608,141 @@ sap.ui.define([
           formatter.masterStatusCode(oContext.getProperty(ServiceSchema.headerProperties.userStatus)));
       }
       UserFeedback.announce(this.getResourceBundle().getText("sectionEditStartAnnounce", [this._getSectionTitle(sSectionId)]));
+    },
+
+    // GH-87: Items edit on a profile with ServiceSchema.itemsEditAction (Returns)
+    // runs in an edit session - the backend only creates a new line
+    // incrementally inside one (CreateOrderService.postItem); a combined
+    // sessionless create dumps. Save = SaveChanges, Cancel/leaving = DiscardChanges.
+    // The Items rows are re-read inside the session ($auto); other sections'
+    // Edit is disabled during the round trip, and only re-enabled on failure.
+    _openItemsEditSession: function (oContext) {
+      if (this._pItemsSessionOpening) {
+        return Promise.resolve(false);
+      }
+      var that = this;
+      var oFlags = this.getView().getModel("sectionFlags");
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var fnSetOtherEditEnabled = function (bEnabled) {
+        that._aSectionMeta.forEach(function (oMeta) {
+          if (oMeta.editLive && oMeta.id !== "items") {
+            oFlags.setProperty("/" + oMeta.id + "/editEnabled", bEnabled);
+          }
+        });
+      };
+      fnSetOtherEditEnabled(false);
+      if (oTable) {
+        oTable.setBusy(true);
+      }
+      this._pItemsSessionOpening = EditRequestService.openSession(oContext).then(function (oSession) {
+        if (that.getView().getBindingContext() !== oContext) {
+          // The user left this order while the session was opening.
+          oSession.plainContext.getBinding().destroy();
+          EditRequestService.discardSession(oContext.getModel());
+          fnSetOtherEditEnabled(true);
+          return false;
+        }
+        that._oItemsEditSession = oSession;
+        that._bItemsSessionLost = false;
+        oContext.getModel().attachSessionTimeout(that._onItemsSessionTimeout, that);
+        that._sItemsUpdateGroup = ServiceSchema.itemInteractiveGroup;
+        that._rebindItemsGroup(that._sItemsUpdateGroup);
+        return true;
+      }, function (oError) {
+        fnSetOtherEditEnabled(true);
+        var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), that.getResourceBundle());
+        aSectionIds.forEach(function (sId) {
+          that._oSectionFactory.expandSection(sId);
+        });
+        that._openMessagePopover();
+        return false;
+      }).finally(function () {
+        that._pItemsSessionOpening = null;
+        if (oTable) {
+          oTable.setBusy(false);
+        }
+      });
+      return this._pItemsSessionOpening;
+    },
+
+    _closeItemsEditSession: function (bRebind) {
+      var oSession = this._oItemsEditSession;
+      if (!oSession) {
+        return;
+      }
+      this._oItemsEditSession = null;
+      oSession.plainContext.getModel().detachSessionTimeout(this._onItemsSessionTimeout, this);
+      oSession.plainContext.getBinding().destroy();
+      this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
+      if (bRebind) {
+        this._rebindItemsGroup(this._sItemsUpdateGroup);
+      }
+    },
+
+    // New lines still being posted into the session (_postInactiveSessionRow);
+    // their outcome is reported there.
+    _waitForItemPosts: function () {
+      return Promise.all(Array.from(this._oItemsPostPromises || []).map(function (pPost) {
+        return pPost.catch(function () {});
+      }));
+    },
+
+    // GH-87: leaving the order with Items edit open - discard the session
+    // (best effort, never blocks) once in-flight new lines have landed.
+    _discardItemsEditSession: function () {
+      var oSession = this._oItemsEditSession;
+      if (!oSession) {
+        return Promise.resolve();
+      }
+      var oModel = oSession.plainContext.getModel();
+      var pPosts = this._waitForItemPosts();
+      this._closeItemsEditSession(false);
+      return pPosts.then(function () {
+        return EditRequestService.discardSession(oModel);
+      });
+    },
+
+    _onItemsSessionTimeout: function () {
+      this._onItemsSessionLost();
+    },
+
+    // GH-87 Q10: the session ended while Items edit was open - the model's
+    // sessionTimeout (UI5 already dropped the session, no oError) or a failed
+    // in-session write that ends it (EditRequestService.isSessionLostError).
+    // UI5 repeats a failed PATCH automatically, and a sessionless PATCH
+    // commits - so reset both groups first, then leave Items edit.
+    _onItemsSessionLost: function (oError) {
+      var oSession = this._oItemsEditSession;
+      if (!oSession) {
+        return;
+      }
+      var oModel = oSession.plainContext.getModel();
+      var oContext = this.getView().getBindingContext();
+      var oBundle = this.getResourceBundle();
+      this._bItemsSessionLost = true;
+      try {
+        if (oModel.hasPendingChanges(ServiceSchema.itemInteractiveGroup)) {
+          oModel.resetChanges(ServiceSchema.itemInteractiveGroup);
+        }
+      } catch (oResetError) {
+        // requests still running - the session they belong to is gone
+      }
+      // Header changes an item edit queued in vrEdit (_updateHeaderReturnReason).
+      if (oContext) {
+        try {
+          EditRequestService.cancel(oContext);
+        } catch (oCancelError) {
+          // same as above
+        }
+      }
+      if (oError) {
+        EditRequestService.discardSession(oModel);
+        MessageExtractor.extract(oError, oContext && oContext.getPath(), oBundle);
+      }
+      this._closeItemsEditSession(true);
+      this._endEditSession("items");
+      MessageExtractor.addNote(oBundle.getText("itemsEditSessionLost"), "Warning");
+      this._openMessagePopover();
     },
 
     _prepareShippingEdit: function (oContext) {
@@ -686,12 +841,20 @@ sap.ui.define([
 
     onSectionCancelPress: async function (sSectionId) {
       var oContext = this.getView().getBindingContext();
+      if (sSectionId === "items") {
+        await this._waitForItemPosts();
+      }
       if (oContext) {
         await EditRequestService.cancel(oContext);
       }
       if (sSectionId === "items") {
         var oTable = this._byIdInSection("items", "itemsTable");
         await this._deleteEmptyItemRows(ItemsTableAccess.getBinding(oTable));
+        if (this._oItemsEditSession) {
+          // GH-87: the rebind also drops leftover inactive lines (NDC, no quantity).
+          await EditRequestService.discardSession(this._oItemsEditSession.plainContext.getModel());
+          this._closeItemsEditSession(true);
+        }
       }
       if (sSectionId === "details") {
         var oEnrichModel = this.getView().getModel("createEnrich");
@@ -866,14 +1029,23 @@ sap.ui.define([
         UserFeedback.reportError(MessageExtractor, oBundle.getText("itemsIncompleteItemsError"), this._openMessagePopover.bind(this));
         return;
       }
+      var oItemsSession = sSectionId === "items" ? this._oItemsEditSession : null;
       var pRemoveEmptyItems = sSectionId === "items"
-        ? this._deleteEmptyItemRows(oItemsBinding)
+        ? this._waitForItemPosts().then(function () { return that._deleteEmptyItemRows(oItemsBinding); })
         : Promise.resolve();
       var oStagePromise = sSectionId === "details"
         ? this._stageHeaderNotes(oContext)
         : Promise.resolve();
       pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
         return EditRequestService.save(oContext);
+      }).then(function () {
+        // GH-87: vrEdit first - header changes an item edit queued
+        // (_updateHeaderReturnReason) go into the session, SaveChanges commits all.
+        if (oItemsSession && oItemsSession === that._oItemsEditSession) {
+          return EditRequestService.saveSession(oContext).then(function () {
+            that._closeItemsEditSession(true);
+          });
+        }
       }).then(function () {
         if (sSectionId === "details" && that._bNotesNeedsCreate) {
           return CreateOrderService.saveNotes(oContext, that.getView().getModel("createEnrich").getProperty("/notes"));
@@ -905,7 +1077,23 @@ sap.ui.define([
       }, function (oError) {
         that._bStartNewAfterSave = false;
         that.byId("newOrderBtn").setEnabled(true);
+        // GH-87 Q10: the session ended during this Save - already reported by
+        // _onItemsSessionLost (sessionTimeout), or it ends here (5xx/404).
+        if (oItemsSession) {
+          if (that._bItemsSessionLost) {
+            return;
+          }
+          if (oItemsSession === that._oItemsEditSession && EditRequestService.isSessionLostError(oError)) {
+            that._onItemsSessionLost(oError);
+            return;
+          }
+        }
         if (oError.isConflict) {
+          // GH-87 Q11: the conflict dialog reloads and ends the edit.
+          if (oItemsSession && oItemsSession === that._oItemsEditSession) {
+            EditRequestService.discardSession(oContext.getModel());
+            that._closeItemsEditSession(true);
+          }
           that._showConflictDialog(oContext, sSectionId);
         } else {
           // Message Accuracy & Hygiene task: same MessageExtractor-driven
@@ -2088,6 +2276,14 @@ sap.ui.define([
       if (!bPersisted || (oError && oError.canceled)) {
         return;
       }
+      // GH-87 Q10: in an Items edit session - a lost session ends the edit once.
+      if (this._oItemsEditSession && EditRequestService.isSessionLostError(oError)) {
+        this._onItemsSessionLost(oError);
+        return;
+      }
+      if (this._bItemsSessionLost && !this._oItemsEditSession) {
+        return;
+      }
       var aSectionIds = MessageExtractor.extract(oError, oRowContext.getPath(), this.getResourceBundle());
       if (this.getView().getModel("sectionFlags").getProperty("/createMode")
           && this._bItemsSessionBound && this._hasHttpStatus(oError, 404)) {
@@ -2198,7 +2394,7 @@ sap.ui.define([
         oEvent.preventDefault();
         return;
       }
-      if (ServiceSchema.profileId === "returns" && this._bItemsSessionBound) {
+      if ((ServiceSchema.profileId === "returns" && this._bItemsSessionBound) || this._oItemsEditSession) {
         oEvent.preventDefault();
         this._postInactiveSessionRow(oRowContext);
         return;
@@ -2267,15 +2463,18 @@ sap.ui.define([
       var oBundle = this.getResourceBundle();
       var oTable = this._byIdInSection("items", "itemsTable");
       var oHeaderContext = this.getView().getBindingContext();
+      // GH-87: Items edit session (existing order) or create session.
+      var oSession = this._oItemsEditSession || this._oCreateSession;
+      var bEditSession = !!this._oItemsEditSession;
       if (oTable) {
         oTable.setBusy(true);
       }
       // Activation fires on the FIRST of several synchronous setProperty
       // calls (e.g. _applyNdcPick: Product, then text/unit/return reason) -
       // read the row only once that synchronous sequence has finished.
-      Promise.resolve()
+      var pPost = Promise.resolve()
         .then(function () {
-          return CreateOrderService.postItem(that._oCreateSession, oHeaderContext, oRowContext.getObject());
+          return CreateOrderService.postItem(oSession, oHeaderContext, oRowContext.getObject());
         })
         .then(function () {
           return oRowContext.delete();
@@ -2284,6 +2483,16 @@ sap.ui.define([
           return that._refreshItemsBinding();
         })
         .catch(function (oError) {
+          if (bEditSession) {
+            // The session already ended (lost and reported, or the user left).
+            if (oSession !== that._oItemsEditSession) {
+              return;
+            }
+            if (EditRequestService.isSessionLostError(oError)) {
+              that._onItemsSessionLost(oError);
+              return;
+            }
+          }
           var aSectionIds = MessageExtractor.extract(oError, oHeaderContext.getPath(), oBundle);
           aSectionIds.forEach(function (sId) {
             that._oSectionFactory.expandSection(sId);
@@ -2292,10 +2501,13 @@ sap.ui.define([
         })
         .then(function () {
           that._oPostingInactiveRows.delete(oRowContext);
+          that._oItemsPostPromises.delete(pPost);
           if (oTable) {
             oTable.setBusy(false);
           }
         });
+      this._oItemsPostPromises = this._oItemsPostPromises || new Set();
+      this._oItemsPostPromises.add(pPost);
     },
 
     // Entry point called from every field-change handler above. Only ever
@@ -5324,6 +5536,7 @@ sap.ui.define([
       if (!sId) {
         return;
       }
+      this._discardItemsEditSession();
       this._destroyCreateContext();
       this._resetCreateSaveState();
       this._setCreateMode(false);
@@ -5381,6 +5594,7 @@ sap.ui.define([
         this._oRouter.navTo("master", {}, true);
         return;
       }
+      this._discardItemsEditSession();
       this._enterCreateMode(sOrderType);
       if (sProviderId) {
         this._preselectProvider(sProviderId);
@@ -5769,6 +5983,7 @@ sap.ui.define([
     },
 
     _onMasterMatched: function () {
+      this._discardItemsEditSession();
       this._destroyCreateContext();
       this._resetCreateSaveState();
       this._setCreateMode(false);
@@ -5914,6 +6129,11 @@ sap.ui.define([
 
     getResourceBundle: function () {
       return this.getOwnerComponent().getModel("i18n").getResourceBundle();
+    },
+
+    // GH-87: the app closes with Items edit open - release the session's lock.
+    onExit: function () {
+      this._discardItemsEditSession();
     }
   });
 });
