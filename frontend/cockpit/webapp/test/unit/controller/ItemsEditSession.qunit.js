@@ -111,4 +111,33 @@ sap.ui.define([
       assert.strictEqual(oStub._hasUnsavedOrderChanges(), true, "open session");
     });
   });
+
+  QUnit.test("a route change discards an open Items edit session first; the last route wins", function (assert) {
+    return loadDetail().then(function (Detail) {
+      var aBusy = [];
+      var aShown = [];
+      var fnDiscarded;
+      var oStub = Object.create(Detail.prototype);
+      oStub.getView = function () {
+        return { setBusy: function (bBusy) { aBusy.push(bBusy); } };
+      };
+      oStub._discardItemsEditSession = function () {
+        oStub._oItemsEditSession = null;
+        return new Promise(function (resolve) { fnDiscarded = resolve; });
+      };
+      oStub._leaveItemsEditSession(function () { aShown.push("A"); });
+      assert.deepEqual(aShown, ["A"], "no session: continues at once");
+
+      oStub._oItemsEditSession = { opened: true };
+      oStub._leaveItemsEditSession(function () { aShown.push("B"); });
+      oStub._leaveItemsEditSession(function () { aShown.push("C"); });
+      assert.deepEqual(aShown, ["A"], "waits for the discard");
+      assert.deepEqual(aBusy, [true], "view busy meanwhile");
+      fnDiscarded();
+      return new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
+        assert.deepEqual(aShown, ["A", "C"], "only the last route continues");
+        assert.deepEqual(aBusy, [true, false], "busy cleared");
+      });
+    });
+  });
 });

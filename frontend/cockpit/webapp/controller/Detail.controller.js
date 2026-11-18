@@ -734,6 +734,31 @@ sap.ui.define([
       this._onItemsSessionLost();
     },
 
+    // GH-87: a route change with Items edit open discards the session first
+    // (view busy): reads the next screen sends while DiscardChanges is still in
+    // flight carry the ending session and fail ("session not found"). The last
+    // route change wins.
+    _leaveItemsEditSession: function (fnContinue) {
+      var that = this;
+      var iRoute = this._iItemsLeaveRoute = (this._iItemsLeaveRoute || 0) + 1;
+      if (this._oItemsEditSession) {
+        this.getView().setBusy(true);
+        this._pItemsSessionLeaving = this._discardItemsEditSession().then(function () {
+          that._pItemsSessionLeaving = null;
+          that.getView().setBusy(false);
+        });
+      }
+      if (!this._pItemsSessionLeaving) {
+        fnContinue();
+        return;
+      }
+      this._pItemsSessionLeaving.then(function () {
+        if (iRoute === that._iItemsLeaveRoute) {
+          fnContinue();
+        }
+      });
+    },
+
     // GH-87 Q10: the session ended while Items edit was open - the model's
     // sessionTimeout (UI5 already dropped the session, no oError) or a failed
     // in-session write that ends it (EditRequestService.isSessionLostError).
@@ -5583,7 +5608,10 @@ sap.ui.define([
       if (!sId) {
         return;
       }
-      this._discardItemsEditSession();
+      this._leaveItemsEditSession(this._showOrder.bind(this, sId));
+    },
+
+    _showOrder: function (sId) {
       this._destroyCreateContext();
       this._resetCreateSaveState();
       this._setCreateMode(false);
@@ -5641,11 +5669,12 @@ sap.ui.define([
         this._oRouter.navTo("master", {}, true);
         return;
       }
-      this._discardItemsEditSession();
-      this._enterCreateMode(sOrderType);
-      if (sProviderId) {
-        this._preselectProvider(sProviderId);
-      }
+      this._leaveItemsEditSession(function () {
+        this._enterCreateMode(sOrderType);
+        if (sProviderId) {
+          this._preselectProvider(sProviderId);
+        }
+      }.bind(this));
     },
 
     // Resolve the route's provider before using the normal selection flow.
@@ -6030,11 +6059,12 @@ sap.ui.define([
     },
 
     _onMasterMatched: function () {
-      this._discardItemsEditSession();
-      this._destroyCreateContext();
-      this._resetCreateSaveState();
-      this._setCreateMode(false);
-      Messaging.removeAllMessages();
+      this._leaveItemsEditSession(function () {
+        this._destroyCreateContext();
+        this._resetCreateSaveState();
+        this._setCreateMode(false);
+        Messaging.removeAllMessages();
+      }.bind(this));
     },
 
     _resetCreateSaveState: function () {
