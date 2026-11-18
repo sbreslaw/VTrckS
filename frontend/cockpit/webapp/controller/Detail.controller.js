@@ -634,7 +634,9 @@ sap.ui.define([
       if (oTable) {
         oTable.setBusy(true);
       }
-      this._pItemsSessionOpening = EditRequestService.openSession(oContext).then(function (oSession) {
+      this._pItemsSessionOpening = Promise.resolve(this._pItemsSessionDiscard).then(function () {
+        return EditRequestService.openSession(oContext);
+      }).then(function (oSession) {
         if (that.getView().getBindingContext() !== oContext) {
           // The user left this order while the session was opening.
           oSession.plainContext.getBinding().destroy();
@@ -697,9 +699,11 @@ sap.ui.define([
       var oModel = oSession.plainContext.getModel();
       var pPosts = this._waitForItemPosts();
       this._closeItemsEditSession(false);
-      return pPosts.then(function () {
+      // _openItemsEditSession waits for this before opening the next session.
+      this._pItemsSessionDiscard = pPosts.then(function () {
         return EditRequestService.discardSession(oModel);
       });
+      return this._pItemsSessionDiscard;
     },
 
     _onItemsSessionTimeout: function () {
@@ -841,19 +845,30 @@ sap.ui.define([
 
     onSectionCancelPress: async function (sSectionId) {
       var oContext = this.getView().getBindingContext();
-      if (sSectionId === "items") {
-        await this._waitForItemPosts();
+      // GH-87: nothing may be queued into the session while it is discarded.
+      var oItemsSession = sSectionId === "items" ? this._oItemsEditSession : null;
+      if (oItemsSession) {
+        this.getView().setBusy(true);
       }
-      if (oContext) {
-        await EditRequestService.cancel(oContext);
-      }
-      if (sSectionId === "items") {
-        var oTable = this._byIdInSection("items", "itemsTable");
-        await this._deleteEmptyItemRows(ItemsTableAccess.getBinding(oTable));
-        if (this._oItemsEditSession) {
-          // GH-87: the rebind also drops leftover inactive lines (NDC, no quantity).
-          await EditRequestService.discardSession(this._oItemsEditSession.plainContext.getModel());
-          this._closeItemsEditSession(true);
+      try {
+        if (sSectionId === "items") {
+          await this._waitForItemPosts();
+        }
+        if (oContext) {
+          await EditRequestService.cancel(oContext);
+        }
+        if (sSectionId === "items") {
+          var oTable = this._byIdInSection("items", "itemsTable");
+          await this._deleteEmptyItemRows(ItemsTableAccess.getBinding(oTable));
+          if (oItemsSession && oItemsSession === this._oItemsEditSession) {
+            // The rebind also drops leftover inactive lines (NDC, no quantity).
+            await EditRequestService.discardSession(oItemsSession.plainContext.getModel());
+            this._closeItemsEditSession(true);
+          }
+        }
+      } finally {
+        if (oItemsSession) {
+          this.getView().setBusy(false);
         }
       }
       if (sSectionId === "details") {
@@ -1030,6 +1045,10 @@ sap.ui.define([
         return;
       }
       var oItemsSession = sSectionId === "items" ? this._oItemsEditSession : null;
+      if (oItemsSession) {
+        // GH-87: nothing may be queued into the session while it is saved.
+        this.getView().setBusy(true);
+      }
       var pRemoveEmptyItems = sSectionId === "items"
         ? this._waitForItemPosts().then(function () { return that._deleteEmptyItemRows(oItemsBinding); })
         : Promise.resolve();
@@ -1110,6 +1129,10 @@ sap.ui.define([
           // right after it would just fight over focus. The popover IS this
           // path's "focus moves to the problem" affordance.
           that._openMessagePopover();
+        }
+      }).finally(function () {
+        if (oItemsSession) {
+          that.getView().setBusy(false);
         }
       });
     },
