@@ -450,12 +450,14 @@
 							<!-- v5 UX phasing: in createMode this also waits on createState>/providerChosen
 								and, where the order type shows Return Type, on createState>/returnTypeChosen.
 								GH-75 (D-1549): read-only outside create, like Return Type above; item Return
-								Reason changes still rewrite it (Detail.controller.js#onItemReturnReasonChange). -->
+								Reason changes still rewrite it (Detail.controller.js#onItemReturnReasonChange).
+								The Text derives its text from the code (returnReasons>/list, _loadReturnReasonVH),
+								so that rewrite shows at once, after Save, and reverts on Cancel. -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{_SDDocumentReason/SDDocumentReason_Text}" visible="{= !${sectionFlags>/details/editing} || !${sectionFlags>/createMode} }"/>
+								<Text text="{parts: [{path: 'SDDocumentReason'}, {path: 'returnReasons>/list'}], formatter: '.formatter.categoryText'}" visible="{= !${sectionFlags>/details/editing} || !${sectionFlags>/createMode} }"/>
 								<ComboBox
 									width="100%"
 									selectedKey="{path: 'SDDocumentReason', mode: 'OneWay'}"

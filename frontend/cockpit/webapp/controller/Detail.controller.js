@@ -178,6 +178,7 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ childParents: {} }), "itemsMeta");
       this._loadRejectionReasonVH();
       this._loadReturnTypeVH();
+      this._loadReturnReasonVH();
       this._applyOrderUi(this.getOwnerComponent().getModel("orderContext").getProperty("/orderTypes/0/orderType"));
 
     },
@@ -4838,6 +4839,32 @@ sap.ui.define([
         }));
       }, function () {
         // Non-fatal: the ComboBox/display-text formatter then only sees an empty list.
+      });
+    },
+
+    // GH-75: one-time load of the header Return Reason code list for the
+    // returns Details display Text (formatter.categoryText). Items edit rewrites
+    // the header code (onItemReturnReasonChange); the header's loaded
+    // _SDDocumentReason text never follows a code change, the code does. Only a
+    // profile with item-level reasons rewrites the header reason from Items, so
+    // Provider Orders sends no request.
+    _loadReturnReasonVH: function () {
+      var oProps = ServiceSchema.valueHelpProperties;
+      var oVHModel = new JSONModel({ list: [] });
+      this.getView().setModel(oVHModel, "returnReasons");
+      if (!ServiceSchema.itemProperties.returnReason) {
+        return;
+      }
+      var oListBinding = this.getOwnerComponent().getModel().bindList(
+        "/" + ServiceSchema.entitySets.orderReason, undefined, undefined, undefined,
+        { $select: [oProps.orderReasonCode, oProps.orderReasonText].join(",") }
+      );
+      oListBinding.requestContexts(0, 200).then(function (aContexts) {
+        oVHModel.setProperty("/list", aContexts.map(function (oCtx) {
+          return { key: oCtx.getProperty(oProps.orderReasonCode), text: oCtx.getProperty(oProps.orderReasonText) };
+        }));
+      }, function () {
+        // Non-fatal: the display Text then shows the bare code.
       });
     },
 
