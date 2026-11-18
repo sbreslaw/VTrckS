@@ -12,7 +12,8 @@
     <OverflowToolbar class="detailItemsToolbar">
       <ToolbarSpacer />
       <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
-      <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsPersonalize" />
+      <!-- GH-83: Personalize is disabled until personalization is reworked (Detail.controller.js#onItemsPersonalize is kept). -->
+      <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" enabled="false" press=".onItemsPersonalize" />
     </OverflowToolbar>
     <VBox id="itemsViewport" class="detailItemsViewport">
     <Table id="itemsTable" width="100%" items="{_Item}" class="detailItemsTable" fixedLayout="true"
