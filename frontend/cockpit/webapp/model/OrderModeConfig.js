@@ -532,6 +532,7 @@ sap.ui.define([
   // Lot Number, Expiration Date, Quantity, Unit, NDC Description, Status,
   // Rejection Reason, Return Reason, ExIS Line Number.
   // GH-91: Item Category removed (D-1573).
+  // GH-95: Returns "mandatory" = keys the Personalize dialog keeps visible (ItemsGridLayout).
   var ITEMS_COLUMN_LAYOUT_BY_PROFILE = {
     orders: {
       keys: [
@@ -557,7 +558,9 @@ sap.ui.define([
         expirationDate: "colExpirationDate", qty: "colQuantity", uom: "colUnit", ndcDescription: "colNdcDescriptionFull",
         itemStatus: "colStatus", rejectionReason: "colRejectionReason", returnReason: "colReturnReason",
         exisId: "colExisLineNumber"
-      }
+      },
+      // GH-95: columns the Items personalization cannot hide (owner 2026-11-19).
+      mandatory: ["rowAction", "ndcCode", "lotNumber", "expirationDate", "qty"]
     }
   };
 
