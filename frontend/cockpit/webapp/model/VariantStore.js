@@ -15,6 +15,34 @@ sap.ui.define([
   // ushell personalization service without changing any caller).
   //
   // Storage shape per key: { variants: { <name>: <json-serializable value> }, lastSelectedKey: <name>|null }
+  //
+  // GH-95: loadAsync/saveAsync use the Launchpad PersonalizationV2 service (container
+  // cdc.vaccreq, one item per key, stored on the front-end server per user). Outside
+  // the Launchpad they resolve null/false - nothing is written to browser storage.
+
+  var LAUNCHPAD_CONTAINER = "cdc.vaccreq";
+  var oLaunchpadContainerPromise = null;
+
+  // null outside the Launchpad (no sap/ushell/Container); rejects when the service fails.
+  function getLaunchpadContainer(oComponent) {
+    var oUshellContainer = sap.ui.require("sap/ushell/Container");
+    if (!oUshellContainer || typeof oUshellContainer.getServiceAsync !== "function") {
+      return Promise.resolve(null);
+    }
+    if (!oLaunchpadContainerPromise) {
+      oLaunchpadContainerPromise = oUshellContainer.getServiceAsync("PersonalizationV2").then(function (oService) {
+        return oService.getContainer(LAUNCHPAD_CONTAINER, {
+          keyCategory: oService.constants.keyCategory.FIXED_KEY,
+          writeFrequency: oService.constants.writeFrequency.LOW,
+          clientStorageAllowed: false
+        }, oComponent);
+      });
+      oLaunchpadContainerPromise.catch(function () {
+        oLaunchpadContainerPromise = null;
+      });
+    }
+    return oLaunchpadContainerPromise;
+  }
 
   function getUshellPersonalizationContainer() {
     try {
@@ -93,6 +121,30 @@ sap.ui.define([
 
     createModel: function (sKey) {
       return new JSONModel(this.load(sKey));
+    },
+
+    // GH-95: the stored value, or null (nothing stored / outside the Launchpad).
+    loadAsync: function (sItemKey, oComponent) {
+      return getLaunchpadContainer(oComponent).then(function (oContainer) {
+        if (!oContainer) {
+          return null;
+        }
+        var vValue = oContainer.getItemValue(sItemKey);
+        return vValue === undefined ? null : vValue;
+      });
+    },
+
+    // GH-95: true once saved on the front-end server; false outside the Launchpad.
+    saveAsync: function (sItemKey, vValue, oComponent) {
+      return getLaunchpadContainer(oComponent).then(function (oContainer) {
+        if (!oContainer) {
+          return false;
+        }
+        oContainer.setItemValue(sItemKey, vValue);
+        return oContainer.save().then(function () {
+          return true;
+        });
+      });
     }
   };
 

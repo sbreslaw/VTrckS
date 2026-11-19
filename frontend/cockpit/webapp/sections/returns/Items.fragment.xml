@@ -11,7 +11,9 @@
        VTrckS#69: grid table (sap.ui.table.Table) - columns can be resized,
        reordered and (Items display mode only) sorted. Rows are virtual: only the
        visible rows have controls, so Detail.controller.js reads and binds this
-       table through model/ItemsTableAccess.js. -->
+       table through model/ItemsTableAccess.js.
+       GH-95: columns can be shown/hidden, moved, resized and sorted through the view
+       selector and Personalize; Export still follows OrderModeConfig.getItemsColumnLayout. -->
   <!-- CRUD Task 1 v3 (In-Place Create): the update group for this nested
        "_Item" navigation must match the header context's own group (edit
        session vs. transient create), which XML binding parameters can't
@@ -23,15 +25,29 @@
        only via bound actions (Computed property), never through this binding. -->
   <VBox width="100%">
     <OverflowToolbar class="detailItemsToolbar">
+      <!-- GH-95: saved views of the Items grid layout (columns, order, widths, sort); persisted per user by Detail.controller.js (Launchpad personalization). -->
+      <VariantManagement id="itemsViewManagement"
+        selectedKey="{itemsViews>/selectedKey}" defaultKey="{itemsViews>/defaultKey}" modified="{itemsViews>/modified}"
+        supportApplyAutomatically="false" supportFavorites="false" supportPublic="false"
+        select=".onItemsViewSelect" save=".onItemsViewSave" manage=".onItemsViewManage"
+        items="{path: 'itemsViews>/items', templateShareable: false}">
+        <items>
+          <VariantItem key="{itemsViews>key}" title="{itemsViews>title}" changeable="{itemsViews>changeable}"
+            remove="{itemsViews>remove}" rename="{itemsViews>rename}" />
+        </items>
+      </VariantManagement>
       <ToolbarSpacer />
       <Button text="{i18n>itemsExport}" icon="sap-icon://excel-attachment" press=".onItemsExport" />
-      <!-- GH-83: Personalize is disabled until personalization is reworked (Detail.controller.js#onItemsPersonalize is kept). -->
-      <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" enabled="false" press=".onItemsPersonalize" />
+      <!-- GH-95: Columns/Sort personalization of the grid (Detail.controller.js#onItemsGridPersonalize); the Orders fragment keeps its disabled button. -->
+      <Button text="{i18n>itemsPersonalize}" icon="sap-icon://action-settings" press=".onItemsGridPersonalize" />
     </OverflowToolbar>
     <VBox id="itemsViewport" class="detailItemsViewport">
     <t:Table id="itemsTable" width="100%" rows="{_Item}" class="detailItemsTable detailItemsGrid"
-      selectionMode="None" enableColumnReordering="true"
-      sort=".onItemsGridSort" rowsUpdated=".onItemsGridRowsUpdated">
+      selectionMode="None" enableColumnReordering="true" fixedColumnCount="3"
+      sort=".onItemsGridSort" rowsUpdated=".onItemsGridRowsUpdated"
+      columnMove=".onItemsGridColumnMove" columnResize=".onItemsGridColumnResize">
+    <!-- GH-95 (code owner 2026-11-19): Action, Item Number and NDC Code are frozen (fixedColumnCount);
+         the grid keeps them first, they are always shown and not listed in the Columns tab of Personalize. -->
     <!-- Column widths are % so the table fits its container; NDC Description has no width
          and takes the remaining space. A user resize sets px (sap.ui.table.Column width). -->
     <!-- optOut (ZZ1_SKIPADDANC_SDI), orderIntention/fundType (MaterialGroup1/2) and

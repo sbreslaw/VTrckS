@@ -61,14 +61,19 @@ sap.ui.define([
   "cdc/vaccreq/service/FundLogicService",
   "cdc/vaccreq/controller/FundSplitDialog",
   "cdc/vaccreq/util/ValueHelpTableFitter",
-  "cdc/vaccreq/util/UserFeedback"
+  "cdc/vaccreq/util/UserFeedback",
+  "sap/m/p13n/Popup",
+  "sap/m/p13n/SelectionPanel",
+  "sap/m/p13n/SortPanel",
+  "sap/m/MessageStrip",
+  "cdc/vaccreq/model/ItemsGridLayout"
 ], function (
   Controller, MessageToast, MessageBox, MessagePopover, MessageItem, Dialog, Button, BusyIndicator, Text,
   List, CustomListItem, CheckBox, HBox, VBox, Select, Input, Label, SelectDialog, StandardListItem, SearchField,
   RadioButton, Token, GridTable, GridColumn, AutoRowMode, ValueHelpDialog, FilterBar, FilterGroupItem, CoreItem, CoreListItem, Fragment,
   Messaging, EventBus, Element, ResizeHandler, coreLibrary, JSONModel, Filter, FilterOperator, Sorter, Spreadsheet, SectionFactory, SectionCatalog, formatter, ServiceSchema, OrderModeConfig, VariantStore, Enums, MessageExtractor,   PricingColumns,     StatusValueHelp, ReturnReasonLogic, LotNumberRule, NoOfBoxesRule, ItemsTableAccess,
   EditRequestService, CreateOrderService, ProviderInventoryService, ProviderSearchService, FundLogicService, FundSplitDialog,
-  ValueHelpTableFitter, UserFeedback
+  ValueHelpTableFitter, UserFeedback, P13nPopup, SelectionPanel, SortPanel, MessageStrip, ItemsGridLayout
 ) {
   "use strict";
 
@@ -141,6 +146,8 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({}), "orderUi");
       this.getView().setModel(Messaging.getMessageModel(), "message");
       this.getView().setModel(new JSONModel(this._getItemsColumnVisibility()), "itemsColumns");
+      // GH-95: Returns grid view selector (sections/returns/Items.fragment.xml); filled by _initItemsViews.
+      this.getView().setModel(new JSONModel({ items: [], selectedKey: ItemsGridLayout.STANDARD_KEY, defaultKey: ItemsGridLayout.STANDARD_KEY, modified: false }), "itemsViews");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
       this.getView().setModel(new JSONModel({ salesOrder: "", rows: [], busy: false, error: false, loaded: false }), "transactionHistory");
       this.getView().setModel(new JSONModel({ name: "", tooltip: "" }), "detailContact");
@@ -365,26 +372,31 @@ sap.ui.define([
       MessageToast.show(this.getResourceBundle().getText("validateToast"));
     },
 
-    // --- Items section: Export to Excel + a lightweight visibility-only
-    // Personalize dialog (Phase 2 Prompt v2, item F). Column order stays fixed
-    // in Items.fragment.xml; only show/hide is persisted, via VariantStore.js,
-    // deliberately simpler than the Master table's reorder-capable dialog.
-    // GH-83: the button is disabled and a saved layout is not applied (_getItemsColumnVisibility). ---
+    // --- Items section: Export to Excel (delivered columns) and, on the Returns grid,
+    // saved views + the p13n dialog (GH-95). GH-83: the Orders Personalize button
+    // stays disabled; onItemsPersonalize is kept for it. ---
 
     _getItemsColumnLayout: function () {
       return OrderModeConfig.getItemsColumnLayout(ServiceSchema.profileId);
     },
 
+    // GH-95: order-type column flags, then the active Items view (grid only; null on Orders).
     _getItemsColumnVisibility: function () {
       var oOrderUi = this.getView().getModel("orderUi").getData();
-      var oVisibility = {};
-      // GH-83: Personalize is disabled and the Items layouts changed since it was
-      // used - a saved column layout no longer applies. Restore the saved-layout
-      // read when the dialog is re-enabled.
-      this._getItemsColumnLayout().keys.forEach(function (sKey) {
-        oVisibility[sKey] = OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
-      });
-      return oVisibility;
+      var oLayout = this._getItemsColumnLayout();
+      var oViewState = this._oItemsViewState;
+      return ItemsGridLayout.visibility(oLayout.keys, function (sKey) {
+        return OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
+      }, oViewState && oViewState.visible, (oLayout.mandatory || []).concat(this._aItemsFrozenKeys || []));
+    },
+
+    // The on-screen header text of an Items column (GH-82: the reason column carries the order-type tag).
+    _getItemsColumnLabel: function (sKey) {
+      var oBundle = this.getResourceBundle();
+      if (sKey === "returnReason") {
+        return oBundle.getText("colReturnReasonTyped", [this.getView().getModel("orderUi").getProperty("/tag")]);
+      }
+      return oBundle.getText(this._getItemsColumnLayout().i18n[sKey]);
     },
 
     onItemsExport: function (oEvent) {
@@ -393,7 +405,7 @@ sap.ui.define([
       var oBinding = ItemsTableAccess.getBinding(oTable);
       var aContexts = ItemsTableAccess.getContexts(oBinding);
       var oBundle = this.getResourceBundle();
-      var oVisibility = this.getView().getModel("itemsColumns").getData();
+      var oOrderUi = this.getView().getModel("orderUi").getData();
       var oLayout = this._getItemsColumnLayout();
       var fnInLayout = function (sKey) { return oLayout.keys.indexOf(sKey) !== -1; };
       // DF-1025: the nav text is no longer bound (not in $select) - resolve the code via the VH list.
@@ -403,15 +415,12 @@ sap.ui.define([
           mRejectionText[oEntry.key] = oEntry.text;
         }
       });
-      var sOrderTag = this.getView().getModel("orderUi").getProperty("/tag");
+      // GH-95: the delivered columns in the delivered order, whatever the Items view (owner Q6).
       var aCols = oLayout.keys
-        .filter(function (sKey) { return sKey !== "rowAction" && oVisibility[sKey] !== false; })
+        .filter(function (sKey) { return sKey !== "rowAction" && OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible"); })
         .map(function (sKey) {
           return {
-            // GH-82: the reason column carries the order-type tag, as on screen.
-            label: sKey === "returnReason"
-              ? oBundle.getText("colReturnReasonTyped", [sOrderTag])
-              : oBundle.getText(oLayout.i18n[sKey]),
+            label: that._getItemsColumnLabel(sKey),
             property: sKey,
             type: "String"
           };
@@ -1371,7 +1380,351 @@ sap.ui.define([
       var oFlags = this.getView().getModel("sectionFlags");
       if (!oBinding || oFlags.getProperty("/items/editing") || oFlags.getProperty("/createMode") || oBinding.hasPendingChanges()) {
         oEvent.preventDefault();
+        return;
       }
+      if (!this._oItemsViewState) {
+        return;
+      }
+      // GH-95: the view owns the sort state; the table's own sorted-column list survives
+      // rebinds (sap.ui.table.Table keeps it across bindRows) and would mix old sorters in.
+      oEvent.preventDefault();
+      this._oItemsViewState.sort = ItemsGridLayout.nextSort(this._oItemsViewState.sort,
+        ItemsGridLayout.columnKey(oEvent.getParameter("column")), oEvent.getParameter("sortOrder"), oEvent.getParameter("columnAdded"));
+      this._applyItemsGridSort();
+      this._setItemsViewModified();
+    },
+
+    // GH-95: a moved or resized column changes the view; the layout is read from the table on save.
+    onItemsGridColumnMove: function () {
+      this._setItemsViewModified();
+    },
+
+    onItemsGridColumnResize: function () {
+      this._setItemsViewModified();
+    },
+
+    // --- GH-95: Returns Items grid views (sap.m.VariantManagement) and the
+    // Columns/Sort dialog (sap.m.p13n.Popup). Views are stored per user in the
+    // Launchpad personalization service (VariantStore.loadAsync/saveAsync); the
+    // state lives in this._oItemsViewState (ItemsGridLayout) while column order and
+    // widths live on the table. Sort applies in Items display mode only. ---
+
+    // Once per Items fragment (grid only): Standard at once, then the stored views.
+    _initItemsViews: function (oTable) {
+      var that = this;
+      var oBundle = this.getResourceBundle();
+      this._oItemsDelivered = { columns: ItemsGridLayout.readColumns(oTable) };
+      // Frozen columns (fragment fixedColumnCount): always first and shown, not in the Columns tab.
+      this._aItemsFrozenKeys = ItemsGridLayout.frozenKeys(oTable, oTable.getFixedColumnCount());
+      this._oItemsViewState = ItemsGridLayout.normalizeState(null, this._oItemsDelivered, this._getItemsMandatoryKeys(), this._getItemsGridSortableKeys(),
+        this._aItemsFrozenKeys);
+      this._oItemsViewStore = ItemsGridLayout.emptyStore();
+      this._bItemsViewsLoaded = false;
+      this._refreshItemsViewsModel();
+      // The first _rebindItemsGroup already ran unsorted; a stored view with a sort costs one more GET.
+      this._pItemsViewsLoad = VariantStore.loadAsync(ItemsGridLayout.STORE_ITEM, this.getOwnerComponent()).then(function (vRaw) {
+        var oStore = ItemsGridLayout.normalizeStore(vRaw);
+        if (oStore === false) {
+          throw new Error("unreadable Items views");
+        }
+        that._oItemsViewStore = oStore || ItemsGridLayout.emptyStore();
+        that._bItemsViewsLoaded = true;
+        var bModified = that.getView().getModel("itemsViews").getProperty("/modified");
+        that._refreshItemsViewsModel(bModified ? undefined : ItemsGridLayout.initialKey(that._oItemsViewStore));
+        if (!bModified) {
+          that._applyItemsView(ItemsGridLayout.initialKey(that._oItemsViewStore));
+        }
+      }).catch(function () {
+        UserFeedback.reportError(MessageExtractor, oBundle.getText("itemsViewsLoadError"));
+      });
+    },
+
+    _getItemsMandatoryKeys: function () {
+      return this._getItemsColumnLayout().mandatory || [];
+    },
+
+    // Columns with a sort property that the order type shows (hidden by the view or not).
+    _getItemsGridSortableKeys: function () {
+      var oOrderUi = this.getView().getModel("orderUi").getData();
+      return Object.keys(ItemsTableAccess.SORT_PROPERTY_KEYS).filter(function (sKey) {
+        return !!this._getItemsGridSortPath(sKey) && OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
+      }, this);
+    },
+
+    _getItemsGridSortPath: function (sKey) {
+      var sSchemaKey = ItemsTableAccess.SORT_PROPERTY_KEYS[sKey];
+      return (sSchemaKey && ServiceSchema.itemProperties[sSchemaKey]) || "";
+    },
+
+    // Display mode on the Items table: the only state in which its rows may be sorted.
+    _isItemsGridDisplay: function (oBinding) {
+      var oFlags = this.getView().getModel("sectionFlags");
+      return !!oBinding && !oFlags.getProperty("/createMode") && !oFlags.getProperty("/items/editing") &&
+        oBinding.getUpdateGroupId() === ServiceSchema.editUpdateGroup && !oBinding.hasPendingChanges();
+    },
+
+    _setItemsGridSortIndicators: function (oTable, aSort) {
+      oTable.getColumns().forEach(function (oColumn) {
+        var oEntry = aSort.filter(function (oSort) { return oSort.key === ItemsGridLayout.columnKey(oColumn); })[0];
+        oColumn.setSortOrder(oEntry ? (oEntry.descending ? SortOrder.Descending : SortOrder.Ascending) : SortOrder.None);
+        // Deprecated, but the 1.136 header renderer still needs it for the sort icon.
+        oColumn.setSorted(!!oEntry);
+      });
+    },
+
+    _applyItemsGridSort: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!ItemsTableAccess.isGrid(oTable) || !this._oItemsViewState) {
+        return;
+      }
+      var oBinding = ItemsTableAccess.getBinding(oTable);
+      if (this._isItemsGridDisplay(oBinding)) {
+        var sSort = JSON.stringify(this._oItemsViewState.sort);
+        // Skip a sort the binding already has (each sort() is a new GET).
+        if (oBinding !== this._oItemsSortedBinding || sSort !== this._sItemsSortApplied) {
+          oBinding.sort(ItemsGridLayout.toSorters(this._oItemsViewState.sort, this._getItemsGridSortPath.bind(this)));
+          this._oItemsSortedBinding = oBinding;
+          this._sItemsSortApplied = sSort;
+        }
+        this._setItemsGridSortIndicators(oTable, this._oItemsViewState.sort);
+      } else {
+        this._setItemsGridSortIndicators(oTable, []);
+      }
+    },
+
+    _applyItemsView: function (sKey) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oView = sKey === ItemsGridLayout.STANDARD_KEY ? null : this._oItemsViewStore.views.filter(function (oCandidate) {
+        return oCandidate.key === sKey;
+      })[0];
+      var sApplied = oView ? sKey : ItemsGridLayout.STANDARD_KEY;
+      this._oItemsViewState = ItemsGridLayout.normalizeState(oView && oView.state, this._oItemsDelivered,
+        this._getItemsMandatoryKeys(), this._getItemsGridSortableKeys(), this._aItemsFrozenKeys);
+      ItemsGridLayout.applyColumns(oTable, this._oItemsViewState.columns);
+      this.getView().getModel("itemsColumns").setData(this._getItemsColumnVisibility());
+      this._applyItemsGridSort();
+      var oModel = this.getView().getModel("itemsViews");
+      oModel.setProperty("/selectedKey", sApplied);
+      oModel.setProperty("/modified", false);
+    },
+
+    // Rebuilds the view list; sSelectedKey only when given.
+    _refreshItemsViewsModel: function (sSelectedKey) {
+      var oModel = this.getView().getModel("itemsViews");
+      var oStore = this._oItemsViewStore;
+      oModel.setProperty("/items", ItemsGridLayout.vmItems(oStore, this.getResourceBundle().getText("standardVariant")));
+      oModel.setProperty("/defaultKey", oStore.defaultKey || ItemsGridLayout.STANDARD_KEY);
+      if (sSelectedKey) {
+        oModel.setProperty("/selectedKey", sSelectedKey);
+      }
+    },
+
+    _setItemsViewModified: function () {
+      this.getView().getModel("itemsViews").setProperty("/modified", true);
+    },
+
+    _captureItemsViewState: function () {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      return {
+        columns: ItemsGridLayout.readColumns(oTable),
+        visible: Object.assign({}, this._oItemsViewState.visible),
+        sort: this._oItemsViewState.sort.map(function (oEntry) { return Object.assign({}, oEntry); })
+      };
+    },
+
+    onItemsViewSelect: function (oEvent) {
+      var sKey = oEvent.getParameter("key");
+      this._pItemsViewsLoad.then(function () {
+        // Unsaved changes of the previous view are dropped (standard VariantManagement behaviour).
+        this._applyItemsView(sKey);
+        this._oItemsViewStore.lastSelectedKey = this.getView().getModel("itemsViews").getProperty("/selectedKey");
+        this._saveItemsViews();
+      }.bind(this));
+    },
+
+    onItemsViewSave: function (oEvent) {
+      var bOverwrite = oEvent.getParameter("overwrite");
+      var sKey = oEvent.getParameter("key");
+      var sName = (oEvent.getParameter("name") || "").trim();
+      var bDefault = oEvent.getParameter("def");
+      this._pItemsViewsLoad.then(function () {
+        var oStore = this._oItemsViewStore;
+        var oState = this._captureItemsViewState();
+        var oExisting = bOverwrite && oStore.views.filter(function (oView) { return oView.key === sKey; })[0];
+        if (oExisting) {
+          oExisting.state = oState;
+        } else {
+          sKey = ItemsGridLayout.newKey(oStore);
+          oStore.views.push({ key: sKey, title: sName, state: oState });
+        }
+        if (bDefault) {
+          oStore.defaultKey = sKey;
+        }
+        oStore.lastSelectedKey = sKey;
+        this._refreshItemsViewsModel(sKey);
+        this.getView().getModel("itemsViews").setProperty("/modified", false);
+        this._saveItemsViews();
+      }.bind(this));
+    },
+
+    onItemsViewManage: function (oEvent) {
+      var aRenamed = oEvent.getParameter("renamed") || [];
+      var aDeleted = oEvent.getParameter("deleted") || [];
+      var sDefault = oEvent.getParameter("def");
+      this._pItemsViewsLoad.then(function () {
+        var oStore = this._oItemsViewStore;
+        var sSelected = this.getView().getModel("itemsViews").getProperty("/selectedKey");
+        aRenamed.forEach(function (oRename) {
+          oStore.views.forEach(function (oView) {
+            if (oView.key === oRename.key && oRename.name) {
+              oView.title = oRename.name;
+            }
+          });
+        });
+        oStore.views = oStore.views.filter(function (oView) { return aDeleted.indexOf(oView.key) === -1; });
+        if (sDefault) {
+          oStore.defaultKey = sDefault;
+        }
+        if (aDeleted.indexOf(oStore.defaultKey) !== -1) {
+          oStore.defaultKey = null;
+        }
+        if (aDeleted.indexOf(oStore.lastSelectedKey) !== -1) {
+          oStore.lastSelectedKey = null;
+        }
+        this._refreshItemsViewsModel();
+        if (aDeleted.indexOf(sSelected) !== -1) {
+          this._applyItemsView(ItemsGridLayout.STANDARD_KEY);
+        }
+        this._saveItemsViews();
+      }.bind(this));
+    },
+
+    // After a failed load nothing is written, so stored views are never overwritten by a partial list.
+    _saveItemsViews: function () {
+      var that = this;
+      if (!this._bItemsViewsLoaded) {
+        return;
+      }
+      VariantStore.saveAsync(ItemsGridLayout.STORE_ITEM, this._oItemsViewStore, this.getOwnerComponent()).catch(function () {
+        UserFeedback.reportError(MessageExtractor, that.getResourceBundle().getText("itemsViewsSaveError"), that._openMessagePopover.bind(that));
+      });
+    },
+
+    onItemsGridPersonalize: function (oEvent) {
+      var oTable = this._byIdInSection("items", "itemsTable");
+      if (!this._oItemsViewState || !oTable) {
+        return;
+      }
+      var oBundle = this.getResourceBundle();
+      var aMandatory = this._getItemsMandatoryKeys();
+      var aFrozen = this._aItemsFrozenKeys || [];
+      var fnLabel = this._getItemsColumnLabel.bind(this);
+      if (!this._oItemsP13nPopup) {
+        this._oItemsSelectionPanel = new SelectionPanel({
+          title: oBundle.getText("p13nSelectionPanelTitle"),
+          enableCount: true,
+          change: this._onItemsSelectionChange.bind(this)
+        });
+        this._oItemsSelectionPanel.setMessageStrip(new MessageStrip({
+          type: "Information",
+          showIcon: true,
+          text: oBundle.getText("itemsColumnsMandatoryNote", [aMandatory.filter(function (sKey) {
+            return aFrozen.indexOf(sKey) === -1;
+          }).map(fnLabel).join(", ")])
+        }));
+        this._oItemsSortPanel = new SortPanel({ title: oBundle.getText("p13nSortPanelTitle") });
+        this._oItemsP13nPopup = new P13nPopup({
+          title: oBundle.getText("p13nDialogTitle"),
+          panels: [this._oItemsSelectionPanel, this._oItemsSortPanel],
+          close: this._onItemsP13nClose.bind(this)
+        });
+        this.getView().addDependent(this._oItemsP13nPopup);
+      }
+      // Sort only in Items display mode (owner Q9).
+      var oFlags = this.getView().getModel("sectionFlags");
+      var bSort = !oFlags.getProperty("/createMode") && !oFlags.getProperty("/items/editing");
+      var bHasSort = this._oItemsP13nPopup.getPanels().indexOf(this._oItemsSortPanel) !== -1;
+      if (bSort && !bHasSort) {
+        this._oItemsP13nPopup.addPanel(this._oItemsSortPanel);
+      } else if (!bSort && bHasSort) {
+        this._oItemsP13nPopup.removePanel(this._oItemsSortPanel);
+      }
+      this._oItemsSelectionPanel.setP13nData(ItemsGridLayout.selectionItems(this._getItemsOfferedKeys(oTable),
+        this._oItemsViewState.visible, aMandatory, fnLabel));
+      if (bSort) {
+        this._oItemsSortPanel.setP13nData(ItemsGridLayout.sortItems(this._getItemsGridSortableKeys(), this._oItemsViewState.sort, fnLabel));
+      }
+      this._oItemsP13nPopup.open(oEvent.getSource());
+    },
+
+    // Table columns (current order) that the order type shows, without the frozen ones.
+    _getItemsOfferedKeys: function (oTable) {
+      var oOrderUi = this.getView().getModel("orderUi").getData();
+      var aFrozen = this._aItemsFrozenKeys || [];
+      return ItemsGridLayout.readColumns(oTable).map(function (oEntry) { return oEntry.key; }).filter(function (sKey) {
+        return aFrozen.indexOf(sKey) === -1 && OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
+      });
+    },
+
+    // Mandatory columns cannot be unchecked (the p13n item has no lock flag): re-check them at once.
+    _onItemsSelectionChange: function (oEvent) {
+      var sReason = oEvent.getParameter("reason");
+      var vItem = oEvent.getParameter("item");
+      var aMandatory = this._getItemsMandatoryKeys();
+      var bMandatoryRemoved = sReason === "Remove" && vItem && aMandatory.indexOf(vItem.name) !== -1;
+      if (!bMandatoryRemoved && sReason !== "DeselectAll") {
+        return;
+      }
+      var oPanel = this._oItemsSelectionPanel;
+      Promise.resolve().then(function () {
+        oPanel.setP13nData(oPanel.getP13nData().map(function (oItem) {
+          return Object.assign({}, oItem, { visible: oItem.visible || aMandatory.indexOf(oItem.name) !== -1 });
+        }));
+      });
+    },
+
+    _onItemsP13nClose: function (oEvent) {
+      if (oEvent.getParameter("reason") !== "Ok") {
+        return;
+      }
+      var oTable = this._byIdInSection("items", "itemsTable");
+      var oOld = this._oItemsViewState;
+      var aMandatory = this._getItemsMandatoryKeys();
+      var aSelection = this._oItemsSelectionPanel.getP13nData();
+      var aOfferedKeys = aSelection.map(function (oItem) { return oItem.name; });
+      var aFrozen = this._aItemsFrozenKeys || [];
+      var aCurrent = ItemsGridLayout.readColumns(oTable);
+      var aColumns = aFrozen.concat(aOfferedKeys, aCurrent.map(function (oEntry) { return oEntry.key; }).filter(function (sKey) {
+        return aOfferedKeys.indexOf(sKey) === -1 && aFrozen.indexOf(sKey) === -1;
+      })).map(function (sKey) {
+        return { key: sKey, width: aCurrent.filter(function (oEntry) { return oEntry.key === sKey; })[0].width };
+      });
+      var oVisible = Object.assign({}, oOld.visible);
+      aSelection.forEach(function (oItem) {
+        oVisible[oItem.name] = oItem.visible || aMandatory.indexOf(oItem.name) !== -1;
+      });
+      var aSort = oOld.sort;
+      if (this._oItemsP13nPopup.getPanels().indexOf(this._oItemsSortPanel) !== -1) {
+        aSort = this._oItemsSortPanel.getP13nData(true).map(function (oItem) {
+          return { key: oItem.name, descending: !!oItem.descending };
+        });
+      }
+      var oNew = ItemsGridLayout.normalizeState({ columns: aColumns, visible: oVisible, sort: aSort }, this._oItemsDelivered,
+        aMandatory, this._getItemsGridSortableKeys(), aFrozen);
+      var fnComparable = function (oState) {
+        return JSON.stringify({ keys: oState.columns.map(function (oEntry) { return oEntry.key; }), visible: oState.visible, sort: oState.sort });
+      };
+      if (fnComparable(oNew) === fnComparable(oOld)) {
+        return;
+      }
+      var bSortChanged = JSON.stringify(oNew.sort) !== JSON.stringify(oOld.sort);
+      this._oItemsViewState = oNew;
+      ItemsGridLayout.applyColumns(oTable, oNew.columns);
+      this.getView().getModel("itemsColumns").setData(this._getItemsColumnVisibility());
+      if (bSortChanged) {
+        this._applyItemsGridSort();
+      }
+      this._setItemsViewModified();
     },
 
     // Returns grid Items table: visible rows follow the item count (1..ITEMS_GRID_MAX_ROWS).
@@ -4904,6 +5257,14 @@ sap.ui.define([
           return aAll.indexOf(sName) === iIndex;
         });
       }
+      var bGridDisplaySort = bGrid && sGroupId === ServiceSchema.editUpdateGroup &&
+        !this.getView().getModel("sectionFlags").getProperty("/createMode") && !!this._oItemsViewState;
+      if (bGrid) {
+        // GH-95: the Items view's sort, display mode only (owner Q9); always assigned so it never sticks.
+        oBindingInfo.sorter = bGridDisplaySort
+          ? ItemsGridLayout.toSorters(this._oItemsViewState.sort, this._getItemsGridSortPath.bind(this))
+          : undefined;
+      }
       oBindingInfo.parameters = Object.assign({}, oBindingInfo.parameters, { $$updateGroupId: sGroupId, $$ownRequest: true, $$patchWithoutSideEffects: true, $select: aSelect.join(",") });
       ItemsTableAccess.bind(oTable, oBindingInfo);
       // bind() always creates a fresh binding instance - re-attach here
@@ -4913,12 +5274,10 @@ sap.ui.define([
         oNewBinding.attachCreateActivate(this._onItemCreateActivate, this);
       }
       if (bGrid) {
-        // The fresh binding is unsorted - clear the columns' sort indicators to match.
-        oTable.getColumns().forEach(function (oColumn) {
-          oColumn.setSortOrder(SortOrder.None);
-          // Deprecated, but the 1.136 header renderer still needs it for the sort icon.
-          oColumn.setSorted(false);
-        });
+        // The fresh binding carries the view's sort in display mode, else none - indicators to match.
+        this._oItemsSortedBinding = oNewBinding;
+        this._sItemsSortApplied = JSON.stringify(bGridDisplaySort ? this._oItemsViewState.sort : []);
+        this._setItemsGridSortIndicators(oTable, bGridDisplaySort ? this._oItemsViewState.sort : []);
       }
     },
 
@@ -4974,6 +5333,7 @@ sap.ui.define([
           oItemsTable.addEventDelegate({ onpaste: this.onItemsCellPaste }, this);
           if (ItemsTableAccess.isGrid(oItemsTable)) {
             this._applyItemsGridSortProperties(oItemsTable);
+            this._initItemsViews(oItemsTable);
           } else {
             // GH-71: re-measure when the panel shows the table again (gate opened, end of an expand/collapse animation).
             oItemsTable.addEventDelegate({
