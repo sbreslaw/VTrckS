@@ -51,6 +51,12 @@ sap.ui.define([
       var oGrid = oReturns.getElementsByTagNameNS("sap.ui.table", "Table")[0];
       assert.strictEqual(oGrid && oGrid.getAttribute("columnMove"), ".onItemsGridColumnMove", "Returns: columnMove handler");
       assert.strictEqual(oGrid && oGrid.getAttribute("columnResize"), ".onItemsGridColumnResize", "Returns: columnResize handler");
+      // Owner 2026-11-19: Action, Item Number and NDC Code are frozen.
+      assert.strictEqual(oGrid && oGrid.getAttribute("fixedColumnCount"), "3", "Returns: three frozen columns");
+      var aFirstKeys = Array.prototype.slice.call(oReturns.getElementsByTagNameNS("sap.ui.table", "Column"), 0, 3).map(function (oColumn) {
+        return oColumn.getAttribute("visible");
+      });
+      assert.deepEqual(aFirstKeys, ["{itemsColumns>/rowAction}", "{itemsColumns>/itemNumber}", "{itemsColumns>/ndcCode}"], "Returns: the frozen columns are Action, Item Number, NDC Code");
     });
   });
 
@@ -88,6 +94,9 @@ sap.ui.define([
       assert.strictEqual(oResult.qty, true, "returns view: mandatory Quantity stays visible");
       assert.strictEqual(oResult.lotNumber, false, "returns view: the order type's hidden flag wins");
       assert.strictEqual(oResult.itemNumber, true, "returns view: other columns visible");
+      var oFrozen = stub(oReturns, { visible: { itemNumber: false } });
+      oFrozen._aItemsFrozenKeys = ["rowAction", "itemNumber", "ndcCode"];
+      assert.strictEqual(Detail.prototype._getItemsColumnVisibility.call(oFrozen).itemNumber, true, "returns view: frozen Item Number stays visible");
     }).finally(function () {
       VariantStore.load = fnLoad;
     });

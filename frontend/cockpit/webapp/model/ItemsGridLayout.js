@@ -21,6 +21,11 @@ sap.ui.define([
     });
   }
 
+  // Keys of the grid's first iCount columns (its fixedColumnCount).
+  function frozenKeys(oTable, iCount) {
+    return readColumns(oTable).slice(0, Math.max(0, iCount || 0)).map(function (oEntry) { return oEntry.key; });
+  }
+
   // Listed keys first, in the given order; columns not listed keep their relative order after them.
   function applyColumns(oTable, aColumns) {
     var iTarget = 0;
@@ -46,7 +51,9 @@ sap.ui.define([
   }
 
   // A complete state against the delivered columns; null = Standard (delivered, all visible, no sort).
-  function normalizeState(oState, oDelivered, aMandatory, aSortableKeys) {
+  // Frozen keys (the grid's fixed columns) stay first in delivered order and are always visible.
+  function normalizeState(oState, oDelivered, aMandatory, aSortableKeys, aFrozenKeys) {
+    var aFrozen = aFrozenKeys || [];
     var aDelivered = oDelivered.columns;
     var aDeliveredKeys = aDelivered.map(function (oEntry) { return oEntry.key; });
     var oSource = isObject(oState) ? oState : {};
@@ -63,10 +70,14 @@ sap.ui.define([
         aColumns.splice(Math.min(iIndex, aColumns.length), 0, { key: oEntry.key, width: oEntry.width });
       }
     });
+    var aPinned = aDeliveredKeys.filter(function (sKey) { return aFrozen.indexOf(sKey) !== -1; }).map(function (sKey) {
+      return aColumns.filter(function (oEntry) { return oEntry.key === sKey; })[0];
+    });
+    aColumns = aPinned.concat(aColumns.filter(function (oEntry) { return aFrozen.indexOf(oEntry.key) === -1; }));
     var oVisibleIn = isObject(oSource.visible) ? oSource.visible : {};
     var oVisible = {};
     aDeliveredKeys.forEach(function (sKey) {
-      oVisible[sKey] = aMandatory.indexOf(sKey) !== -1 || oVisibleIn[sKey] !== false;
+      oVisible[sKey] = aMandatory.indexOf(sKey) !== -1 || aFrozen.indexOf(sKey) !== -1 || oVisibleIn[sKey] !== false;
     });
     var aSort = [];
     (Array.isArray(oSource.sort) ? oSource.sort : []).forEach(function (oEntry) {
@@ -187,6 +198,7 @@ sap.ui.define([
     STORE_ITEM: "itemsGridViews",
     columnKey: columnKey,
     readColumns: readColumns,
+    frozenKeys: frozenKeys,
     applyColumns: applyColumns,
     normalizeState: normalizeState,
     visibility: visibility,

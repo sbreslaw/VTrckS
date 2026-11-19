@@ -70,6 +70,18 @@ sap.ui.define([
     assert.deepEqual(oState.sort, [{ key: "c", descending: true }, { key: "b", descending: false }], "a unsortable, duplicate c dropped");
   });
 
+  QUnit.test("normalizeState: frozen columns stay first, in delivered order, and visible (owner 2026-11-19)", function (assert) {
+    var oState = ItemsGridLayout.normalizeState({
+      columns: [{ key: "c", width: "" }, { key: "b", width: "300px" }, { key: "d", width: "5%" }, { key: "a", width: "10%" }],
+      visible: { a: false, b: false, c: false }
+    }, DELIVERED, [], ["b", "c"], ["a", "b"]);
+    assert.deepEqual(oState.columns.map(function (o) { return o.key; }), ["a", "b", "c", "d"], "a, b pinned first");
+    assert.strictEqual(oState.columns[1].width, "300px", "a frozen column keeps its stored width");
+    assert.deepEqual(oState.visible, { a: true, b: true, c: false, d: true }, "frozen forced visible");
+    assert.deepEqual(ItemsGridLayout.frozenKeys(fakeTable([["a", "1%"], ["b", "2%"], ["c", "3%"]]), 2), ["a", "b"], "frozenKeys = first N columns");
+    assert.deepEqual(ItemsGridLayout.frozenKeys(fakeTable([["a", "1%"]]), 0), [], "no frozen columns");
+  });
+
   QUnit.test("visibility: order-type flag beats the view, mandatory beats the view", function (assert) {
     var fnType = function (sKey) { return sKey !== "d"; };
     assert.deepEqual(ItemsGridLayout.visibility(["a", "b", "c", "d"], fnType, null, ["a"]), { a: true, b: true, c: true, d: false }, "no view");

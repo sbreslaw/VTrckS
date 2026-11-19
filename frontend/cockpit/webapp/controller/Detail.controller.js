@@ -387,7 +387,7 @@ sap.ui.define([
       var oViewState = this._oItemsViewState;
       return ItemsGridLayout.visibility(oLayout.keys, function (sKey) {
         return OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
-      }, oViewState && oViewState.visible, oLayout.mandatory || []);
+      }, oViewState && oViewState.visible, (oLayout.mandatory || []).concat(this._aItemsFrozenKeys || []));
     },
 
     // The on-screen header text of an Items column (GH-82: the reason column carries the order-type tag).
@@ -1414,7 +1414,10 @@ sap.ui.define([
       var that = this;
       var oBundle = this.getResourceBundle();
       this._oItemsDelivered = { columns: ItemsGridLayout.readColumns(oTable) };
-      this._oItemsViewState = ItemsGridLayout.normalizeState(null, this._oItemsDelivered, this._getItemsMandatoryKeys(), this._getItemsGridSortableKeys());
+      // Frozen columns (fragment fixedColumnCount): always first and shown, not in the Columns tab.
+      this._aItemsFrozenKeys = ItemsGridLayout.frozenKeys(oTable, oTable.getFixedColumnCount());
+      this._oItemsViewState = ItemsGridLayout.normalizeState(null, this._oItemsDelivered, this._getItemsMandatoryKeys(), this._getItemsGridSortableKeys(),
+        this._aItemsFrozenKeys);
       this._oItemsViewStore = ItemsGridLayout.emptyStore();
       this._bItemsViewsLoaded = false;
       this._refreshItemsViewsModel();
@@ -1496,7 +1499,7 @@ sap.ui.define([
       })[0];
       var sApplied = oView ? sKey : ItemsGridLayout.STANDARD_KEY;
       this._oItemsViewState = ItemsGridLayout.normalizeState(oView && oView.state, this._oItemsDelivered,
-        this._getItemsMandatoryKeys(), this._getItemsGridSortableKeys());
+        this._getItemsMandatoryKeys(), this._getItemsGridSortableKeys(), this._aItemsFrozenKeys);
       ItemsGridLayout.applyColumns(oTable, this._oItemsViewState.columns);
       this.getView().getModel("itemsColumns").setData(this._getItemsColumnVisibility());
       this._applyItemsGridSort();
@@ -1614,6 +1617,7 @@ sap.ui.define([
       }
       var oBundle = this.getResourceBundle();
       var aMandatory = this._getItemsMandatoryKeys();
+      var aFrozen = this._aItemsFrozenKeys || [];
       var fnLabel = this._getItemsColumnLabel.bind(this);
       if (!this._oItemsP13nPopup) {
         this._oItemsSelectionPanel = new SelectionPanel({
@@ -1624,7 +1628,9 @@ sap.ui.define([
         this._oItemsSelectionPanel.setMessageStrip(new MessageStrip({
           type: "Information",
           showIcon: true,
-          text: oBundle.getText("itemsColumnsMandatoryNote", [aMandatory.map(fnLabel).join(", ")])
+          text: oBundle.getText("itemsColumnsMandatoryNote", [aMandatory.filter(function (sKey) {
+            return aFrozen.indexOf(sKey) === -1;
+          }).map(fnLabel).join(", ")])
         }));
         this._oItemsSortPanel = new SortPanel({ title: oBundle.getText("p13nSortPanelTitle") });
         this._oItemsP13nPopup = new P13nPopup({
@@ -1651,11 +1657,12 @@ sap.ui.define([
       this._oItemsP13nPopup.open(oEvent.getSource());
     },
 
-    // Table columns (current order) that the order type shows.
+    // Table columns (current order) that the order type shows, without the frozen ones.
     _getItemsOfferedKeys: function (oTable) {
       var oOrderUi = this.getView().getModel("orderUi").getData();
+      var aFrozen = this._aItemsFrozenKeys || [];
       return ItemsGridLayout.readColumns(oTable).map(function (oEntry) { return oEntry.key; }).filter(function (sKey) {
-        return OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
+        return aFrozen.indexOf(sKey) === -1 && OrderModeConfig.uiFlag(oOrderUi, "columns", sKey, "visible");
       });
     },
 
@@ -1685,9 +1692,10 @@ sap.ui.define([
       var aMandatory = this._getItemsMandatoryKeys();
       var aSelection = this._oItemsSelectionPanel.getP13nData();
       var aOfferedKeys = aSelection.map(function (oItem) { return oItem.name; });
+      var aFrozen = this._aItemsFrozenKeys || [];
       var aCurrent = ItemsGridLayout.readColumns(oTable);
-      var aColumns = aOfferedKeys.concat(aCurrent.map(function (oEntry) { return oEntry.key; }).filter(function (sKey) {
-        return aOfferedKeys.indexOf(sKey) === -1;
+      var aColumns = aFrozen.concat(aOfferedKeys, aCurrent.map(function (oEntry) { return oEntry.key; }).filter(function (sKey) {
+        return aOfferedKeys.indexOf(sKey) === -1 && aFrozen.indexOf(sKey) === -1;
       })).map(function (sKey) {
         return { key: sKey, width: aCurrent.filter(function (oEntry) { return oEntry.key === sKey; })[0].width };
       });
@@ -1702,7 +1710,7 @@ sap.ui.define([
         });
       }
       var oNew = ItemsGridLayout.normalizeState({ columns: aColumns, visible: oVisible, sort: aSort }, this._oItemsDelivered,
-        aMandatory, this._getItemsGridSortableKeys());
+        aMandatory, this._getItemsGridSortableKeys(), aFrozen);
       var fnComparable = function (oState) {
         return JSON.stringify({ keys: oState.columns.map(function (oEntry) { return oEntry.key; }), visible: oState.visible, sort: oState.sort });
       };

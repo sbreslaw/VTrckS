@@ -43,9 +43,11 @@
     </OverflowToolbar>
     <VBox id="itemsViewport" class="detailItemsViewport">
     <t:Table id="itemsTable" width="100%" rows="{_Item}" class="detailItemsTable detailItemsGrid"
-      selectionMode="None" enableColumnReordering="true"
+      selectionMode="None" enableColumnReordering="true" fixedColumnCount="3"
       sort=".onItemsGridSort" rowsUpdated=".onItemsGridRowsUpdated"
       columnMove=".onItemsGridColumnMove" columnResize=".onItemsGridColumnResize">
+    <!-- GH-95 (code owner 2026-11-19): Action, Item Number and NDC Code are frozen (fixedColumnCount);
+         the grid keeps them first, they are always shown and not listed in the Columns tab of Personalize. -->
     <!-- Column widths are % so the table fits its container; NDC Description has no width
          and takes the remaining space. A user resize sets px (sap.ui.table.Column width). -->
     <!-- optOut (ZZ1_SKIPADDANC_SDI), orderIntention/fundType (MaterialGroup1/2) and
