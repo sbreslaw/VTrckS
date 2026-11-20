@@ -48,13 +48,15 @@ sap.ui.define([
   "cdc/vaccreq/service/ProviderSearchService",
   "cdc/vaccreq/util/ValueHelpTableFitter",
   "cdc/vaccreq/util/FilterValue",
-  "cdc/vaccreq/util/UserFeedback"
+  "cdc/vaccreq/util/UserFeedback",
+  "cdc/vaccreq/util/ConditionValueCheck"
 ], function (
   Controller, Filter, FilterOperator, Sorter, JSONModel, StringType, Element, Item, InvisibleText, ResizeHandler, GridTable, Column, AutoRowMode, Text, Link,
   Dialog, Button, BusyIndicator, Input, Select, List, MColumn, ColumnListItem, CustomListItem, HBox, MessageToast, MessageBox, MenuItem, SearchField, Token, mLibrary,
   P13nPopup, SelectionPanel, SortPanel, GroupPanel, EventBus, coreLibrary,
   ValueHelpDialog, FilterBar, FilterGroupItem, compLibrary, Spreadsheet,
-  formatter, ServiceSchema, StatusValueHelp, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue, UserFeedback
+  formatter, ServiceSchema, StatusValueHelp, VariantStore, ProviderSearchService, ValueHelpTableFitter, FilterValue, UserFeedback,
+  ConditionValueCheck
 ) {
   "use strict";
 
@@ -243,6 +245,15 @@ sap.ui.define([
       if (oConfig.loadSuggestions) {
         oInput.setModel(new JSONModel({ rows: [] }), oConfig.suggestionModelName);
       }
+      this._addSuggestionColumns(oInput, oBundle);
+      oInput.attachSuggest(this.onFilterSuggest, this);
+      oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+    },
+
+    // Tabular type-ahead from the input's "suggestionConfig" (rows bound by onFilterSuggest);
+    // the key is the first column, so a picked row puts the key into the input.
+    _addSuggestionColumns: function (oInput, oBundle) {
+      var oConfig = oInput.data("suggestionConfig");
       oInput.setShowSuggestion(true);
       oInput.setFilterSuggests(false);
       oInput.setStartSuggestion(1);
@@ -252,8 +263,51 @@ sap.ui.define([
       oInput.addSuggestionColumn(new MColumn({
         header: new Text({ text: oBundle.getText(oConfig.descriptionLabel) })
       }));
-      oInput.attachSuggest(this.onFilterSuggest, this);
-      oInput.attachSuggestionItemSelected(this.onFilterSuggestionSelected, this);
+    },
+
+    // GH-99: Define Conditions value fields offer the filter field's type-ahead list and
+    // accept only keys from it. oValueList: { suggestionConfig (the filter field's, e.g.
+    // CustomerSalesArea on the lookup model), notFoundKey, invalidKey, checkFailedKey }.
+    _createConditionValueCheck: function (oInput, oValueList) {
+      var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+      var oList = oValueList.suggestionConfig;
+      var oModel = this.getOwnerComponent().getModel(oList.modelName || undefined);
+      return ConditionValueCheck.create({
+        // Tokens picked from the list (type-ahead or table) carry their key in displayValue.
+        knownValues: oInput.getTokens().map(function (oToken) {
+          var oRange = oToken.data("range");
+          return oRange && oRange.displayValue ? oRange.value1 : null;
+        }),
+        lookup: function (aValues) {
+          return Promise.all(aValues.map(function (sValue) {
+            var oBinding = oModel.bindList("/" + oList.entitySet, undefined, undefined,
+              [new Filter(oList.key, FilterOperator.EQ, sValue)], { $select: oList.key });
+            return oBinding.requestContexts(0, 1).finally(function () {
+              oBinding.destroy();
+            });
+          })).then(function (aResults) {
+            var mFound = {};
+            aResults.forEach(function (aContexts, iIndex) {
+              if (aContexts[0]) {
+                mFound[aValues[iIndex]] = aContexts[0].getProperty(oList.key);
+              }
+            });
+            return mFound;
+          });
+        },
+        configureInput: function (oValueInput) {
+          oValueInput.data("suggestionConfig", oList);
+          this._addSuggestionColumns(oValueInput, oBundle);
+          oValueInput.attachSuggest(this.onFilterSuggest, this);
+          return function () {
+            oValueInput.detachSuggest(this.onFilterSuggest, this);
+          }.bind(this);
+        }.bind(this),
+        notFoundText: function (sValue) {
+          return oBundle.getText(oValueList.notFoundKey, [sValue]);
+        },
+        checkFailedText: oBundle.getText(oValueList.checkFailedKey)
+      });
     },
 
     // D-1171: the same value list as F3893's Created By filter - CreatedByUser's
@@ -595,6 +649,35 @@ sap.ui.define([
         });
       };
       fnSetColumns(oInitialSearchMode ? oInitialSearchMode.columns : oConfig.columns);
+      var oConditionCheck = oConfig.conditionValueList && oConfig.conditionValueList.suggestionConfig
+        ? this._createConditionValueCheck(oInput, oConfig.conditionValueList) : null;
+      var fnTakeOverTokens = function (aTokens) {
+        var mFilterValues = {};
+        oTable.getSelectedIndices().forEach(function (iIndex) {
+          var oContext = oTable.getContextByIndex(iIndex);
+          if (oContext && oConfig.filterValueKey) {
+            mFilterValues[oContext.getProperty(oConfig.key)] = oContext.getProperty(oConfig.filterValueKey);
+          }
+        });
+        oInput.removeAllTokens();
+        aTokens.forEach(function (oToken, iIndex) {
+          var oExistingRange = oToken.data("range");
+          if (oExistingRange) {
+            oInput.addToken(that._createConditionToken(oExistingRange, iIndex));
+            return;
+          }
+          var sDisplayValue = oToken.getKey() || oToken.data("longKey");
+          var oRange = {
+            exclude: false,
+            operation: RangeOperation.EQ,
+            value1: mFilterValues[sDisplayValue] || sDisplayValue,
+            displayValue: sDisplayValue
+          };
+          oInput.addToken(that._createConditionToken(oRange, iIndex));
+        });
+        oInput.setValue("");
+        oDialog.close();
+      };
       var oDialog = new ValueHelpDialog({
         title: oConfig.title,
         contentWidth: oConfig.contentWidth || "66rem",
@@ -607,31 +690,31 @@ sap.ui.define([
         supportRanges: oConfig.supportRanges !== false,
         supportRangesOnly: false,
         ok: function (oOkEvent) {
-          var mFilterValues = {};
-          oTable.getSelectedIndices().forEach(function (iIndex) {
-            var oContext = oTable.getContextByIndex(iIndex);
-            if (oContext && oConfig.filterValueKey) {
-              mFilterValues[oContext.getProperty(oConfig.key)] = oContext.getProperty(oConfig.filterValueKey);
-            }
+          var aTokens = oOkEvent.getParameter("tokens");
+          if (!oConditionCheck) {
+            fnTakeOverTokens(aTokens);
+            return;
+          }
+          var aRangeTokens = aTokens.filter(function (oToken) {
+            return !!oToken.data("range");
           });
-          oInput.removeAllTokens();
-          oOkEvent.getParameter("tokens").forEach(function (oToken, iIndex) {
-            var oExistingRange = oToken.data("range");
-            if (oExistingRange) {
-              oInput.addToken(that._createConditionToken(oExistingRange, iIndex));
+          oDialog.setBusy(true);
+          oConditionCheck.checkRanges(aRangeTokens.map(function (oToken) {
+            return oToken.data("range");
+          })).then(function (oResult) {
+            oDialog.setBusy(false);
+            if (oResult.invalid.length) {
+              MessageBox.error(oBundle.getText(oConfig.conditionValueList.invalidKey, [oResult.invalid.join(", ")]));
               return;
             }
-            var sDisplayValue = oToken.getKey() || oToken.data("longKey");
-            var oRange = {
-              exclude: false,
-              operation: RangeOperation.EQ,
-              value1: mFilterValues[sDisplayValue] || sDisplayValue,
-              displayValue: sDisplayValue
-            };
-            oInput.addToken(that._createConditionToken(oRange, iIndex));
+            aRangeTokens.forEach(function (oToken, iIndex) {
+              oToken.data("range", oResult.ranges[iIndex]);
+            });
+            fnTakeOverTokens(aTokens);
+          }, function () {
+            oDialog.setBusy(false);
+            MessageBox.error(oBundle.getText(oConfig.conditionValueList.checkFailedKey));
           });
-          oInput.setValue("");
-          oDialog.close();
         },
         cancel: function () {
           oDialog.close();
@@ -762,6 +845,9 @@ sap.ui.define([
       oDialog.setFilterBar(oFilterBar);
       oDialog.setTable(oTable);
       oDialog.setRangeKeyFields([{ label: oConfig.title, key: oConfig.key, type: "string" }]);
+      if (oConditionCheck) {
+        oConditionCheck.attachTo(oDialog);
+      }
       oDialog.setIncludeRangeOperations(CONDITION_OPERATIONS);
       oDialog.setExcludeRangeOperations(CONDITION_OPERATIONS);
       oDialog.setTokens(oInput.getTokens().map(function (oToken) { return oToken.clone(); }));
@@ -1254,6 +1340,12 @@ sap.ui.define([
         fitTableRows: true,
         styleClass: "providerValueHelpDialog",
         loadErrorKey: "providerSearchLoadError",
+        conditionValueList: {
+          suggestionConfig: this.byId("filterProvider").data("suggestionConfig"),
+          notFoundKey: "providerConditionNotFound",
+          invalidKey: "providerConditionsInvalid",
+          checkFailedKey: "providerConditionCheckFailed"
+        },
         key: oProps.customer,
         descriptionKey: oProps.customerName,
         select: [oProps.customer, oProps.customerName, oProps.postalCode, oProps.cityName, oProps.countryText],
