@@ -282,14 +282,20 @@ sap.ui.define([
           return Promise.all(aValues.map(function (sValue) {
             var oBinding = oModel.bindList("/" + oList.entitySet, undefined, undefined,
               [new Filter(oList.key, FilterOperator.EQ, sValue)], { $select: oList.key });
-            return oBinding.requestContexts(0, 1).finally(function () {
+            // Read the key before destroy(): a destroyed binding's contexts can no longer be read.
+            return oBinding.requestContexts(0, 1).then(function (aContexts) {
+              var sKey = aContexts[0] ? aContexts[0].getProperty(oList.key) : null;
               oBinding.destroy();
+              return sKey;
+            }, function (oError) {
+              oBinding.destroy();
+              throw oError;
             });
-          })).then(function (aResults) {
+          })).then(function (aKeys) {
             var mFound = {};
-            aResults.forEach(function (aContexts, iIndex) {
-              if (aContexts[0]) {
-                mFound[aValues[iIndex]] = aContexts[0].getProperty(oList.key);
+            aKeys.forEach(function (sKey, iIndex) {
+              if (sKey) {
+                mFound[aValues[iIndex]] = sKey;
               }
             });
             return mFound;

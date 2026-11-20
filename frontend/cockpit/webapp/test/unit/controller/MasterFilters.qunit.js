@@ -317,11 +317,23 @@ sap.ui.define([
           var sValue = aFilters[0].getValue1();
           aRequests.push({ path: sPath, filter: aFilters[0].getPath() + " " + aFilters[0].getOperator() + " " + sValue,
             select: mParameters.$select });
+          var bDestroyed = false;
+          // Like V4: a context of a destroyed list binding can no longer be read.
+          var oContext = {
+            getProperty: function () {
+              if (bDestroyed) {
+                throw new TypeError("Cannot read properties of undefined (reading 'checkSuspended')");
+              }
+              return mList[sValue];
+            }
+          };
           return {
             requestContexts: function () {
-              return Promise.resolve(mList[sValue] ? [{ getProperty: function () { return mList[sValue]; } }] : []);
+              return Promise.resolve(mList[sValue] ? [oContext] : []);
             },
-            destroy: function () {}
+            destroy: function () {
+              bDestroyed = true;
+            }
           };
         }
       };
