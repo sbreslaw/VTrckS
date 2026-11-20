@@ -75,7 +75,10 @@ sap.ui.define([
       m.CreateOrderService.hasIncompleteItems = function () { return true; };
       try {
         seedMessages(m.MessageExtractor);
-        var oStub = stubController(m.Detail, { getPath: function () { return "/x"; } }, true);
+        var oStub = stubController(m.Detail, {
+          getPath: function () { return "/x"; },
+          getProperty: function () { return "0518000521"; }
+        }, true);
         oStub.onSectionSavePress("items");
         assert.deepEqual(texts(), ["itemsIncompleteItemsError"], "first Save: only its own message");
         oStub.onSectionSavePress("items");
