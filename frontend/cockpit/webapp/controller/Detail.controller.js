@@ -5697,7 +5697,7 @@ sap.ui.define([
     // Provider Orders sends no request.
     _loadReturnReasonVH: function () {
       var oProps = ServiceSchema.valueHelpProperties;
-      var oVHModel = new JSONModel({ list: [] });
+      var oVHModel = new JSONModel({ list: [], options: [] });
       this.getView().setModel(oVHModel, "returnReasons");
       if (!ServiceSchema.itemProperties.returnReason) {
         return;
@@ -6518,6 +6518,7 @@ sap.ui.define([
       }, oMode.ui, { sections: mSections }));
       oView.getModel("itemsColumns").setData(this._getItemsColumnVisibility());
       this._loadOrderStatusVH(oMode.orderType);
+      this._loadReturnReasonOptions(oMode.orderType);
       this._loadCategoryOptions(oMode);
       // A section un-hidden by this order type may already be expanded.
       this._oSectionFactory.rebind();
@@ -6541,6 +6542,39 @@ sap.ui.define([
       StatusValueHelp.load(this.getOwnerComponent(), ServiceSchema.statusValueHelp, [sOrderType]).then(function (aOptions) {
         if (this._iOrderStatusRequest === iRequest) {
           oEnumsModel.setProperty("/EDIT_STATUS", aOptions);
+        }
+      }.bind(this));
+    },
+
+    // GH-104: Return Reason picker options for the current return type (po>/OrderReason
+    // filtered by OrderType, shared StatusValueHelp reader). Only profiles with item
+    // return reasons load it, so Provider Orders send nothing. No fallback: a type with
+    // no rows gives an empty picker (owner decision, VTrckS#104). The options are
+    // cleared at once, so a picker never offers the previous type's reasons.
+    // returnReasons>/list (_loadReturnReasonVH) stays the code -> text lookup for display.
+    _loadReturnReasonOptions: function (sOrderType) {
+      var oVHModel = this.getView().getModel("returnReasons");
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema && oSchema.orderReasonProperties;
+      var sEntitySet = oSchema && oSchema.entitySets && oSchema.entitySets.orderReason;
+      var iRequest = (this._iReturnReasonOptionsRequest || 0) + 1;
+      this._iReturnReasonOptionsRequest = iRequest;
+      if (!oVHModel) {
+        return Promise.resolve();
+      }
+      oVHModel.setProperty("/options", []);
+      if (!ServiceSchema.itemProperties.returnReason || !sOrderType || !sEntitySet || !oProps) {
+        return Promise.resolve();
+      }
+      return StatusValueHelp.load(this.getOwnerComponent(), {
+        model: "po",
+        entitySet: sEntitySet,
+        codeProperty: oProps.code,
+        textProperty: oProps.text,
+        typeFilterProperty: oProps.orderType
+      }, [sOrderType]).then(function (aOptions) {
+        if (this._iReturnReasonOptionsRequest === iRequest) {
+          oVHModel.setProperty("/options", aOptions);
         }
       }.bind(this));
     },
