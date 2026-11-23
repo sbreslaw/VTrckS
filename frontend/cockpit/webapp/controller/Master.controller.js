@@ -267,12 +267,15 @@ sap.ui.define([
 
     // GH-99: Define Conditions value fields offer the filter field's type-ahead list and
     // accept only keys from it. oValueList: { suggestionConfig (the filter field's, e.g.
-    // CustomerSalesArea on the lookup model), notFoundKey, invalidKey, checkFailedKey }.
+    // CustomerSalesArea on the lookup model), allowUnknown, notFoundKey, invalidKey, checkFailedKey }.
+    // GH-105: allowUnknown accepts free text (exact keys are still normalised); the three
+    // text keys are needed only without it.
     _createConditionValueCheck: function (oInput, oValueList) {
       var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
       var oList = oValueList.suggestionConfig;
       var oModel = this.getOwnerComponent().getModel(oList.modelName || undefined);
       return ConditionValueCheck.create({
+        allowUnknown: !!oValueList.allowUnknown,
         // Tokens picked from the list (type-ahead or table) carry their key in displayValue.
         knownValues: oInput.getTokens().map(function (oToken) {
           var oRange = oToken.data("range");
@@ -312,7 +315,7 @@ sap.ui.define([
         notFoundText: function (sValue) {
           return oBundle.getText(oValueList.notFoundKey, [sValue]);
         },
-        checkFailedText: oBundle.getText(oValueList.checkFailedKey)
+        checkFailedText: oValueList.checkFailedKey ? oBundle.getText(oValueList.checkFailedKey) : ""
       });
     },
 
@@ -1095,6 +1098,7 @@ sap.ui.define([
         filterProvider: {
           label: oBundle.getText("filterProvider"),
           path: ServiceSchema.headerProperties.providerId,
+          // typed text and conditions (GH-105)
           typedPaths: [ServiceSchema.headerProperties.providerId, ServiceSchema.headerProperties.providerName]
         },
         filterCreatedBy: { label: oBundle.getText("filterCreatedBy"), path: ServiceSchema.headerProperties.createdBy }
@@ -1116,11 +1120,16 @@ sap.ui.define([
       }
       var aIncludeFilters = [];
       var aExcludeFilters = [];
+      // GH-105: conditions apply to every path of the field (Provider: ID or name, owner decision on
+      // VTrckS#105); includes OR, excludes AND. Never case-insensitive: the services answer tolower with 501.
+      var aPaths = oConfig.typedPaths || [oConfig.path];
       aConditions.forEach(function (oCondition) {
-        var oFilter = this._createConditionFilter(oConfig.path, oCondition);
-        if (oFilter) {
-          (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oFilter);
-        }
+        aPaths.forEach(function (sPath) {
+          var oFilter = this._createConditionFilter(sPath, oCondition);
+          if (oFilter) {
+            (oCondition.exclude ? aExcludeFilters : aIncludeFilters).push(oFilter);
+          }
+        }, this);
       }, this);
       if (aIncludeFilters.length) {
         aFilters.push(new Filter({ filters: aIncludeFilters, and: false }));
@@ -1347,10 +1356,9 @@ sap.ui.define([
         styleClass: "providerValueHelpDialog",
         loadErrorKey: "providerSearchLoadError",
         conditionValueList: {
+          // GH-105: free text accepted; a typed exact ID is still set to the list key.
           suggestionConfig: this.byId("filterProvider").data("suggestionConfig"),
-          notFoundKey: "providerConditionNotFound",
-          invalidKey: "providerConditionsInvalid",
-          checkFailedKey: "providerConditionCheckFailed"
+          allowUnknown: true
         },
         key: oProps.customer,
         descriptionKey: oProps.customerName,
