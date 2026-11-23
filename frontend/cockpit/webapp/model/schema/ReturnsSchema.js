@@ -634,7 +634,21 @@ sap.ui.define([
         orderIntention: "OrderIntention",
         vaccineReturnType: "VaccineReturnType",
         batchValueHelp: "BatchValueHelp",
-        orderStatus: "OrderStatus"
+        orderStatus: "OrderStatus",
+        // GH-101: read-only SAP application log for the shared Provider Order service.
+        orderLogMessage: "OrderLogMessage"
+      },
+      orderLogMessageProperties: {
+        salesOrder: "SalesOrder",
+        sequence: "MessageSequence",
+        type: "MessageType",
+        text: "MessageText",
+        messageClass: "MessageClass",
+        messageNumber: "MessageNumber",
+        variable1: "MessageVariable1",
+        variable2: "MessageVariable2",
+        variable3: "MessageVariable3",
+        variable4: "MessageVariable4"
       },
       orderIntentionProperties: {
         code: "OrderingIntention",

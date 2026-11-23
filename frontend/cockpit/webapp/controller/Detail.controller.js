@@ -120,6 +120,9 @@ sap.ui.define([
   var ITEMS_GRID_MAX_ROWS = 10;
   // Provider Orders Items table (sap.m.Table): the viewport scrolls after this many rows (GH-71).
   var ITEMS_VIEWPORT_MAX_ROWS = 10;
+  // GH-101: the SAP update task may commit order logs just after SaveChanges.
+  var ORDER_LOG_RETRY_LIMIT = 2;
+  var ORDER_LOG_RETRY_DELAY_MS = 750;
 
   return Controller.extend("cdc.vaccreq.controller.Detail", {
     formatter: formatter,
@@ -242,7 +245,11 @@ sap.ui.define([
     onRefresh: function () {
       var oContext = this.getView().getBindingContext();
       if (oContext) {
-        oContext.refresh();
+        oContext.requestRefresh().then(function () {
+          return this._loadOrderLogMessages(oContext.getProperty(ServiceSchema.keys.orderId));
+        }.bind(this), function () {
+          return this._loadOrderLogMessages(oContext.getProperty(ServiceSchema.keys.orderId));
+        }.bind(this));
       }
     },
 
@@ -370,6 +377,10 @@ sap.ui.define([
     },
 
     onValidate: function () {
+      var oContext = this.getView().getBindingContext();
+      if (oContext && !(oContext.isTransient && oContext.isTransient())) {
+        this._loadOrderLogMessages(oContext.getProperty(ServiceSchema.keys.orderId));
+      }
       MessageToast.show(this.getResourceBundle().getText("validateToast"));
     },
 
@@ -1104,7 +1115,10 @@ sap.ui.define([
       if (!oContext) {
         return;
       }
-      // GH-92: each Save starts with an empty message store.
+      var sOrderId = oContext.getProperty(ServiceSchema.keys.orderId);
+      // GH-101: invalidate reads that could restore pre-save validations.
+      this._iOrderLogRequest = (this._iOrderLogRequest || 0) + 1;
+      // GH-92/GH-101: each save starts clean; fresh logs are appended after success.
       Messaging.removeAllMessages();
       var oItemsTable = sSectionId === "items" && this._byIdInSection("items", "itemsTable");
       var oItemsBinding = ItemsTableAccess.getBinding(oItemsTable);
@@ -1125,7 +1139,7 @@ sap.ui.define([
       var oStagePromise = sSectionId === "details"
         ? this._stageHeaderNotes(oContext)
         : Promise.resolve();
-      pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
+      return pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
         return bContactSession ? that._saveDetailsContactSession(oContext) : EditRequestService.save(oContext);
       }).then(function () {
         // GH-87: vrEdit first - header changes an item edit queued
@@ -1158,6 +1172,7 @@ sap.ui.define([
         if (sSectionId === "items") {
           that._computeHeaderTaxAmount();
         }
+        that._loadOrderLogMessages(sOrderId, { retryWhenEmpty: true });
         if (that._bStartNewAfterSave) {
           that._bStartNewAfterSave = false;
           that.byId("newOrderBtn").setEnabled(true);
@@ -6113,6 +6128,7 @@ sap.ui.define([
       if (bStartNew) {
         this._enterCreateMode(this._sCreateOrderType);
       } else {
+        this._sOrderLogRetryAfterSave = sNewId;
         this._oRouter.navTo("detail", { orderId: encodeURIComponent(sNewId) }, true);
       }
     },
@@ -6160,6 +6176,13 @@ sap.ui.define([
       this._destroyCreateContext();
       this._resetCreateSaveState();
       this._setCreateMode(false);
+      // GH-101: never carry another order's messages into the selected order.
+      if (this._sDisplayedOrderId && this._sDisplayedOrderId !== sId) {
+        Messaging.removeAllMessages();
+      }
+      var bRetryWhenEmpty = this._sOrderLogRetryAfterSave === sId;
+      this._sOrderLogRetryAfterSave = null;
+      this._sDisplayedOrderId = sId;
       var sHeaderSelect = ["SAP__Messages", ServiceSchema.headerProperties.salesOrderType].concat(Object.keys(ServiceSchema.updatableHeaderProperties).map(function (sKey) {
         return ServiceSchema.updatableHeaderProperties[sKey];
       })).concat(this._productLookupHeaderSelect()).filter(function (sProp) { return !!sProp; }).join(",");
@@ -6197,6 +6220,7 @@ sap.ui.define([
       this._oSectionFactory.rebind();
       this._resetTransactionHistoryState(sId);
       this._refreshTransactionHistory();
+      this._loadOrderLogMessages(sId, { retryWhenEmpty: bRetryWhenEmpty });
     },
 
     // v5 (design/E008_CRUD1_v5_Sticky_Amendment.md): the "create" route
@@ -6342,6 +6366,7 @@ sap.ui.define([
     _enterCreateMode: function (sOrderType) {
       this._destroyCreateContext();
       this._resetCreateSaveState();
+      this._resetOrderLogState();
       // A prior "detail" route visit leaves an active bindElement() on the
       // view - an element binding always wins over the plain
       // setBindingContext() below (UI5 propagation rules), so without this
@@ -6612,8 +6637,88 @@ sap.ui.define([
         this._destroyCreateContext();
         this._resetCreateSaveState();
         this._setCreateMode(false);
+        this._resetOrderLogState();
         Messaging.removeAllMessages();
       }.bind(this));
+    },
+
+    _resetOrderLogState: function () {
+      // GH-101: invalidate in-flight reads and pending retries during route exit.
+      this._iOrderLogRequest = (this._iOrderLogRequest || 0) + 1;
+      this._sDisplayedOrderId = "";
+      this._sOrderLogRetryAfterSave = null;
+      MessageExtractor.clearOrderLogMessages();
+    },
+
+    _loadOrderLogMessages: function (sOrderId, oOptions) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oProps = oSchema && oSchema.orderLogMessageProperties;
+      var sEntitySet = oSchema && oSchema.entitySets && oSchema.entitySets.orderLogMessage;
+      if (!sOrderId || !sEntitySet || !oProps) {
+        return Promise.resolve([]);
+      }
+      var iRequest = (this._iOrderLogRequest || 0) + 1;
+      var iRetryCount = 0;
+      var iRetryLimit = oOptions && oOptions.retryWhenEmpty ? ORDER_LOG_RETRY_LIMIT : 0;
+      var iRetryDelay = oOptions && oOptions.retryDelayMs !== undefined
+        ? oOptions.retryDelayMs
+        : ORDER_LOG_RETRY_DELAY_MS;
+      this._iOrderLogRequest = iRequest;
+      MessageExtractor.clearOrderLogMessages();
+
+      // GH-101: one filtered read, plus bounded retries for empty post-save results.
+      function fnRead() {
+        if (this._iOrderLogRequest !== iRequest) {
+          return Promise.resolve([]);
+        }
+        var oBinding = this.getOwnerComponent().getModel("po").bindList(
+          "/" + sEntitySet,
+          undefined,
+          undefined,
+          [new Filter(oProps.salesOrder, FilterOperator.EQ, sOrderId)],
+          {
+            $select: [
+              oProps.salesOrder,
+              oProps.sequence,
+              oProps.type,
+              oProps.text,
+              oProps.messageClass,
+              oProps.messageNumber,
+              oProps.variable1,
+              oProps.variable2,
+              oProps.variable3,
+              oProps.variable4
+            ].filter(Boolean).join(","),
+            $orderby: oProps.sequence
+          }
+        );
+        return oBinding.requestContexts(0, 100).then(function (aContexts) {
+          return aContexts.map(function (oContext) {
+            return oContext.getObject();
+          });
+        }, function () {
+          return null;
+        }).finally(function () {
+          oBinding.destroy();
+        }).then(function (aRows) {
+          if (this._iOrderLogRequest !== iRequest) {
+            return aRows || [];
+          }
+          if (aRows === null) {
+            return [];
+          }
+          if (!aRows.length && iRetryCount < iRetryLimit) {
+            iRetryCount += 1;
+            return new Promise(function (resolve) {
+              setTimeout(resolve, iRetryDelay);
+            }).then(fnRead.bind(this));
+          }
+          MessageExtractor.replaceOrderLogMessages(aRows, oProps);
+          return aRows;
+        }.bind(this));
+      }
+
+      return fnRead.call(this);
     },
 
     _resetCreateSaveState: function () {
@@ -6759,6 +6864,7 @@ sap.ui.define([
 
     // GH-87: the app closes with Items edit open - release the session's lock.
     onExit: function () {
+      this._resetOrderLogState();
       this._discardItemsEditSession();
     }
   });

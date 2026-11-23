@@ -37,12 +37,11 @@ sap.ui.define([
     Brand: "inventory"
   };
 
-  // Message Accuracy & Hygiene task (this file's own header comment above is
-  // still correct and is extended, never rewritten, below): every message
-  // THIS module adds carries this tag in technicalDetails.source so a later
-  // save attempt can surgically clear only these (Gap 1), never a
-  // client-side validation message added by some other part of the app.
+  // Message Accuracy & Hygiene task: extracted failure messages carry this tag
+  // in technicalDetails.source so a later save attempt can surgically clear
+  // only those messages, never a separate client-side validation message.
   var SOURCE_TAG = "vrExtract";
+  var ORDER_LOG_SOURCE_TAG = "vrOrderLog";
 
   // @Common.numericSeverity -> sap.ui.core.MessageType (Gap 4). TODO-VERIFY:
   // exact annotation key/casing against a live error body that actually
@@ -50,6 +49,14 @@ sap.ui.define([
   // mapping table. Unknown/absent numeric severity defaults to "Error"
   // (fail-loud, never silently downgrade a message we can't classify).
   var SEVERITY_MAP = { 1: "Success", 2: "Information", 3: "Warning", 4: "Error" };
+  // GH-101: SAP "A" (abend) uses the closest existing fatal UI severity: Error.
+  var ORDER_LOG_TYPE_MAP = {
+    E: "Error",
+    A: "Error",
+    W: "Warning",
+    I: "Information",
+    S: "Success"
+  };
 
   function mapSeverity(vNumericSeverity) {
     return SEVERITY_MAP[Number(vNumericSeverity)] || "Error";
@@ -249,6 +256,60 @@ sap.ui.define([
 
   var MessageExtractor = {
     SOURCE_TAG: SOURCE_TAG,
+    ORDER_LOG_SOURCE_TAG: ORDER_LOG_SOURCE_TAG,
+
+    clearOrderLogMessages: function () {
+      var aOrderLogMessages = Messaging.getMessageModel().getData().filter(function (oMessage) {
+        var oDetails = oMessage.getTechnicalDetails && oMessage.getTechnicalDetails();
+        return !!(oDetails && oDetails.source === ORDER_LOG_SOURCE_TAG);
+      });
+      if (aOrderLogMessages.length) {
+        Messaging.removeMessages(aOrderLogMessages);
+      }
+    },
+
+    replaceOrderLogMessages: function (aRows, oProps) {
+      // GH-101: replace tagged logs only; keep current client/framework messages.
+      this.clearOrderLogMessages();
+      var mExistingKeys = Object.create(null);
+      function messageKey(sCode, sText, sType) {
+        return JSON.stringify([sCode, sText, sType]);
+      }
+      Messaging.getMessageModel().getData().forEach(function (oMessage) {
+        var sText = oMessage.getMessage ? oMessage.getMessage() : "";
+        var sCode = oMessage.getCode ? oMessage.getCode() : "";
+        var sType = oMessage.getType();
+        mExistingKeys[messageKey(sCode || "", sText || "", sType)] = true;
+      });
+      (aRows || []).slice().sort(function (oLeft, oRight) {
+        return Number(oLeft[oProps.sequence]) - Number(oRight[oProps.sequence]);
+      }).forEach(function (oRow) {
+        var sText = oRow[oProps.text] || "";
+        var sMessageClass = oRow[oProps.messageClass] || "";
+        var sMessageNumber = oRow[oProps.messageNumber] || "";
+        var sCode = [sMessageClass, sMessageNumber].filter(Boolean).join("/");
+        var sType = ORDER_LOG_TYPE_MAP[String(oRow[oProps.type] || "").toUpperCase()] || "Information";
+        // Include severity so a client Warning cannot hide a backend Error.
+        var sKey = messageKey(sCode, sText, sType);
+        if (!sText || mExistingKeys[sKey]) {
+          return;
+        }
+        mExistingKeys[sKey] = true;
+        Messaging.addMessages(new Message({
+          message: sText,
+          code: sCode,
+          type: sType,
+          technical: true,
+          technicalDetails: {
+            source: ORDER_LOG_SOURCE_TAG,
+            code: sCode,
+            messageClass: sMessageClass,
+            messageNumber: sMessageNumber,
+            sequence: oRow[oProps.sequence]
+          }
+        }));
+      });
+    },
 
     // Live evidence (2026-09-01): the create flow's own SaveChanges (step ③)
     // and header PATCH replay (step ④) are TWO separate, both-successful

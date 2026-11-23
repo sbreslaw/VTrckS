@@ -51,7 +51,7 @@ sap.ui.define([
     };
     ["_destroyCreateContext", "_resetCreateSaveState", "_setCreateMode", "_loadHeaderNotes", "_loadDetailContact",
       "_releaseItemsTable", "_bindDetailHeader", "_computeHeaderTaxAmount", "_resetTransactionHistoryState",
-      "_refreshTransactionHistory", "_syncOrderUiFromContext"].forEach(function (sName) {
+      "_refreshTransactionHistory", "_syncOrderUiFromContext", "_loadOrderLogMessages"].forEach(function (sName) {
       oStub[sName] = function () {};
     });
     oStub._oSectionFactory = { rebind: function () {} };

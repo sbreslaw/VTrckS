@@ -77,6 +77,14 @@ sap.ui.define([
       "/HeaderPartner(SalesOrder='',PartnerFunction='AP')", "orders session row");
   });
 
+  QUnit.test("both profiles expose the shared order log contract", function (assert) {
+    [OrdersSchema, ReturnsSchema].forEach(function (oSchema) {
+      assert.strictEqual(oSchema.providerOrderService.entitySets.orderLogMessage, "OrderLogMessage", oSchema.profileId);
+      assert.strictEqual(oSchema.providerOrderService.orderLogMessageProperties.sequence, "MessageSequence", oSchema.profileId + " sequence");
+      assert.strictEqual(oSchema.providerOrderService.orderLogMessageProperties.text, "MessageText", oSchema.profileId + " text");
+    });
+  });
+
   // GH-87: only Returns run Items edit in an edit session.
   QUnit.test("Items edit session action: Returns PrepareForEdit, Orders none (GH-87)", function (assert) {
     ServiceSchema.use(ReturnsSchema);
