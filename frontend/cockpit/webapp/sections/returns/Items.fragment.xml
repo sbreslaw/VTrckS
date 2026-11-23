@@ -222,25 +222,35 @@
             </Select>
         </t:template>
       </t:Column>
-      <t:Column width="9%" visible="{itemsColumns>/returnReason}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">
-        <t:label><Text text="{parts: [{path: 'i18n>colReturnReasonTyped'}, {path: 'orderUi>/tag'}], formatter: '.formatter.formatText'}" wrapping="true" /></t:label>
-        <t:template>
-            <!-- Return Reason: item-level reason code (ReasonCode), bound to the same
-                 SDDocumentReason VH as the header Return Reason. Display shows text via
-                 the shared /SDDocumentReason map (loaded for the header Select).
+      <t:Column id="itemsReturnReasonColumn" width="9%" visible="{itemsColumns>/returnReason}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing}       &amp;&amp; !${sectionFlags>/createMode} }">
+              <t:label><Text text="{parts: [{path: 'i18n>colReturnReasonTyped'}, {path: 'orderUi>/tag'}], formatter: '.formatter.formatText'}" wrapping="true" /></t:label>
+              <t:template>
+                  <!-- Return Reason: item-level reason code (ReasonCode). GH-104: the Select lists
+                 only the current return type's reasons (returnReasons>/options, po>/OrderReason
+                 by OrderType, _loadReturnReasonOptions) and is shown only when the row is
+                 editable; otherwise the Text shows the code's text from the full list
+                 (returnReasons>/list), so a saved code outside the type list stays readable.
+                 Such a code keeps its value in Items edit (blank Select, resetOnMissingKey,
+                 nothing written) until the user picks a new reason.
                  In create/edit mode, Select with change handler for rule 2.1.2.
                  Editable once the row has an NDC (like Lot Number), also before the
                  row is posted: ReasonCode is a plain property (no bound action, unlike
                  Rejection Reason above), so an unposted row's value is sent with
                  the rest of the row by CreateOrderService.postItem. Rows without an
-                 NDC are not counted in the header recompute (_getItemReasonsArray). -->
-            <Select selectedKey="{path: 'ReasonCode', mode: 'sap.ui.model.BindingMode.TwoWay'}" forceSelection="false" width="100%"
-              visible="{itemsColumns>/returnReason}"
-              items="{path: '/SDDocumentReason', templateShareable: false}"
-              editable="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
-              change=".onItemReturnReasonChange">
-              <core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
-            </Select>
+                 NDC are not counted in the header recompute (_getItemReasonsArray).
+                 The table labels only a cell's root control with its column, so the
+                 Select inside the HBox names its column itself (ariaLabelledBy). -->
+            <HBox renderType="Bare" width="100%" visible="{itemsColumns>/returnReason}">
+              <Text text="{parts: [{path: 'ReasonCode'}, {path: 'returnReasons>/list'}], formatter: '.formatter.categoryText'}" wrapping="false"
+                visible="{= !(!!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false)) }" />
+              <Select selectedKey="{path: 'ReasonCode', mode: 'sap.ui.model.BindingMode.TwoWay'}" forceSelection="false" resetOnMissingKey="true" width="100%"
+                visible="{= !!(${sectionFlags>/items/editing} &amp;&amp; (!${sectionFlags>/createMode} || ${createState>/providerChosen}) &amp;&amp; !!%{Product} &amp;&amp; !%{HigherLevelItem} &amp;&amp; ${orderUi>/columns/returnReason/editable} !== false) }"
+                items="{path: 'returnReasons>/options', templateShareable: false}"
+                ariaLabelledBy="itemsReturnReasonColumn"
+                change=".onItemReturnReasonChange">
+                <core:Item key="{returnReasons>key}" text="{returnReasons>text}" />
+              </Select>
+            </HBox>
         </t:template>
       </t:Column>
       <t:Column width="9%" visible="{itemsColumns>/exisId}" resizable="true" autoResizable="true" showSortMenuEntry="{= !${sectionFlags>/items/editing} &amp;&amp; !${sectionFlags>/createMode} }">

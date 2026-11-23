@@ -455,7 +455,9 @@
 								GH-75 (D-1549): read-only outside create, like Return Type above; item Return
 								Reason changes still rewrite it (Detail.controller.js#onItemReturnReasonChange).
 								The Text derives its text from the code (returnReasons>/list, _loadReturnReasonVH),
-								so that rewrite shows at once, after Save, and reverts on Cancel. -->
+								so that rewrite shows at once, after Save, and reverts on Cancel.
+								GH-104: the create picker lists only the current return type's reasons
+								(returnReasons>/options, po>/OrderReason by OrderType, _loadReturnReasonOptions). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
@@ -467,8 +469,8 @@
 									visible="{= ${sectionFlags>/details/editing} &amp;&amp; ${sectionFlags>/createMode} }"
 									enabled="{= !${sectionFlags>/createMode} || (${createState>/providerChosen} &amp;&amp; (${createState>/returnTypeChosen} || ${orderUi>/fields/detailsReturnType/visible} === false)) }"
 									change=".onReturnReasonChange"
-									items="{path: '/SDDocumentReason'}">
-									<core:Item key="{SDDocumentReason}" text="{SDDocumentReason_Text}" />
+									items="{path: 'returnReasons>/options', templateShareable: false}">
+									<core:Item key="{returnReasons>key}" text="{returnReasons>text}" />
 								</ComboBox>
 							</VBox>
 						</f:fields>
