@@ -2,6 +2,7 @@
 <!-- One paragraph. Reference the task/spec you were given, if any. -->
 
 Closes #<!-- issue number, if this PR resolves a GitHub issue; leave out otherwise -->
+Approved spec: `specs/GH-<n>.md` <!-- the definition of done for this PR; the file must be unchanged from the approved spec PR -->
 
 ## Evidence
 - Task/spec reference (if provided by the code owner):

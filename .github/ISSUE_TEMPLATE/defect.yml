@@ -1,0 +1,73 @@
+name: Defect
+description: Something in the cockpit behaves wrongly
+title: "<Area>: <one-line summary>"
+labels: ["defect"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **How this works.** After triage you will receive a spec pull request with the acceptance criteria written out. Approving it (Review changes → Approve) confirms that is what you asked for; work starts only after that. No review within 2 business days = approved by default. Details: `specs/README.md`.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options: ["_ORD (Provider Orders)", "_RET (Returns)", "Both"]
+    validations:
+      required: true
+  - type: checkboxes
+    id: ordertypes
+    attributes:
+      label: Order type(s)
+      options:
+        - label: ZKB
+        - label: ZREP
+        - label: ZKR
+        - label: ZISL
+        - label: ZWST
+        - label: ZXFR
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce on DH1
+      description: Numbered steps. Include the document number (synthetic test data only).
+      placeholder: |
+        1. Open order 60000123 (ZKR)
+        2. Items → Edit → add a row …
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happens. Paste the exact message text if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should happen instead. If this is CRM parity, name the CRM screen and field and attach a screenshot of CRM next to one of the cockpit.
+    validations:
+      required: true
+  - type: dropdown
+    id: approver
+    attributes:
+      label: Approver
+      description: Who approves the spec (acceptance criteria) before work starts. "Reporter" = you.
+      options:
+        - "Reporter (me)"
+        - "@APPROVER-LOGIN-1"
+        - "@APPROVER-LOGIN-2"
+        - "@APPROVER-LOGIN-3"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance (optional)
+      description: How you will judge it fixed. Leave empty and triage will propose it for your approval.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / attachments
+      description: Drag and drop here. No real provider data.

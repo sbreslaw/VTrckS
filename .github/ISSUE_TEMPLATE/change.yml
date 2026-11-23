@@ -1,0 +1,73 @@
+name: Change request
+description: New or changed behaviour requested by the customer or the team
+title: "<Area>: <one-line summary>"
+labels: ["change"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **How this works.** After triage you will receive a spec pull request with the acceptance criteria written out. Approving it (Review changes → Approve) confirms that is what you asked for; work starts only after that. No review within 2 business days = approved by default. Details: `specs/README.md`.
+  - type: input
+    id: requestedby
+    attributes:
+      label: Requested by / date
+      placeholder: CDC functional lead, 2026-11-24
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options: ["_ORD (Provider Orders)", "_RET (Returns)", "Both"]
+    validations:
+      required: true
+  - type: checkboxes
+    id: ordertypes
+    attributes:
+      label: Order type(s)
+      options:
+        - label: ZKB
+        - label: ZREP
+        - label: ZKR
+        - label: ZISL
+        - label: ZWST
+        - label: ZXFR
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: requested
+    attributes:
+      label: Requested behaviour
+      description: What should change and why. If this is CRM parity, name the CRM screen and field and attach a screenshot. Be specific about values, defaults and what happens on empty.
+    validations:
+      required: true
+  - type: textarea
+    id: outofscope
+    attributes:
+      label: Out of scope
+      description: What this request explicitly does NOT cover.
+  - type: dropdown
+    id: approver
+    attributes:
+      label: Approver
+      description: Who approves the spec (acceptance criteria) before work starts. "Reporter" = you.
+      options:
+        - "Reporter (me)"
+        - "@APPROVER-LOGIN-1"
+        - "@APPROVER-LOGIN-2"
+        - "@APPROVER-LOGIN-3"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance (optional)
+      description: How you will judge it done. Leave empty and triage will propose it for your approval.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / attachments
