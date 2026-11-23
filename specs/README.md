@@ -16,6 +16,6 @@ Still working: <what passes>
 Screenshots: <attached>
 ```
 
-**Who approves** is chosen on the issue form ("Approver"). Blank or missing → the per-category default in `APPROVERS.md`.
+**Who approves** is chosen on the issue form ("Approver") and named in the spec pull request (`Approver: @login`); you are @-mentioned there and GitHub emails you the link. Only that person's Approve counts (or a repository collaborator's). No repository role is needed — a GitHub account is enough. Blank or missing on the form → the per-category default in `APPROVERS.md`.
 
 Spec files are plain Markdown: Request (as filed), Acceptance (numbered), Out of scope, Open questions with the default applied if unanswered. They stay here permanently next to the code they govern; the implementation pull request quotes the approved file as its definition of done.
