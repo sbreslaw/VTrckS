@@ -9,14 +9,14 @@ sap.ui.define([
   "sap/m/P13nConditionPanel",
   "sap/m/Token",
   "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
-  "sap/ui/core/library",
-  "sap/ui/model/FilterOperator"
+  "sap/ui/core/library"
 ], function (ConditionValueCheck, ServiceSchema, OrdersSchema, ReturnsSchema, Input, MultiInput, P13nConditionPanel, Token,
-  ValueHelpDialog, coreLibrary, FilterOperator) {
+  ValueHelpDialog, coreLibrary) {
   "use strict";
 
   // GH-99: Provider (ID or Name) value help, Define Conditions tab - type-ahead from the
-  // filter field's list and only list keys accepted.
+  // filter field's list and only list keys accepted (default mode). GH-105: free-text mode,
+  // and Provider conditions apply to the ID or the name.
   var ValueState = coreLibrary.ValueState;
   var mList = { "40006524": "40006524", "0040006524": "40006524", "40029638": "40029638" };
 
@@ -250,6 +250,171 @@ sap.ui.define([
     assert.deepEqual(ConditionValueCheck.rangeValues(null), []);
   });
 
+  // GH-105: Provider (ID or Name) conditions accept free text; exact IDs are still set to the list key.
+  QUnit.module("ConditionValueCheck: free text (GH-105)");
+
+  QUnit.test("an unknown typed value is kept without an error", function (assert) {
+    var aSeen = [];
+    var oSetup = createCheck({ allowUnknown: true });
+    var oInput = panelInput(aSeen);
+    oInput.setValue("milwau");
+    return oSetup.check.checkField(oInput).then(function () {
+      assert.strictEqual(oInput.getValue(), "milwau", "value kept");
+      assert.deepEqual(aSeen, [], "the condition is not emptied");
+      assert.strictEqual(oInput.getValueState(), ValueState.None, "no error");
+      assert.deepEqual(oSetup.calls.lookups, [["milwau"]], "one lookup");
+      oInput.destroy();
+    });
+  });
+
+  QUnit.test("typed text is trimmed; a value of only spaces is cleared without a lookup", function (assert) {
+    var aSeen = [];
+    var aBlankSeen = [];
+    var oSetup = createCheck({ allowUnknown: true });
+    var oInput = panelInput(aSeen);
+    var oBlank = panelInput(aBlankSeen);
+    oInput.setValue(" milwau ");
+    oBlank.setValue("   ");
+    return Promise.all([oSetup.check.checkField(oInput), oSetup.check.checkField(oBlank)]).then(function () {
+      assert.strictEqual(oInput.getValue(), "milwau", "trimmed");
+      assert.deepEqual(aSeen, ["milwau"], "the condition received the trimmed text via change");
+      assert.strictEqual(oBlank.getValue(), "", "spaces cleared");
+      assert.deepEqual(aBlankSeen, [""], "the condition received an empty value");
+      assert.deepEqual(oSetup.calls.lookups, [["milwau"]], "no lookup for spaces");
+      assert.strictEqual(oInput.getValueState(), ValueState.None, "no error");
+      oInput.destroy();
+      oBlank.destroy();
+    });
+  });
+
+  QUnit.test("a typed existing ID is still set to the list key", function (assert) {
+    var aSeen = [];
+    var oSetup = createCheck({ allowUnknown: true });
+    var oInput = panelInput(aSeen);
+    oInput.setValue(" 0040006524 ");
+    return oSetup.check.checkField(oInput).then(function () {
+      assert.strictEqual(oInput.getValue(), "40006524", "list key in the field");
+      assert.strictEqual(aSeen[aSeen.length - 1], "40006524", "the condition received the key");
+      assert.deepEqual(oSetup.calls.lookups, [["0040006524"]], "one lookup for the trimmed value");
+      assert.strictEqual(oInput.getValueState(), ValueState.None, "no error");
+      oInput.destroy();
+    });
+  });
+
+  QUnit.test("a failed lookup keeps the trimmed value without an error", function (assert) {
+    var aSeen = [];
+    var oSetup = createCheck({
+      allowUnknown: true,
+      lookup: function () {
+        return Promise.reject(new Error("503"));
+      }
+    });
+    var oInput = panelInput(aSeen);
+    oInput.setValue(" 4000 ");
+    return oSetup.check.checkField(oInput).then(function () {
+      assert.strictEqual(oInput.getValue(), "4000", "trimmed value kept");
+      assert.deepEqual(aSeen, ["4000"], "the condition keeps the value");
+      assert.strictEqual(oInput.getValueState(), ValueState.None, "no error");
+      oInput.destroy();
+    });
+  });
+
+  QUnit.test("a field filled by the panel after creation keeps unknown text", function (assert) {
+    var fnCallback;
+    var oSetup = createCheck({ allowUnknown: true });
+    oSetup.check.attachTo({ suggest: function (fn) { fnCallback = fn; } });
+    var oInput = panelInput([]);
+    fnCallback(oInput, "Customer");
+    oInput.setValue("milwau");
+    return flush().then(function () {
+      assert.strictEqual(oInput.getValue(), "milwau", "carried-over text kept");
+      assert.strictEqual(oInput.getValueState(), ValueState.None, "no error");
+      oInput.destroy();
+    });
+  });
+
+  QUnit.test("checkRanges: nothing is invalid; unknown values trimmed, known ones get the list key", function (assert) {
+    var oSetup = createCheck({ allowUnknown: true, knownValues: ["40029638"] });
+    var aRanges = [
+      { exclude: false, operation: "EQ", value1: "40029638", displayValue: "40029638" },
+      { exclude: false, operation: "Contains", value1: " milwau " },
+      { exclude: true, operation: "BT", value1: "0040006524", value2: "zzz" },
+      { exclude: false, operation: "Empty", value1: "" }
+    ];
+    return oSetup.check.checkRanges(aRanges).then(function (oResult) {
+      assert.deepEqual(oSetup.calls.lookups, [["milwau", "0040006524", "zzz"]], "one lookup, known values skipped");
+      assert.deepEqual(oResult.invalid, [], "free text is valid");
+      assert.strictEqual(oResult.ranges[0].value1, "40029638", "known value unchanged");
+      assert.strictEqual(oResult.ranges[1].value1, "milwau", "unknown value trimmed");
+      assert.strictEqual(oResult.ranges[2].value1, "40006524", "pasted ID -> list key");
+      assert.strictEqual(oResult.ranges[2].value2, "zzz", "unknown value kept");
+      assert.strictEqual(oResult.ranges[2].exclude, true, "exclude kept");
+      assert.strictEqual(oResult.ranges[3], aRanges[3], "Empty has no value to check");
+    });
+  });
+
+  QUnit.test("checkRanges: a failed lookup does not block - values kept (trimmed), known ones still keyed", function (assert) {
+    var oSetup = createCheck({
+      allowUnknown: true,
+      knownValues: ["40029638"],
+      lookup: function () {
+        return Promise.reject(new Error("500"));
+      }
+    });
+    return oSetup.check.checkRanges([
+      { operation: "Contains", value1: " x " },
+      { operation: "EQ", value1: "40029638" }
+    ]).then(function (oResult) {
+      assert.deepEqual(oResult.invalid, [], "nothing invalid");
+      assert.strictEqual(oResult.ranges[0].value1, "x", "trimmed value kept");
+      assert.strictEqual(oResult.ranges[1].value1, "40029638", "known value kept");
+    }, function () {
+      assert.ok(false, "must not reject in free-text mode");
+    });
+  });
+
+  [false, true].forEach(function (bAllowUnknown) {
+    QUnit.test("one lookup per value: a settled 'not found' and an in-flight lookup are reused (" +
+      (bAllowUnknown ? "free text" : "list only") + ")", function (assert) {
+      var aInvalid = bAllowUnknown ? [] : ["milwau"];
+      var oSequential = createCheck({ allowUnknown: bAllowUnknown });
+      var oFirst = panelInput([]);
+      oFirst.setValue("milwau");
+      return oSequential.check.checkField(oFirst).then(function () {
+        return oSequential.check.checkRanges([{ operation: "Contains", value1: "milwau" }]);
+      }).then(function (oResult) {
+        assert.deepEqual(oSequential.calls.lookups, [["milwau"]], "OK reuses the field's 'not found' answer");
+        assert.deepEqual(oResult.invalid, aInvalid, "same result as before");
+
+        var aLookups = [];
+        var aResolve = [];
+        var oConcurrent = createCheck({
+          allowUnknown: bAllowUnknown,
+          lookup: function (aValues) {
+            aLookups.push(aValues);
+            return new Promise(function (resolve) {
+              aResolve.push(resolve);
+            });
+          }
+        });
+        var oSecond = panelInput([]);
+        oSecond.setValue("milwau");
+        var oField = oConcurrent.check.checkField(oSecond);
+        var oRanges = oConcurrent.check.checkRanges([{ operation: "Contains", value1: "milwau" }]);
+        assert.deepEqual(aLookups, [["milwau"]], "OK waits for the field's lookup in flight");
+        aResolve.forEach(function (fnResolve) {
+          fnResolve({});
+        });
+        return Promise.all([oField, oRanges]).then(function (aResults) {
+          assert.strictEqual(aLookups.length, 1, "still one lookup");
+          assert.deepEqual(aResults[1].invalid, aInvalid, "same result as before");
+          oFirst.destroy();
+          oSecond.destroy();
+        });
+      });
+    });
+  });
+
   // ---- Master controller -------------------------------------------------------------------
 
   var sPreviousProfile;
@@ -262,7 +427,14 @@ sap.ui.define([
 
   function stubMaster(Master, mControls, oModel) {
     var oStub = Object.create(Master.prototype);
-    var oBundle = { getText: function (sKey, aArgs) { return sKey + (aArgs ? ":" + aArgs.join("|") : ""); } };
+    var aTextKeys = [];
+    var oBundle = {
+      getText: function (sKey, aArgs) {
+        aTextKeys.push(sKey);
+        return sKey + (aArgs ? ":" + aArgs.join("|") : "");
+      }
+    };
+    oStub.textKeys = aTextKeys;
     oStub.byId = function (sId) { return mControls[sId]; };
     oStub.getOwnerComponent = function () {
       return {
@@ -287,25 +459,133 @@ sap.ui.define([
     }
   });
 
-  QUnit.test("condition -> filter mapping is unchanged: Provider conditions stay on the Provider ID", function (assert) {
+  function filterShape(oFilter) {
+    var vValue2 = oFilter.getValue2();
+    return [oFilter.getPath(), oFilter.getOperator(), oFilter.getValue1()].join(" ") +
+      (vValue2 === undefined || vValue2 === null ? "" : ".." + vValue2);
+  }
+
+  QUnit.test("Provider conditions apply to ID or name; excludes match neither (GH-105)", function (assert) {
     return loadMaster().then(function (Master) {
-      var sId = ServiceSchema.headerProperties.providerId;
-      var oInput = new MultiInput();
-      oInput.addToken(new Token({ text: "*40006524*" }).data("range",
-        { exclude: false, operation: "Contains", value1: "40006524" }));
-      oInput.addToken(new Token({ text: "!(=40029638)" }).data("range",
-        { exclude: true, operation: "EQ", value1: "40029638" }));
-      var oStub = stubMaster(Master, { filterProvider: oInput });
+      [ReturnsSchema, OrdersSchema].forEach(function (oProfile) {
+        ServiceSchema.use(oProfile);
+        var sId = ServiceSchema.headerProperties.providerId;
+        var sName = ServiceSchema.headerProperties.providerName;
+        assert.strictEqual(sName, oProfile === ReturnsSchema ? "SoldToPartyName" : "CustomerName",
+          "name path of the " + oProfile.profileId + " profile");
+        var oInput = new MultiInput();
+        [
+          { exclude: false, operation: "Contains", value1: "40033" },
+          { exclude: false, operation: "EQ", value1: "40006524", displayValue: "40006524" },
+          { exclude: false, operation: "BT", value1: "40029000", value2: "40030000" },
+          { exclude: false, operation: "Empty", value1: "" },
+          { exclude: false, operation: "GT", value1: "40001000" },
+          { exclude: true, operation: "Contains", value1: "milwau" },
+          { exclude: true, operation: "LT", value1: "40001000" }
+        ].forEach(function (oRange, iIndex) {
+          oInput.addToken(new Token({ text: "condition " + iIndex }).data("range", oRange));
+        });
+        var oStub = stubMaster(Master, { filterProvider: oInput });
+        var aFilters = [];
+        oStub._pushConditionFilters(aFilters, "filterProvider");
+        assert.strictEqual(aFilters.length, 2, "include group + exclude group");
+        assert.notOk(aFilters[0].isAnd(), "includes: ID or name (OR)");
+        assert.deepEqual(aFilters[0].getFilters().map(filterShape), [
+          sId + " Contains 40033", sName + " Contains 40033",
+          sId + " EQ 40006524", sName + " EQ 40006524",
+          sId + " BT 40029000..40030000", sName + " BT 40029000..40030000",
+          sId + " EQ ", sName + " EQ ",
+          sId + " GT 40001000", sName + " GT 40001000"
+        ], "every operator on both paths, in token order");
+        assert.ok(aFilters[1].isAnd(), "excludes: neither ID nor name (AND)");
+        assert.deepEqual(aFilters[1].getFilters().map(filterShape), [
+          sId + " NotContains milwau", sName + " NotContains milwau",
+          sId + " GE 40001000", sName + " GE 40001000"
+        ], "exclude mappings on both paths");
+        assert.ok(aFilters[0].getFilters().concat(aFilters[1].getFilters()).every(function (oFilter) {
+          return oFilter.isCaseSensitive() !== false;
+        }), "never case-insensitive (the services answer tolower with 501)");
+        oInput.destroy();
+      });
+    });
+  });
+
+  QUnit.test("other condition fields keep one path; typed Provider text is unchanged (GH-105)", function (assert) {
+    return loadMaster().then(function (Master) {
+      var oRequestId = new MultiInput();
+      oRequestId.addToken(new Token({ text: "*600*" }).data("range", { exclude: false, operation: "Contains", value1: "600" }));
+      var oProvider = new MultiInput({ value: "*milwau*" });
+      var oStub = stubMaster(Master, { filterRequestId: oRequestId, filterProvider: oProvider });
       var aFilters = [];
+      oStub._pushConditionFilters(aFilters, "filterRequestId");
+      assert.strictEqual(aFilters.length, 1, "one include group");
+      assert.deepEqual(aFilters[0].getFilters().map(filterShape), [ServiceSchema.keys.orderId + " Contains 600"],
+        "Request ID: one path");
+
+      aFilters = [];
       oStub._pushConditionFilters(aFilters, "filterProvider");
-      assert.strictEqual(aFilters.length, 2, "include group + exclude group");
-      var oInclude = aFilters[0].getFilters()[0];
-      var oExclude = aFilters[1].getFilters()[0];
-      assert.strictEqual(oInclude.getPath(), sId, "contains on " + sId + " only");
-      assert.strictEqual(oInclude.getOperator(), FilterOperator.Contains);
-      assert.strictEqual(oExclude.getPath(), sId, "exclude on " + sId);
-      assert.strictEqual(oExclude.getOperator(), FilterOperator.NE);
+      assert.strictEqual(aFilters.length, 1, "typed text: one filter");
+      assert.notOk(aFilters[0].isAnd(), "ID or name");
+      assert.deepEqual(aFilters[0].getFilters().map(filterShape), [
+        ServiceSchema.headerProperties.providerId + " Contains milwau",
+        ServiceSchema.headerProperties.providerName + " Contains milwau"
+      ], "typed *x* -> contains on ID or name, as before");
+      oRequestId.destroy();
+      oProvider.destroy();
+    });
+  });
+
+  QUnit.test("the Provider value help asks for free text and needs no 'not found' texts (GH-105)", function (assert) {
+    return loadMaster().then(function (Master) {
+      var oList = { entitySet: "CustomerSalesArea", key: "Customer" };
+      var oInput = new MultiInput().data("suggestionConfig", oList);
+      var oStub = stubMaster(Master, { filterProvider: oInput });
+      var oConfig;
+      oStub._openStandardEntityValueHelp = function (oField, oValueHelpConfig) {
+        oConfig = oValueHelpConfig;
+      };
+      oStub.onProviderFilterValueHelpRequest();
+      assert.deepEqual(oConfig.conditionValueList, { suggestionConfig: oList, allowUnknown: true },
+        "free text on, the filter field's list as suggestions, no error texts");
       oInput.destroy();
+    });
+  });
+
+  QUnit.test("_createConditionValueCheck in free-text mode: nothing invalid, IDs set to the list key (GH-105)", function (assert) {
+    return loadMaster().then(function (Master) {
+      var aRequests = [];
+      var oModel = {
+        bindList: function (sPath, oContext, aSorters, aFilters) {
+          var sValue = aFilters[0].getValue1();
+          aRequests.push(sValue);
+          return {
+            requestContexts: function () {
+              return Promise.resolve(mList[sValue] ? [{ getProperty: function () { return mList[sValue]; } }] : []);
+            },
+            destroy: function () {}
+          };
+        }
+      };
+      var oInput = new MultiInput();
+      var oStub = stubMaster(Master, {}, oModel);
+      var oCheck = oStub._createConditionValueCheck(oInput, {
+        suggestionConfig: { modelName: "ord", entitySet: "CustomerSalesArea", key: "Customer", description: "CustomerName",
+          keyLabel: "providerHelpId", descriptionLabel: "providerHelpName" },
+        allowUnknown: true
+      });
+      return oCheck.checkRanges([
+        { operation: "Contains", value1: "milwau" },
+        { operation: "EQ", value1: "0040006524" }
+      ]).then(function (oResult) {
+        assert.deepEqual(aRequests, ["milwau", "0040006524"], "one exact lookup per value");
+        assert.deepEqual(oResult.invalid, [], "free text accepted");
+        assert.strictEqual(oResult.ranges[0].value1, "milwau", "free text kept");
+        assert.strictEqual(oResult.ranges[1].value1, "40006524", "typed ID normalised to the list key");
+        assert.ok(oStub.textKeys.every(function (sKey) {
+          return typeof sKey === "string" && sKey.length > 0;
+        }), "no text read with a missing key");
+        oInput.destroy();
+      });
     });
   });
 
@@ -345,9 +625,9 @@ sap.ui.define([
       var oCheck = oStub._createConditionValueCheck(oInput, {
         suggestionConfig: { modelName: "ord", entitySet: "CustomerSalesArea", key: "Customer", description: "CustomerName",
           keyLabel: "providerHelpId", descriptionLabel: "providerHelpName" },
-        notFoundKey: "providerConditionNotFound",
-        invalidKey: "providerConditionsInvalid",
-        checkFailedKey: "providerConditionCheckFailed"
+        notFoundKey: "testNotFound",
+        invalidKey: "testInvalid",
+        checkFailedKey: "testCheckFailed"
       });
       return oCheck.checkRanges([
         { operation: "EQ", value1: "40029638" },
