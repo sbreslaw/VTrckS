@@ -56,9 +56,10 @@ body:
       description: Who approves the spec (acceptance criteria) before work starts. "Reporter" = you.
       options:
         - "Reporter (me)"
-        - "Approver One (@APPROVER-LOGIN-1)"
-        - "Approver Two (@APPROVER-LOGIN-2)"
-        - "Approver Three (@APPROVER-LOGIN-3)"
+        - "Rebekah (@BZ30)"
+        - "Jigisha (@BO79)"
+        - "DJ Fesco (@BN68)"
+        - "Anitha (@BN95)"
     validations:
       required: true
   - type: textarea
