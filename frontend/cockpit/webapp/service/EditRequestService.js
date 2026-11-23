@@ -83,7 +83,8 @@ sap.ui.define([
 
     // GH-87: Returns Items edit session (ServiceSchema.itemsEditAction ...
     // saveAction / discardAction); its writes run in the immediate
-    // itemInteractiveGroup. Details and the other sections stay sessionless.
+    // itemInteractiveGroup. Details uses the same session only for a Contact
+    // change at Save (GH-98); the other sections stay sessionless.
     // Resolves the session object CreateOrderService.postItem accepts.
     // If-Match:* - the Items rows are re-read inside the session right after it opens.
     openSession: function (oHeaderContext) {

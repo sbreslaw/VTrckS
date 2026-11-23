@@ -698,12 +698,14 @@ sap.ui.define([
     // before). Read first (minimal $select): the V4 model only PATCHes an
     // entity it has in its cache. ITEM_GROUP ($auto) keeps it out of
     // SaveChanges' changeset ("Save not alone in changeset", see save() above).
-    _patchSessionContact: function (oModel, oCreateOptions) {
+    // GH-98: also used by the General-edit Save session on an existing return
+    // (sOrderId = its key; create passes none and addresses the session row '').
+    _patchSessionContact: function (oModel, oCreateOptions, sOrderId) {
       if (!oCreateOptions || !oCreateOptions.contactId || !ServiceSchema.contactPartnerFunction) {
         return Promise.resolve();
       }
       var sProperty = ServiceSchema.headerPartnerProperties.contactPerson;
-      var oBinding = oModel.bindContext(ServiceSchema.buildHeaderPartnerPath("", ServiceSchema.contactPartnerFunction), undefined, {
+      var oBinding = oModel.bindContext(ServiceSchema.buildHeaderPartnerPath(sOrderId || "", ServiceSchema.contactPartnerFunction), undefined, {
         $$updateGroupId: ITEM_GROUP,
         $select: sProperty
       });

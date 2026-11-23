@@ -544,6 +544,9 @@ sap.ui.define([
     },
 
     contactPartnerFunction: "AP",
+    // GH-98: General edit changes the AP Contact Person inside an edit session
+    // opened at Save (Detail.controller.js#_saveDetailsContactSession).
+    contactEditableInEdit: true,
 
     // Sold-To partner function (internal code, PartnerFunction_Text "Sold-to party").
     // formatter.mainPartnerText marks it as the Main Partner in the read-only
