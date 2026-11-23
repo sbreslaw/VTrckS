@@ -868,7 +868,21 @@ sap.ui.define([
         // Status field (Details.fragment.xml, OrderStatusType, key OrderType+Status) -
         // replaces the static per-order-type editStatusOptions array with a live VH,
         // filtered by the current order's own SalesOrderType.
-        orderStatus: "OrderStatus"
+        orderStatus: "OrderStatus",
+        // GH-101: read-only SAP application log for the shared Provider Order service.
+        orderLogMessage: "OrderLogMessage"
+      },
+      orderLogMessageProperties: {
+        salesOrder: "SalesOrder",
+        sequence: "MessageSequence",
+        type: "MessageType",
+        text: "MessageText",
+        messageClass: "MessageClass",
+        messageNumber: "MessageNumber",
+        variable1: "MessageVariable1",
+        variable2: "MessageVariable2",
+        variable3: "MessageVariable3",
+        variable4: "MessageVariable4"
       },
       // OrderIntentionType (design/metadata/zui_providerorder_meta_2026-10-19.xml): key NDC + OrderingIntention + SortOrder.
       orderIntentionProperties: {
