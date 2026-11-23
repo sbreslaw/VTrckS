@@ -319,15 +319,16 @@ sap.ui.define([
     });
   });
 
-  QUnit.test("a field filled by the panel after creation keeps unknown text", function (assert) {
+  QUnit.test("a field filled by the panel after creation keeps unknown text (trimmed, one lookup)", function (assert) {
     var fnCallback;
     var oSetup = createCheck({ allowUnknown: true });
     oSetup.check.attachTo({ suggest: function (fn) { fnCallback = fn; } });
     var oInput = panelInput([]);
     fnCallback(oInput, "Customer");
-    oInput.setValue("milwau");
+    oInput.setValue(" milwau ");
     return flush().then(function () {
-      assert.strictEqual(oInput.getValue(), "milwau", "carried-over text kept");
+      assert.strictEqual(oInput.getValue(), "milwau", "carried-over text kept, trimmed");
+      assert.deepEqual(oSetup.calls.lookups, [["milwau"]], "checked once, although the trim re-enters checkField via change");
       assert.strictEqual(oInput.getValueState(), ValueState.None, "no error");
       oInput.destroy();
     });
