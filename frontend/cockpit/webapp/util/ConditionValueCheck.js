@@ -10,6 +10,8 @@ sap.ui.define([
   // value that does not exist is cleared from the condition with an error on
   // the field. checkRanges() is the OK safety net for values that never passed
   // a value field (pasted rows, conditions restored from a variant).
+  // GH-105: with allowUnknown the fields take free text instead - a value that
+  // is not in the list stays (trimmed), only an existing one is set to its key.
   var ValueState = coreLibrary.ValueState;
   var PICKED = "conditionValuePicked";
 
@@ -40,31 +42,61 @@ sap.ui.define([
    * @param {function(sap.m.Input):(function|undefined)} oOptions.configureInput adds the type-ahead to a
    *   value field; may return a function that removes it
    * @param {string[]} [oOptions.knownValues] keys already known to exist (picked from the list earlier)
-   * @param {function(string):string} oOptions.notFoundText field error for a value that does not exist
-   * @param {string} oOptions.checkFailedText field error when the lookup fails
+   * @param {boolean} [oOptions.allowUnknown] free text (GH-105): a value that is not in the list is kept as
+   *   typed (trimmed), without an error; a failed lookup keeps the value; checkRanges never reports invalid
+   *   values and never rejects. Found values are still set to the list key.
+   * @param {function(string):string} [oOptions.notFoundText] field error for a value that does not exist
+   *   (only without allowUnknown)
+   * @param {string} [oOptions.checkFailedText] field error when the lookup fails (only without allowUnknown)
    */
   function create(oOptions) {
+    var bAllowUnknown = !!oOptions.allowUnknown;
     var mKnown = {};
+    // One lookup per value: answers "not found" are remembered, lookups in flight are shared.
+    var mMissing = {};
+    var mPending = {};
     (oOptions.knownValues || []).map(normalize).filter(Boolean).forEach(function (sKey) {
       mKnown[sKey] = sKey;
     });
 
     function resolve(aValues) {
+      var aWaits = [];
       var aMissing = unique(aValues.filter(function (sValue) {
-        return !mKnown[sValue];
+        if (mKnown[sValue] || mMissing[sValue]) {
+          return false;
+        }
+        if (mPending[sValue]) {
+          aWaits.push(mPending[sValue]);
+          return false;
+        }
+        return true;
       }));
-      if (!aMissing.length) {
-        return Promise.resolve();
-      }
-      return oOptions.lookup(aMissing).then(function (mFound) {
-        aMissing.forEach(function (sValue) {
-          var sKey = mFound && mFound[sValue];
-          if (sKey) {
-            mKnown[sValue] = sKey;
-            mKnown[sKey] = sKey;
-          }
+      if (aMissing.length) {
+        var oLookup = oOptions.lookup(aMissing).then(function (mFound) {
+          aMissing.forEach(function (sValue) {
+            var sKey = mFound && mFound[sValue];
+            if (sKey) {
+              mKnown[sValue] = sKey;
+              mKnown[sKey] = sKey;
+            } else {
+              mMissing[sValue] = true;
+            }
+          });
         });
-      });
+        var fnSettled = function () {
+          aMissing.forEach(function (sValue) {
+            if (mPending[sValue] === oLookup) {
+              delete mPending[sValue];
+            }
+          });
+        };
+        oLookup.then(fnSettled, fnSettled);
+        aMissing.forEach(function (sValue) {
+          mPending[sValue] = oLookup;
+        });
+        aWaits.push(oLookup);
+      }
+      return Promise.all(aWaits).then(function () {});
     }
 
     // The condition panel reads the field on "change": a programmatic value
@@ -82,6 +114,10 @@ sap.ui.define([
       var sValue = normalize(oInput.getValue());
       var bPicked = oInput.data(PICKED);
       oInput.data(PICKED, null);
+      // GH-105: free text reaches the condition as typed - trim it there first (only spaces -> no condition).
+      if (bAllowUnknown && sValue !== oInput.getValue()) {
+        setFieldValue(oInput, sValue);
+      }
       if (!sValue) {
         return Promise.resolve();
       }
@@ -94,15 +130,17 @@ sap.ui.define([
         }
         var sKey = mKnown[sValue];
         if (!sKey) {
-          // An empty value removes the condition; the rejected text stays visible in the error.
-          setFieldValue(oInput, "");
-          oInput.setValueState(ValueState.Error);
-          oInput.setValueStateText(oOptions.notFoundText(sValue));
+          if (!bAllowUnknown) {
+            // An empty value removes the condition; the rejected text stays visible in the error.
+            setFieldValue(oInput, "");
+            oInput.setValueState(ValueState.Error);
+            oInput.setValueStateText(oOptions.notFoundText(sValue));
+          }
         } else if (sKey !== oInput.getValue()) {
           setFieldValue(oInput, sKey);
         }
       }, function () {
-        if (isCurrent(oInput, sValue)) {
+        if (!bAllowUnknown && isCurrent(oInput, sValue)) {
           oInput.setValueState(ValueState.Error);
           oInput.setValueStateText(oOptions.checkFailedText);
         }
@@ -157,18 +195,20 @@ sap.ui.define([
 
       checkField: checkField,
 
-      // Resolves { invalid: [values that do not exist], ranges: copies with list keys }; rejects when the lookup fails.
+      // Resolves { invalid: [values that do not exist], ranges: copies with list keys }; rejects when the lookup
+      // fails. With allowUnknown nothing is invalid, unknown values come back trimmed, and a failure resolves too.
       checkRanges: function (aRanges) {
         var aValues = [];
         aRanges.forEach(function (oRange) {
           aValues = aValues.concat(rangeValues(oRange));
         });
-        return resolve(aValues).then(function () {
+        var fnResult = function () {
           var fnKey = function (vValue) {
-            return mKnown[normalize(vValue)] || vValue;
+            var sValue = normalize(vValue);
+            return mKnown[sValue] || (bAllowUnknown && sValue ? sValue : vValue);
           };
           return {
-            invalid: unique(aValues.filter(function (sValue) {
+            invalid: bAllowUnknown ? [] : unique(aValues.filter(function (sValue) {
               return !mKnown[sValue];
             })),
             ranges: aRanges.map(function (oRange) {
@@ -181,6 +221,12 @@ sap.ui.define([
               });
             })
           };
+        };
+        return resolve(aValues).then(fnResult, function (oError) {
+          if (bAllowUnknown) {
+            return fnResult();
+          }
+          throw oError;
         });
       }
     };
