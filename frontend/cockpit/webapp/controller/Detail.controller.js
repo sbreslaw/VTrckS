@@ -150,7 +150,7 @@ sap.ui.define([
       this.getView().setModel(new JSONModel({ items: [], selectedKey: ItemsGridLayout.STANDARD_KEY, defaultKey: ItemsGridLayout.STANDARD_KEY, modified: false }), "itemsViews");
       this.getView().setModel(new JSONModel({ rows: [], busy: false, error: false, editable: false, loaded: false }), "ioh");
       this.getView().setModel(new JSONModel({ salesOrder: "", rows: [], busy: false, error: false, loaded: false }), "transactionHistory");
-      this.getView().setModel(new JSONModel({ name: "", tooltip: "" }), "detailContact");
+      this.getView().setModel(new JSONModel(this._emptyDetailContact()), "detailContact");
       // CRUD Task 1 v4: Contact/Employee Responsible/Priority/Category/Status/
       // Shipping-Provider have no real writable field yet (all part of the
       // still-unbuilt enrichment action, ADDENDUM-001) - local-only model, reset
@@ -298,7 +298,8 @@ sap.ui.define([
       var oEnrichModel = this.getView().getModel("createEnrich");
       return oContext.getModel().hasPendingChanges(ServiceSchema.editUpdateGroup) ||
         !!this._oItemsEditSession ||
-        oEnrichModel.getProperty("/notes") !== oEnrichModel.getProperty("/notesOriginal");
+        oEnrichModel.getProperty("/notes") !== oEnrichModel.getProperty("/notesOriginal") ||
+        this._isDetailsContactChanged();
     },
 
     _getEditingSectionId: function () {
@@ -618,6 +619,9 @@ sap.ui.define([
         // order's current status code - its selectedKey is createEnrich>/status.
         this.getView().getModel("createEnrich").setProperty("/status",
           formatter.masterStatusCode(oContext.getProperty(ServiceSchema.headerProperties.userStatus)));
+        if (ServiceSchema.contactEditableInEdit) {
+          this._seedDetailsContact();
+        }
       }
       UserFeedback.announce(this.getResourceBundle().getText("sectionEditStartAnnounce", [this._getSectionTitle(sSectionId)]));
     },
@@ -937,6 +941,7 @@ sap.ui.define([
         oEnrichModel.setProperty("/notes", oEnrichModel.getProperty("/notesOriginal") || "");
         this._bNotesNeedsCreate = false;
         this._destroyNotesWriteBinding();
+        this._restoreDetailsContact();
       }
       Messaging.removeAllMessages();
       UserFeedback.announce(this.getResourceBundle().getText("sectionEditCancelAnnounce", [this._getSectionTitle(sSectionId)]));
@@ -1108,7 +1113,9 @@ sap.ui.define([
         return;
       }
       var oItemsSession = sSectionId === "items" ? this._oItemsEditSession : null;
-      if (oItemsSession) {
+      // GH-98: a changed Contact is saved in an edit session opened here.
+      var bContactSession = sSectionId === "details" && this._isDetailsContactChanged();
+      if (oItemsSession || bContactSession) {
         // GH-87: nothing may be queued into the session while it is saved.
         this.getView().setBusy(true);
       }
@@ -1119,7 +1126,7 @@ sap.ui.define([
         ? this._stageHeaderNotes(oContext)
         : Promise.resolve();
       pRemoveEmptyItems.then(function () { return oStagePromise; }).then(function () {
-        return EditRequestService.save(oContext);
+        return bContactSession ? that._saveDetailsContactSession(oContext) : EditRequestService.save(oContext);
       }).then(function () {
         // GH-87: vrEdit first - header changes an item edit queued
         // (_updateHeaderReturnReason) go into the session, SaveChanges commits all.
@@ -1170,31 +1177,43 @@ sap.ui.define([
             return;
           }
         }
-        if (oError.isConflict) {
-          // GH-87 Q11: the conflict dialog reloads and ends the edit.
-          if (oItemsSession && oItemsSession === that._oItemsEditSession) {
-            EditRequestService.discardSession(oContext.getModel());
-            that._closeItemsEditSession(true);
+        var fnReport = function () {
+          if (oError.isConflict) {
+            // GH-87 Q11: the conflict dialog reloads and ends the edit.
+            if (oItemsSession && oItemsSession === that._oItemsEditSession) {
+              EditRequestService.discardSession(oContext.getModel());
+              that._closeItemsEditSession(true);
+            }
+            that._showConflictDialog(oContext, sSectionId);
+          } else {
+            // Message Accuracy & Hygiene task: same MessageExtractor-driven
+            // popover the create flow uses, replacing the generic toast this
+            // used to show for every change-mode save failure alike.
+            var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), oBundle);
+            var aExpandIds = aSectionIds.length ? aSectionIds : [sSectionId];
+            aExpandIds.forEach(function (sId) {
+              that._oSectionFactory.expandSection(sId);
+            });
+            // Package D note: NOT also moving focus to the section title here -
+            // _openMessagePopover() below already moves focus into the popover
+            // (the actual error detail), so a second programmatic focus move
+            // right after it would just fight over focus. The popover IS this
+            // path's "focus moves to the problem" affordance.
+            that._openMessagePopover();
           }
-          that._showConflictDialog(oContext, sSectionId);
-        } else {
-          // Message Accuracy & Hygiene task: same MessageExtractor-driven
-          // popover the create flow uses, replacing the generic toast this
-          // used to show for every change-mode save failure alike.
-          var aSectionIds = MessageExtractor.extract(oError, oContext.getPath(), oBundle);
-          var aExpandIds = aSectionIds.length ? aSectionIds : [sSectionId];
-          aExpandIds.forEach(function (sId) {
-            that._oSectionFactory.expandSection(sId);
+        };
+        // GH-98: the Contact session is discarded (or the saved Contact
+        // reloaded) first; the view stays busy until that has settled.
+        if (bContactSession) {
+          return that._recoverDetailsContactSession(oError, oContext).then(function (bReported) {
+            if (!bReported) {
+              fnReport();
+            }
           });
-          // Package D note: NOT also moving focus to the section title here -
-          // _openMessagePopover() below already moves focus into the popover
-          // (the actual error detail), so a second programmatic focus move
-          // right after it would just fight over focus. The popover IS this
-          // path's "focus moves to the problem" affordance.
-          that._openMessagePopover();
         }
+        fnReport();
       }).finally(function () {
-        if (oItemsSession) {
+        if (oItemsSession || bContactSession) {
           that.getView().setBusy(false);
         }
       });
@@ -1217,43 +1236,175 @@ sap.ui.define([
           dataReceived: this._syncOrderUiFromContext.bind(this)
         }
       });
-      this._loadDetailContact(sOrderId);
+      return this._loadDetailContact(sOrderId);
+    },
+
+    _emptyDetailContact: function () {
+      return { name: "", tooltip: "", id: "", exists: false, editable: false };
     },
 
     // Same source as the Master Contact column: the order's AP HeaderPartner, via a
     // filtered collection query (a key read 404s when the order has no AP partner).
+    // GH-98: also keeps the Contact Person id and whether the row exists - only an
+    // existing row is editable in General edit (Returns). Never rejects.
     _loadDetailContact: function (sOrderId) {
       var oContactModel = this.getView().getModel("detailContact");
       var oProps = ServiceSchema.headerPartnerProperties;
       var iRequest = (this._iContactRequest || 0) + 1;
       this._iContactRequest = iRequest;
-      oContactModel.setData({ name: "", tooltip: "" });
+      oContactModel.setData(this._emptyDetailContact());
       // ADR-002 PR1: same absent-AP-partner-contact concept as Master.controller.js's
       // _loadVisibleMasterContacts - contactPartnerFunction/contactPerson/phone/email
       // are all null on ReturnsSchema (Parties reads 500 on this service).
       if (!sOrderId || !ServiceSchema.contactPartnerFunction) {
-        return;
+        return Promise.resolve();
       }
       var oBinding = this.getOwnerComponent().getModel().bindList("/" + ServiceSchema.entitySets.headerPartner, undefined, undefined, [
         new Filter(oProps.salesOrder, FilterOperator.EQ, sOrderId),
         new Filter(oProps.partnerFunction, FilterOperator.EQ, ServiceSchema.contactPartnerFunction)
       ], { $select: [oProps.salesOrder, oProps.partnerFunction, oProps.fullName, oProps.contactPerson, oProps.phone, oProps.email].join(",") });
-      oBinding.requestContexts(0, 1).then(function (aContexts) {
+      return oBinding.requestContexts(0, 1).then(function (aContexts) {
         var oContact = aContexts.length ? aContexts[0].getObject() : null;
         if (iRequest !== this._iContactRequest || !oContact) {
           return;
         }
         var sContactPerson = oContact[oProps.contactPerson];
-        var sName = oContact[oProps.fullName] || (sContactPerson && sContactPerson !== "0" ? sContactPerson : "");
+        var sId = sContactPerson && sContactPerson !== "0" ? sContactPerson : "";
+        var sName = oContact[oProps.fullName] || sId;
         oContactModel.setData({
           name: sName,
-          tooltip: [sName, oContact[oProps.email], oContact[oProps.phone]].filter(Boolean).join(" \u00b7 ")
+          tooltip: [sName, oContact[oProps.email], oContact[oProps.phone]].filter(Boolean).join(" \u00b7 "),
+          id: sId,
+          exists: true,
+          editable: !!ServiceSchema.contactEditableInEdit
         });
+        // General edit opened before this read returned: seed the field,
+        // unless the user already picked a contact.
+        var oFlags = this.getView().getModel("sectionFlags");
+        var sPicked = this.getView().getModel("createEnrich").getProperty("/contactId");
+        if (ServiceSchema.contactEditableInEdit && oFlags.getProperty("/details/editing") && !oFlags.getProperty("/createMode") &&
+            (this._sContactSeedId === undefined || sPicked === this._sContactSeedId)) {
+          this._seedDetailsContact();
+        }
       }.bind(this)).catch(function () {
         // Non-fatal: the field stays empty; the read failure is in the message model.
       }).finally(function () {
         oBinding.destroy();
       });
+    },
+
+    // GH-98: General edit starts from the loaded Contact; Cancel restores it.
+    _seedDetailsContact: function () {
+      var oContact = this.getView().getModel("detailContact");
+      var oEnrich = this.getView().getModel("createEnrich");
+      this._sContactSeedId = oContact.getProperty("/id") || "";
+      // A late create-mode prefill answer must not overwrite the seed.
+      this._iContactPrefillRequest = (this._iContactPrefillRequest || 0) + 1;
+      oEnrich.setProperty("/contactId", this._sContactSeedId);
+      oEnrich.setProperty("/contactName", oContact.getProperty("/name") || "");
+    },
+
+    _restoreDetailsContact: function () {
+      if (this._sContactSeedId === undefined || !ServiceSchema.contactEditableInEdit) {
+        return;
+      }
+      var oEnrich = this.getView().getModel("createEnrich");
+      oEnrich.setProperty("/contactId", this._sContactSeedId);
+      oEnrich.setProperty("/contactName", this.getView().getModel("detailContact").getProperty("/name") || "");
+    },
+
+    _isDetailsContactChanged: function () {
+      var oView = this.getView();
+      var oFlags = oView.getModel("sectionFlags");
+      if (!oFlags || oFlags.getProperty("/createMode") || !oFlags.getProperty("/details/editing")) {
+        return false;
+      }
+      var oContact = oView.getModel("detailContact");
+      if (!oContact || !oContact.getProperty("/editable")) {
+        return false;
+      }
+      return (oView.getModel("createEnrich").getProperty("/contactId") || "") !== (this._sContactSeedId || "");
+    },
+
+    // GH-98 (owner Q4/Q5, prompt Q7): PrepareForEdit -> the AP Contact Person
+    // PATCH -> the queued vrEdit header changes -> SaveChanges. A sessionless
+    // AP PATCH dumps on this service (NOTES 2026-11-17 #75), so Contact is only
+    // written in a session. A rejection carries contactSessionStage for
+    // _recoverDetailsContactSession: "opening", "inSession" or "saving".
+    _saveDetailsContactSession: function (oContext) {
+      var sStage = "opening";
+      var sContactId = this.getView().getModel("createEnrich").getProperty("/contactId");
+      return EditRequestService.openSession(oContext).then(function (oSession) {
+        oSession.plainContext.getBinding().destroy();
+        sStage = "inSession";
+        return CreateOrderService._patchSessionContact(oContext.getModel(), { contactId: sContactId },
+          oContext.getProperty(ServiceSchema.keys.orderId));
+      }).then(function () {
+        return EditRequestService.save(oContext);
+      }).then(function () {
+        sStage = "saving";
+        return EditRequestService.saveSession(oContext);
+      }).catch(function (oError) {
+        var oTagged = oError || new Error("Contact save failed");
+        if (!oTagged.contactSessionStage) {
+          oTagged.contactSessionStage = sStage;
+        }
+        throw oTagged;
+      });
+    },
+
+    // Resolves true when the failure is fully reported here, false when the
+    // caller's usual conflict/message handling should follow. General stays in edit.
+    _recoverDetailsContactSession: function (oError, oContext) {
+      var that = this;
+      var oModel = oContext.getModel();
+      var oBundle = this.getResourceBundle();
+      var sStage = oError && oError.contactSessionStage;
+      var fnShow = function () {
+        // UI5 already reports a failed bound action (PrepareForEdit/SaveChanges).
+        if (!oError.$reported) {
+          MessageExtractor.extract(oError, oContext.getPath(), oBundle).forEach(function (sId) {
+            that._oSectionFactory.expandSection(sId);
+          });
+        }
+        that._openMessagePopover();
+      };
+      if (sStage === "opening") {
+        fnShow();
+        return Promise.resolve(true);
+      }
+      if (sStage === "inSession" || sStage === "saving") {
+        this._resetImmediateWrites(oModel);
+        return EditRequestService.discardSession(oModel).then(function () {
+          that._resetImmediateWrites(oModel);
+          if (sStage === "inSession" || oError.isConflict) {
+            return false;
+          }
+          // The writes were accepted before SaveChanges failed: show the stored values.
+          return that._reloadHeaderContext(oContext.getPath()).then(function () {
+            MessageExtractor.addNote(oBundle.getText("detailsSessionSaveDiscarded"), "Warning");
+            fnShow();
+            return true;
+          });
+        });
+      }
+      // SaveChanges committed; a later step failed - the saved Contact is the new seed.
+      this._sContactSeedId = undefined;
+      return this._loadDetailContact(oContext.getProperty(ServiceSchema.keys.orderId)).then(function () {
+        return false;
+      });
+    },
+
+    // A rejected in-session write stays pending and UI5 would repeat it
+    // without the session, where an AP PATCH dumps and commits.
+    _resetImmediateWrites: function (oModel) {
+      try {
+        if (oModel.hasPendingChanges(ServiceSchema.itemInteractiveGroup)) {
+          oModel.resetChanges(ServiceSchema.itemInteractiveGroup);
+        }
+      } catch (oResetError) {
+        // still running: it belongs to the ended session and fails there
+      }
     },
 
     // Controls loaded via a section's Fragment.load carry the panel's ID as an
@@ -5190,16 +5341,28 @@ sap.ui.define([
       var oProps = ServiceSchema.providerOrderService.providerContactProperties;
       var oBundle = this.getResourceBundle();
       var oContext = this.getView().getBindingContext();
-      var sProviderId = oContext && oContext.getProperty(ServiceSchema.headerProperties.providerId);
-      if (!sProviderId) {
+      var fnOpen = function (sProviderId) {
+        if (!sProviderId) {
+          return;
+        }
+        this._openProviderContactValueHelpDialog(oBundle.getText("filterContact"), sProviderId, function (oItem) {
+          this._iContactPrefillRequest = (this._iContactPrefillRequest || 0) + 1;
+          var oModel = this.getView().getModel("createEnrich");
+          oModel.setProperty("/contactId", oItem[oProps.businessPartnerPerson]);
+          oModel.setProperty("/contactName", oItem[oProps.businessPartnerPersonText]);
+        }.bind(this));
+      }.bind(this);
+      if (!oContext) {
         return;
       }
-      this._openProviderContactValueHelpDialog(oBundle.getText("filterContact"), sProviderId, function (oItem) {
-        this._iContactPrefillRequest = (this._iContactPrefillRequest || 0) + 1;
-        var oModel = this.getView().getModel("createEnrich");
-        oModel.setProperty("/contactId", oItem[oProps.businessPartnerPerson]);
-        oModel.setProperty("/contactName", oItem[oProps.businessPartnerPersonText]);
-      }.bind(this));
+      if (this.getView().getModel("sectionFlags").getProperty("/createMode")) {
+        fnOpen(oContext.getProperty(ServiceSchema.headerProperties.providerId));
+        return;
+      }
+      // GH-98 General edit: the provider may not be loaded on a displayed return.
+      oContext.requestProperty(ServiceSchema.headerProperties.providerId).then(fnOpen, function () {
+        // the read failure is in the message model
+      });
     },
 
     // Local-only (see createEnrich>/employeeResponsibleName) - "based on SAP
@@ -5370,7 +5533,11 @@ sap.ui.define([
         }
       };
       var fnOpenValueHelp = function (oEvent) {
-        if (!this.getView().getModel("createState").getProperty("/providerChosen")) {
+        var oFlags = this.getView().getModel("sectionFlags");
+        var bAllowed = oFlags.getProperty("/createMode")
+          ? this.getView().getModel("createState").getProperty("/providerChosen")
+          : oFlags.getProperty("/details/editing") && this.getView().getModel("detailContact").getProperty("/editable");
+        if (!bAllowed) {
           return;
         }
         if (oEvent.target.closest(".sapMInputBaseIconContainer")) {
@@ -6021,6 +6188,7 @@ sap.ui.define([
         this._focusById("detailTitle");
       }.bind(this));
       this._loadHeaderNotes(this.getView().getBindingContext());
+      this._sContactSeedId = undefined;
       this._loadDetailContact(sId);
       this._sItemsUpdateGroup = ServiceSchema.editUpdateGroup;
       this._releaseItemsTable();

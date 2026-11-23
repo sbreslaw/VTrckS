@@ -172,18 +172,21 @@
 								Contact Person (HeaderPartner PartnerFunction AP) row inside the
 								create session before SaveChanges
 								(CreateOrderService.js#_patchSessionContact) - never via
-								CreatePartner (only one CP allowed, VPD/012). -->
+								CreatePartner (only one CP allowed, VPD/012). GH-98: also shown in
+								General edit when detailContact>/editable (Returns with an AP row);
+								saved by an edit session at Save (Detail.controller.js#
+								_saveDetailsContactSession). -->
 							<VBox>
 								<layoutData>
 									<l:GridData span="XL8 L8 M8 S12"/>
 								</layoutData>
-								<Text text="{detailContact>/name}" tooltip="{detailContact>/tooltip}" visible="{= !${sectionFlags>/createMode} }"/>
+								<Text text="{detailContact>/name}" tooltip="{detailContact>/tooltip}" visible="{= !(${sectionFlags>/createMode} || (${sectionFlags>/details/editing} ? ${detailContact>/editable} : false)) }"/>
 								<Input id="contactInput"
 									value="{createEnrich>/contactName}"
 									showValueHelp="true"
 									editable="true"
-									enabled="{createState>/providerChosen}"
-									visible="{sectionFlags>/createMode}"
+									enabled="{= !${sectionFlags>/createMode} || ${createState>/providerChosen} }"
+									visible="{= ${sectionFlags>/createMode} || (${sectionFlags>/details/editing} ? ${detailContact>/editable} : false) }"
 									valueHelpRequest=".onContactValueHelpRequest"/>
 							</VBox>
 						</f:fields>
