@@ -16,9 +16,9 @@ body:
       label: Who decides
       options:
         - "Reporter (me)"
-        - "@APPROVER-LOGIN-1"
-        - "@APPROVER-LOGIN-2"
-        - "@APPROVER-LOGIN-3"
+        - "Approver One (@APPROVER-LOGIN-1)"
+        - "Approver Two (@APPROVER-LOGIN-2)"
+        - "Approver Three (@APPROVER-LOGIN-3)"
     validations:
       required: true
   - type: textarea
