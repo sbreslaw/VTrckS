@@ -197,6 +197,13 @@ sap.ui.define([
       assert.strictEqual(oSelect.getAttribute("resetOnMissingKey"), "true", "a missing key clears the shown selection");
       var oItem = oSelect.getElementsByTagNameNS("*", "Item")[0];
       assert.strictEqual(oItem.getAttribute("key"), "{returnReasons>key}", "item key");
+      var oColumn = oSelect.parentNode;
+      while (oColumn && oColumn.localName !== "Column") {
+        oColumn = oColumn.parentNode;
+      }
+      assert.ok(oColumn && oColumn.getAttribute("id"), "the column has an id");
+      assert.strictEqual(oSelect.getAttribute("ariaLabelledBy"), oColumn && oColumn.getAttribute("id"),
+        "the Select is labelled by its column (the table labels only a cell's root control)");
 
       var oBox = oSelect.parentNode;
       assert.strictEqual(oBox.localName, "HBox", "Select sits in an HBox");
