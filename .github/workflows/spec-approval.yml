@@ -1,0 +1,86 @@
+name: Spec approval
+
+# Spec PRs: branch spec/gh-<issue>, one file specs/GH-<issue>.md, opened by triage.
+# - Approval review  -> issue gets `acceptance-confirmed` (+ comment), `awaiting-approval` removed.
+# - Changes requested -> issue gets `needs-info` (+ comment).
+# - Daily: spec PRs with no review after 2 business days -> approved by default (same labels, comment says so).
+# The spec PR itself is not merged here (branch protection); the implementation PR carries the approved file.
+
+on:
+  pull_request_review:
+    types: [submitted]
+  schedule:
+    - cron: "17 13 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  on-review:
+    if: github.event_name == 'pull_request_review' && startsWith(github.event.pull_request.head.ref, 'spec/gh-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const review = context.payload.review;
+            const issueNumber = Number(pr.head.ref.replace('spec/gh-', ''));
+            if (!issueNumber) return;
+            const { owner, repo } = context.repo;
+            const who = review.user.login;
+            const when = new Date(review.submitted_at).toISOString().slice(0, 16).replace('T', ' ');
+            // Only the designated approver (PR body line "Approver: @login") — or a repo collaborator — can confirm.
+            const m = /Approver:\s*@([A-Za-z0-9-]+)/i.exec(pr.body || '');
+            const designated = m ? m[1].toLowerCase() : null;
+            let allowed = designated ? who.toLowerCase() === designated : false;
+            if (!allowed) {
+              try { const perm = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: who });
+                    allowed = ['write', 'admin', 'maintain', 'triage'].includes(perm.data.permission); } catch (e) {}
+            }
+            if (!allowed) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number,
+                body: `Review by @${who} noted, but confirmation must come from the designated approver${designated ? ' @' + designated : ''} (or a repository collaborator).` });
+              return;
+            }
+            if (review.state === 'approved') {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['acceptance-confirmed'] });
+              try { await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'awaiting-approval' }); } catch (e) {}
+              try { await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'needs-info' }); } catch (e) {}
+              await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber,
+                body: `**Acceptance confirmed** by @${who} via spec PR #${pr.number} on ${when} UTC. The approved \`specs/GH-${issueNumber}.md\` is the definition of done for this issue.` });
+            } else if (review.state === 'changes_requested') {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['needs-info'] });
+              await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber,
+                body: `Spec PR #${pr.number}: changes requested by @${who} on ${when} UTC. The spec will be revised on the same PR; work does not start until it is approved.` });
+            }
+  default-approval:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const businessDaysSince = (d) => { let n = 0; const x = new Date(d); const now = new Date();
+              while (x < now) { x.setUTCDate(x.getUTCDate() + 1); const wd = x.getUTCDay(); if (wd !== 0 && wd !== 6) n++; } return n; };
+            const prs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+            for (const pr of prs) {
+              if (!pr.head.ref.startsWith('spec/gh-')) continue;
+              const issueNumber = Number(pr.head.ref.replace('spec/gh-', ''));
+              const reviews = await github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number: pr.number });
+              if (reviews.some(r => ['APPROVED', 'CHANGES_REQUESTED'].includes(r.state))) continue;
+              const m = /Approver:\s*@([A-Za-z0-9-]+)/i.exec(pr.body || '');
+              const requested = m ? '@' + m[1] : (pr.requested_reviewers.map(u => '@' + u.login).join(', ') || 'the reporter');
+              if (businessDaysSince(pr.created_at) < 2) continue;
+              const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+              if (issue.data.labels.some(l => l.name === 'acceptance-confirmed')) continue;
+              await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['acceptance-confirmed'] });
+              try { await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'awaiting-approval' }); } catch (e) {}
+              const body = `**Acceptance taken as confirmed by default** — spec PR #${pr.number} received no review from ${requested} within 2 business days (opened ${pr.created_at.slice(0,10)}). Per \`specs/README.md\`, \`specs/GH-${issueNumber}.md\` is now the definition of done for this issue.`;
+              await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body });
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: `No review within 2 business days — approved by default (see issue #${issueNumber}).` });
+            }

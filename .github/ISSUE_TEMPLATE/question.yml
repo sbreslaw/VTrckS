@@ -1,0 +1,29 @@
+name: Question
+description: Something to investigate or decide before any code changes
+title: "Question: <one-line summary>"
+labels: ["question"]
+body:
+  - type: textarea
+    id: request
+    attributes:
+      label: Question
+      description: What needs to be understood or decided, and what depends on the answer.
+    validations:
+      required: true
+  - type: dropdown
+    id: approver
+    attributes:
+      label: Who decides
+      options:
+        - "Reporter (me)"
+        - "Rebekah (@BZ30)"
+        - "Jigisha (@BO79)"
+        - "DJ Fesco (@BN68)"
+        - "Anitha (@BN95)"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: What a sufficient answer looks like
+      placeholder: e.g. confirmed on DH1 with a trace; ruling recorded
