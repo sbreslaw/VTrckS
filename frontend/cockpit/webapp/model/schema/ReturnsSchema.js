@@ -635,6 +635,9 @@ sap.ui.define([
         vaccineReturnType: "VaccineReturnType",
         batchValueHelp: "BatchValueHelp",
         orderStatus: "OrderStatus",
+        // GH-104: Return Reason options per return type (OrderReasonType, key OrderType+OrderReason,
+        // zui_providerorder_meta_2026-11-23.xml) - read-only, filterable on OrderType only.
+        orderReason: "OrderReason",
         // GH-101: read-only SAP application log for the shared Provider Order service.
         orderLogMessage: "OrderLogMessage"
       },
@@ -712,6 +715,11 @@ sap.ui.define([
         status: "Status",
         text: "StatusTextDescription",
         statusProfile: "StatusProfile"
+      },
+      orderReasonProperties: {
+        orderType: "OrderType",
+        code: "OrderReason",
+        text: "OrderReasonText"
       }
     },
 
