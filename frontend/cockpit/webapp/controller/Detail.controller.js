@@ -245,7 +245,7 @@ sap.ui.define([
     onRefresh: function () {
       var oContext = this.getView().getBindingContext();
       if (oContext) {
-        Promise.resolve(oContext.refresh()).then(function () {
+        oContext.requestRefresh().then(function () {
           return this._loadOrderLogMessages(oContext.getProperty(ServiceSchema.keys.orderId));
         }.bind(this), function () {
           return this._loadOrderLogMessages(oContext.getProperty(ServiceSchema.keys.orderId));
