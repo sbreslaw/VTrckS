@@ -507,6 +507,35 @@ sap.ui.define([
       });
     },
 
+    // GH-111 (Q6): Returns save() fallback - posts every scratch row with an NDC
+    // through postItem, one after another (postItem opens the session first). Any
+    // failure discards an opened session and resets it, so the scratch rows stay
+    // on screen for the next retry.
+    _postScratchItemsInSession: function (oSession, oScratchContext, oItemsBinding) {
+      var oModel = oScratchContext.getModel();
+      var sMaterialKey = ServiceSchema.itemProperties.material;
+      var aRows = ItemsTableAccess.getContexts(oItemsBinding).filter(function (oItemContext) {
+        return !!oItemContext.getProperty(sMaterialKey);
+      }).map(function (oItemContext) {
+        return oItemContext.getObject() || {};
+      });
+      return aRows.reduce(function (pPrevious, oRow) {
+        return pPrevious.then(function () {
+          return CreateOrderService.postItem(oSession, oScratchContext, oRow);
+        });
+      }, Promise.resolve()).catch(function (oError) {
+        console.error("CreateOrderService.save: item post at Save failed",
+          "\nerror:", oError && oError.message, oError, "\nmessages:", logMessages());
+        var pDiscard = oSession.opened ? discardSession(oModel, "item post at Save failed") : Promise.resolve();
+        return pDiscard.then(function () {
+          oSession.opened = false;
+          oSession.plainContext = null;
+          oSession.pending = null;
+          throw oError;
+        });
+      });
+    },
+
     // Client-side MIN_ITEMS rule enforced at Save (design/prompts/CRUD Task 1
     // Prompt v3.md "Items" section) — counts transient item rows with an NDC
     // and a positive quantity.
@@ -578,6 +607,21 @@ sap.ui.define([
       // only WHEN ① ran (here vs. earlier) differs.
       if (oSession && oSession.opened && oSession.plainContext) {
         return CreateOrderService._commitStickySession(oModel, oSession.plainContext, oScratchContext, oScratchData, oSession, oCreateOptions);
+      }
+
+      // GH-111 (Q6): a Returns Save with no session open or opening - in practice
+      // every retry after a rejected save, whose session was discarded
+      // (Detail.controller.js#_revertItemsToScratch) - opens it and posts the items
+      // exactly like item entry: _ensureSession (create action + Sold-To PATCH) and
+      // postItem per row (POST {} -> PATCH Product+Unit -> PATCH rest). The combined
+      // deep-create below 422s on Returns, and its vrCreate group also holds the
+      // never-submitted scratch header create. A session still opening (first
+      // item's post in flight) keeps the path below, so no row is posted twice.
+      if (ServiceSchema.profileId === "returns" && !(oSession && oSession.pending)) {
+        var oRetrySession = oSession || { opened: false, plainContext: null, pending: null };
+        return CreateOrderService._postScratchItemsInSession(oRetrySession, oScratchContext, oItemsBinding).then(function () {
+          return CreateOrderService._commitStickySession(oModel, oRetrySession.plainContext, oScratchContext, oScratchData, oRetrySession, oCreateOptions);
+        });
       }
 
       // Fallback - session never opened interactively (e.g. Save reached
