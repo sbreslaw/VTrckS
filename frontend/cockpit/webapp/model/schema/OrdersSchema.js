@@ -762,6 +762,8 @@ sap.ui.define([
     contactPartnerFunction: "AP",
     // GH-98: Contact stays read-only in General edit on Provider Orders.
     contactEditableInEdit: false,
+    // GH-111: Provider Orders keep the header PATCH on the new number after SaveChanges.
+    createHeaderInSession: false,
     // Sold-To partner function (internal code). Live 2026-11-11 on 518000504:
     // AG = "Sold-to party" (_PartnerFunction/PartnerFunction_Text). The Parties
     // row actions never show on it (formatter.isNotSoldTo).
