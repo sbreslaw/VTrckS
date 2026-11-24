@@ -35,6 +35,8 @@ sap.ui.define([
   // so a stray pending change-mode edit can never ride the same changeset).
   // Any failure from step (1) onward triggers a best-effort DiscardChanges
   // cleanup (v5 Required Fix 2) before the original error is re-thrown.
+  // GH-111: on Returns (createHeaderInSession) step (4)'s header fields are
+  // written into the session before (3); only the ship-to address follows (3).
   var CREATE_GROUP = ServiceSchema.createUpdateGroup;
   var CREATE_REPLAY_GROUP = ServiceSchema.createReplayGroup;
   // Ancillary Items & Opt-Out session prompt: the group every in-session
@@ -188,6 +190,19 @@ sap.ui.define([
       }
     });
     return oClean;
+  }
+
+  // GH-111: the header values both header writes send - every
+  // createReplayHeaderProperties entry with a scratch value; undefined/""/null
+  // are skipped (a null on a Nullable="false" field fails the whole changeset,
+  // 2026-11-09), "0" is sent.
+  function replayableHeaderValues(oScratchData) {
+    return ServiceSchema.createReplayHeaderProperties.filter(function (sProperty) {
+      var vValue = oScratchData[sProperty];
+      return vValue !== undefined && vValue !== "" && vValue !== null;
+    }).map(function (sProperty) {
+      return { property: sProperty, value: oScratchData[sProperty] };
+    });
   }
 
   function saveNotes(oHeaderContext, sNotes) {
@@ -541,7 +556,9 @@ sap.ui.define([
     // before this resolves). Rejects with the raw error (Detail.controller.js
     // uses MessageExtractor.js to parse it) if any step fails; a best-effort
     // DiscardChanges runs first for any failure from step ① onward (v5
-    // Required Fix 2).
+    // Required Fix 2). GH-111: on Returns (createHeaderInSession) step ④'s
+    // header fields are written into the session before ③; only the ship-to
+    // address follows ③.
     save: function (oScratchContext, oItemsBinding, oSession, oCreateOptions) {
       // Message Accuracy & Hygiene task, Gap 1 - pre-attempt clearing: a
       // stale extractor/technical message from a PRIOR failed save attempt
@@ -673,7 +690,9 @@ sap.ui.define([
     },
 
     // Internal — steps ③④ shared by BOTH save() paths above: SaveChanges
-    // (commits + assigns the real key) and the header-extras PATCH. Bound
+    // (commits + assigns the real key) and, on Returns (createHeaderInSession),
+    // the header fields written into the session before it; Provider Orders
+    // PATCH them on the new number after it. Bound
     // onto oStickyPlainContext, NOT the CreateWithSalesOrderType action's own
     // bound context - see the (still-applicable) v5 gotcha comment history
     // above for why a plain canonical-path context is required here instead.
@@ -683,6 +702,26 @@ sap.ui.define([
       var oContactError = null;
       return CreateOrderService._patchSessionContact(oModel, oCreateOptions).catch(function (oError) {
         oContactError = oError;
+      }).then(function () {
+        if (!ServiceSchema.createHeaderInSession) {
+          return undefined;
+        }
+        // GH-111: a refused header write is handled like a failed SaveChanges -
+        // nothing was saved, so discard the session; a stored Contact error is
+        // dropped, the header error is the one to show.
+        return CreateOrderService._writeSessionHeader(oModel, oScratchData).catch(function (oError) {
+          console.error("CreateOrderService.save: header write before SaveChanges failed",
+            "\nerror:", oError && oError.message, oError,
+            "\nmessages:", logMessages());
+          return discardSession(oModel, "header write before SaveChanges failed").then(function () {
+            if (oSession) {
+              oSession.opened = false;
+              oSession.plainContext = null;
+              oSession.pending = null;
+            }
+            throw oError;
+          });
+        });
       }).then(function () {
         return CreateOrderService._saveStickySession(oModel, oStickyPlainContext, oScratchContext, oScratchData, oSession, oCreateOptions, oContactError);
       });
@@ -717,6 +756,38 @@ sap.ui.define([
         return oContext.setProperty(sProperty, oCreateOptions.contactId);
       }).finally(function () {
         oBinding.destroy();
+      });
+    },
+
+    // GH-111: header fields into the open create session BEFORE SaveChanges, so
+    // the backend save checks see them. Own, never-read binding in
+    // createReplayGroup (API): one merged PATCH on <header>(''), sent with
+    // If-Match * (UI5 fakes an unread entity), fully settled before SaveChanges
+    // is queued, so SaveChanges stays alone in its own $batch (#47). A PATCH
+    // refused inside a delivered $batch rejects only its setProperty promise;
+    // a failed $batch also rejects submitBatch - wait for all of them.
+    _writeSessionHeader: function (oModel, oScratchData) {
+      var aValues = replayableHeaderValues(oScratchData);
+      if (!aValues.length) {
+        return Promise.resolve();
+      }
+      var oBinding = oModel.bindContext(ServiceSchema.buildHeaderPath(""), undefined, {
+        $$updateGroupId: CREATE_REPLAY_GROUP
+      });
+      var oContext = oBinding.getBoundContext();
+      var oFirstError = null;
+      function keepFirst(oError) {
+        oFirstError = oFirstError || oError;
+      }
+      var aSettled = aValues.map(function (oValue) {
+        return oContext.setProperty(oValue.property, oValue.value).catch(keepFirst);
+      });
+      aSettled.push(oModel.submitBatch(CREATE_REPLAY_GROUP).catch(keepFirst));
+      return Promise.all(aSettled).then(function () {
+        oBinding.destroy();
+        if (oFirstError) {
+          throw oFirstError;
+        }
       });
     },
 
@@ -786,7 +857,10 @@ sap.ui.define([
           // header fields against the canonical path exactly like an
           // existing order (EditRequestService.js). Items are already
           // attached (either interactively, or by the fallback's own bulk
-          // deep-create above) - do not create them again here.
+          // deep-create above) - do not create them again here. GH-111:
+          // Returns wrote the header fields into the session before
+          // SaveChanges (createHeaderInSession) - only a picked ship-to
+          // address follows here.
           //
           // v5 Required Fix 3 (unverified, live-test task): does this
           // sessionless PATCH (no PrepareForEdit/SaveChanges bracket
@@ -838,24 +912,32 @@ sap.ui.define([
 
     // Internal — PATCH the non-action header fields onto the new real
     // context, in one batch. Items are deep-created earlier, on the sticky
-    // session context, before SaveChanges (see save() above).
+    // session context, before SaveChanges (see save() above). GH-111: on
+    // Returns (createHeaderInSession) the header fields were already written
+    // into the session before SaveChanges - only a picked ship-to address
+    // follows here, and nothing is sent when there is none.
     _replayHeaderProperties: function (oNewContext, oScratchData, oCreateOptions) {
-      ServiceSchema.createReplayHeaderProperties.forEach(function (sProperty) {
+      var bHeaderInSession = !!ServiceSchema.createHeaderInSession;
+      if (!bHeaderInSession) {
         // 2026-11-09 (live-reproduced, Returns): a scratch value can be
         // explicitly null (e.g. ShippingCondition when defaultShippingCondition
         // is null and the user never picks one, ReturnsSchema.js) - PATCHing
         // null onto a Nullable="false" field is a genuine backend reject that
         // cascades and fails every other PATCH riding the same changeset.
         // Never replay null here - there is nothing to clear on a brand-new order.
-        if (oScratchData[sProperty] !== undefined && oScratchData[sProperty] !== "" && oScratchData[sProperty] !== null) {
-          oNewContext.setProperty(sProperty, oScratchData[sProperty]);
-        }
-      });
-      if (oCreateOptions && oCreateOptions.shipToAddressId) {
+        replayableHeaderValues(oScratchData).forEach(function (oValue) {
+          oNewContext.setProperty(oValue.property, oValue.value);
+        });
+      }
+      var bShipTo = !!(oCreateOptions && oCreateOptions.shipToAddressId);
+      if (bShipTo) {
         oNewContext.setProperty(
           ServiceSchema.navigation.headerToShipToParty + "/" + ServiceSchema.shipToPartyProperties.addressId,
           oCreateOptions.shipToAddressId
         );
+      }
+      if (bHeaderInSession && !bShipTo) {
+        return Promise.resolve();
       }
 
       return oNewContext.getModel().submitBatch(CREATE_REPLAY_GROUP);
