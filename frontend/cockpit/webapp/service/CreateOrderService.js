@@ -313,7 +313,8 @@ sap.ui.define([
       // GH-81: a profile with a writable header status (ServiceSchema.defaultStatus
       // set - Returns only; Orders have none, so OverallSDProcessStatus is never
       // seeded) starts on the order type's createStatusDefault (OrderModeConfig);
-      // the profile value is the fallback. Replayed at Save (_replayHeaderProperties).
+      // the profile value is the fallback. Written at Save with the other header
+      // fields (_writeSessionHeader, inside the create session - GH-111).
       if (ServiceSchema.defaultStatus !== undefined) {
         oInitialData[ServiceSchema.headerProperties.status] =
           OrderModeConfig.resolveOrderType(sOrderType).createStatusDefault || ServiceSchema.defaultStatus;
