@@ -4,9 +4,13 @@ name: Spec approval
 # - Approval review  -> issue gets `acceptance-confirmed` (+ comment), `awaiting-approval` removed.
 # - Changes requested -> issue gets `needs-info` (+ comment).
 # - Daily: spec PRs with no review after 2 business days -> approved by default (same labels, comment says so).
+# - Self-approval: if the designated approver (`Approver: @login`) is the person who opened the spec PR,
+#   the gate confirms immediately on open (GitHub does not let an author approve their own PR; no 2-day hold).
 # The spec PR itself is not merged here (branch protection); the implementation PR carries the approved file.
 
 on:
+  pull_request:
+    types: [opened, edited, reopened]
   pull_request_review:
     types: [submitted]
   schedule:
@@ -19,6 +23,29 @@ permissions:
   contents: read
 
 jobs:
+  self-approval:
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'spec/gh-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const issueNumber = Number(pr.head.ref.replace('spec/gh-', ''));
+            if (!issueNumber) return;
+            const { owner, repo } = context.repo;
+            const m = /Approver:\s*@([A-Za-z0-9-]+)/i.exec(pr.body || '');
+            const designated = m ? m[1].toLowerCase() : null;
+            if (!designated || designated !== pr.user.login.toLowerCase()) return;   // someone else approves -> normal gate
+            const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+            if (issue.data.labels.some(l => l.name === 'acceptance-confirmed')) return;   // idempotent on 'edited'
+            const when = new Date().toISOString().slice(0, 16).replace('T', ' ');
+            await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['acceptance-confirmed'] });
+            try { await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: 'awaiting-approval' }); } catch (e) {}
+            await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber,
+              body: `**Acceptance confirmed (self-approval)** — the designated approver @${pr.user.login} opened spec PR #${pr.number} on ${when} UTC, so no separate approval is required. \`specs/GH-${issueNumber}.md\` is the definition of done for this issue.` });
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr.number,
+              body: `Self-approval: approver is the author — acceptance confirmed on issue #${issueNumber}; no review needed on this PR.` });
   on-review:
     if: github.event_name == 'pull_request_review' && startsWith(github.event.pull_request.head.ref, 'spec/gh-')
     runs-on: ubuntu-latest

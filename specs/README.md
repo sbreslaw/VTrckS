@@ -19,3 +19,5 @@ Screenshots: <attached>
 **Who approves** is chosen on the issue form ("Approver") and named in the spec pull request (`Approver: @login`); you are @-mentioned there and GitHub emails you the link. Only that person's Approve counts (or a repository collaborator's). No repository role is needed — a GitHub account is enough. Blank or missing on the form → the per-category default in `APPROVERS.md`.
 
 Spec files are plain Markdown: Request (as filed), Acceptance (numbered), Out of scope, Open questions with the default applied if unanswered. They stay here permanently next to the code they govern; the implementation pull request quotes the approved file as its definition of done.
+
+**Self-approval.** When the issue's Approver is the same person who triages it and opens the spec PR (e.g. *Reporter (me)* on an issue the owner filed), the gate confirms acceptance the moment the spec PR is opened — no review and no 2-business-day hold. The spec file still exists and the implementation PR still carries it unchanged.
