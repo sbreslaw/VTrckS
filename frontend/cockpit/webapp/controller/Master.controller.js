@@ -108,6 +108,7 @@ sap.ui.define([
       this._applyFilterAvailability();
       this._populateStatusCodes();
       this._populateSalesOrderTypeItems();
+      this._populateReturnTypeItems();
       // ADR-002 PR1: deliveryBlockReason is absent (null) on ReturnsSchema -
       // live-confirmed this control's items-binding would otherwise resolve
       // to a literal "/null" path. _applyFilterAvailability() disables the
@@ -1430,6 +1431,9 @@ sap.ui.define([
       // ServiceSchema.js navigation comment / PHASE2_AUDIT.md); the control stays
       // disabled (see _applyFilterAvailability), so nothing is pushed here.
       this._pushIfValue(aFilters, ServiceSchema.headerProperties.deliveryBlockReason, oView.byId("filterDeliveryBlockReason").getSelectedKey(), FilterOperator.EQ);
+      // GH-120: Returns Description (contains; same typed syntax as Ship-To) and Return Type.
+      this._pushTypedFilter(aFilters, [ServiceSchema.headerProperties.description], oView.byId("filterDescription").getValue(), RangeOperation.Contains);
+      this._pushIfValue(aFilters, ServiceSchema.headerProperties.returnType, oView.byId("filterReturnType").getSelectedKey(), FilterOperator.EQ);
       aFilters.push(this._getOrderTypeFilter());
 
       if (ServiceSchema.showJurisdictionFilter) {
@@ -1941,14 +1945,15 @@ sap.ui.define([
       });
     },
 
-    _populateValueHelp: function (sControlId, sEntitySet, sKeyProperty, sTextProperty) {
+    _populateValueHelp: function (sControlId, sEntitySet, sKeyProperty, sTextProperty, sModelName) {
+      var sPrefix = sModelName ? sModelName + ">" : "";
       var oControl = this.byId(sControlId);
       oControl.removeAllItems();
       oControl.bindItems({
-        path: "/" + sEntitySet,
+        path: sPrefix + "/" + sEntitySet,
         template: new Item({
-          key: "{" + sKeyProperty + "}",
-          text: "{" + sTextProperty + "}"
+          key: "{" + sPrefix + sKeyProperty + "}",
+          text: "{" + sPrefix + sTextProperty + "}"
         })
       });
     },
@@ -1959,6 +1964,16 @@ sap.ui.define([
       this._getAuthorizedOrderTypes("READ").forEach(function (oType) {
         oControl.addItem(new Item({ key: oType.orderType, text: oType.title }));
       });
+    },
+
+    // GH-120: the Return Type value list (provider-order service), bound only where the filter is shown.
+    _populateReturnTypeItems: function () {
+      if (this._mHiddenFilterControls.filterReturnType) {
+        return;
+      }
+      var oSchema = ServiceSchema.providerOrderService;
+      this._populateValueHelp("filterReturnType", oSchema.entitySets.vaccineReturnType,
+        oSchema.vaccineReturnTypeProperties.code, oSchema.vaccineReturnTypeProperties.text, "po");
     },
 
     // --- Master table columns: layout (order/visibility) driven by VariantStore
@@ -2583,6 +2598,8 @@ sap.ui.define([
         { id: "filterJurisdiction", type: "value" },
         { id: "filterDeliveryBlockReason", type: "key" },
         { id: "filterSalesOrderType", type: "key" },
+        { id: "filterDescription", type: "value" },
+        { id: "filterReturnType", type: "key" },
         { id: "filterStatus", type: "keys" },
         { id: "filterCreatedOn", type: "dynamicDateRange" }
       ].filter(function (oDef) {

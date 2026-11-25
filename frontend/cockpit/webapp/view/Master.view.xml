@@ -82,6 +82,17 @@
                     <ComboBox id="filterSalesOrderType" showClearIcon="true" />
                   </fb:control>
                 </fb:FilterGroupItem>
+                <!-- GH-120: Returns-only (OrdersSchema.hiddenMasterFilters); Return Type items bound in Master.controller.js#_populateReturnTypeItems. -->
+                <fb:FilterGroupItem name="description" label="{i18n>filterDescription}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <Input id="filterDescription" />
+                  </fb:control>
+                </fb:FilterGroupItem>
+                <fb:FilterGroupItem name="returnType" label="{i18n>filterReturnType}" groupName="default" visibleInFilterBar="true">
+                  <fb:control>
+                    <ComboBox id="filterReturnType" showClearIcon="true" />
+                  </fb:control>
+                </fb:FilterGroupItem>
 
                 <!-- Dialog-only group ("Filters" adapt dialog only) -->
                 <fb:FilterGroupItem name="createdOn" label="{i18n>filterCreatedOn}" groupName="dialog" visibleInFilterBar="false">

@@ -9,9 +9,16 @@ sap.ui.define([
   "sap/m/P13nConditionPanel",
   "sap/m/Token",
   "sap/ui/comp/valuehelpdialog/ValueHelpDialog",
-  "sap/ui/core/library"
+  "sap/ui/core/library",
+  "sap/m/ComboBox",
+  "sap/m/MultiComboBox",
+  "sap/ui/core/Item",
+  "sap/ui/comp/filterbar/FilterBar",
+  "sap/ui/comp/filterbar/FilterGroupItem",
+  "sap/ui/model/Filter",
+  "sap/ui/model/FilterOperator"
 ], function (ConditionValueCheck, ServiceSchema, OrdersSchema, ReturnsSchema, Input, MultiInput, P13nConditionPanel, Token,
-  ValueHelpDialog, coreLibrary) {
+  ValueHelpDialog, coreLibrary, ComboBox, MultiComboBox, Item, FilterBar, FilterGroupItem, Filter, FilterOperator) {
   "use strict";
 
   // GH-99: Provider (ID or Name) value help, Define Conditions tab - type-ahead from the
@@ -657,6 +664,377 @@ sap.ui.define([
         oValueInput.destroy();
         oInput.destroy();
       });
+    });
+  });
+
+  // ---- GH-120: Description and Return Type filters (Manage Returns only) -------------------
+
+  QUnit.module("Master: Description and Return Type filters (GH-120)", {
+    beforeEach: function () {
+      sPreviousProfile = ServiceSchema.profileId;
+      ServiceSchema.use(ReturnsSchema);
+    },
+    afterEach: function () {
+      if (sPreviousProfile) {
+        ServiceSchema.use(sPreviousProfile === ReturnsSchema.profileId ? ReturnsSchema : OrdersSchema);
+      }
+    }
+  });
+
+  var RETURN_TYPE_KEYS = ["REPL", "RETO", "RETR"];
+
+  function returnTypeComboBox(sId) {
+    return new ComboBox(sId, {
+      items: RETURN_TYPE_KEYS.map(function (sKey) {
+        return new Item({ key: sKey, text: sKey });
+      })
+    });
+  }
+
+  function deepShape(oFilter) {
+    var aFilters = oFilter.getFilters();
+    return aFilters ? "(" + aFilters.map(deepShape).join(oFilter.isAnd() ? " and " : " or ") + ")" : filterShape(oFilter);
+  }
+
+  function leaves(aFilters) {
+    return aFilters.reduce(function (aLeaves, oFilter) {
+      return aLeaves.concat(oFilter.getFilters() ? leaves(oFilter.getFilters()) : [oFilter]);
+    }, []);
+  }
+
+  // onSearch with every control it reads, the async lookups resolved empty and the list binding captured.
+  function searchStub(Master) {
+    var mControls = {
+      filterRequestId: new MultiInput(),
+      filterExisId: new MultiInput(),
+      filterProvider: new MultiInput(),
+      filterCreatedBy: new MultiInput(),
+      filterEmployeeResponsible: new Input(),
+      filterShipToParty: new Input(),
+      filterJurisdiction: new Input(),
+      filterDescription: new Input(),
+      filterDeliveryBlockReason: new ComboBox(),
+      filterSalesOrderType: new ComboBox(),
+      filterReturnType: returnTypeComboBox(),
+      filterStatus: new MultiComboBox()
+    };
+    var aCaptured = [];
+    var oStub = stubMaster(Master, Object.assign({
+      requestsTable: {
+        getBinding: function () {
+          return {
+            filter: function (aFilters) {
+              aCaptured.push(aFilters);
+            },
+            attachEventOnce: function () {}
+          };
+        }
+      }
+    }, mControls));
+    oStub.getView = function () {
+      return { byId: oStub.byId };
+    };
+    oStub._oViewModel = { setProperty: function () {} };
+    oStub._resolveProviderPinFilters = function () {
+      return Promise.resolve([]);
+    };
+    oStub._resolveNdcFilters = function () {
+      return Promise.resolve([]);
+    };
+    oStub._getOrderTypeFilter = function () {
+      return new Filter("OrderTypeScope", FilterOperator.EQ, "X");
+    };
+    oStub._getCreatedOnFilter = function () {
+      return null;
+    };
+    oStub.controls = mControls;
+    oStub.search = function () {
+      oStub.onSearch();
+      return flush().then(function () {
+        return aCaptured[aCaptured.length - 1];
+      });
+    };
+    oStub.destroyControls = function () {
+      Object.keys(mControls).forEach(function (sId) {
+        mControls[sId].destroy();
+      });
+    };
+    return oStub;
+  }
+
+  QUnit.test("Search: Description adds contains, Return Type adds eq; empty fields add nothing", function (assert) {
+    return loadMaster().then(function (Master) {
+      var sDescription = ServiceSchema.headerProperties.description;
+      var sReturnType = ServiceSchema.headerProperties.returnType;
+      assert.strictEqual(sDescription, "ZZ1_Description_SDH", "Returns Description property");
+      assert.strictEqual(sReturnType, "ZZ1_VaccineReturnType_SDH", "Returns Return Type property");
+      var oStub = searchStub(Master);
+      var oControls = oStub.controls;
+      var aBaseline;
+      var fnAdded = function (aFilters) {
+        var aBase = aBaseline.map(deepShape);
+        return aFilters.map(deepShape).filter(function (sShape) {
+          return aBase.indexOf(sShape) === -1;
+        });
+      };
+      var fnRest = function (aFilters, aAdded) {
+        return aFilters.map(deepShape).filter(function (sShape) {
+          return aAdded.indexOf(sShape) === -1;
+        });
+      };
+      return oStub.search().then(function (aFilters) {
+        aBaseline = aFilters;
+        assert.ok(aFilters.length > 0, "the search ran (" + aFilters.length + " filters)");
+        assert.notOk(leaves(aFilters).some(function (oFilter) {
+          return oFilter.getPath() === sDescription || oFilter.getPath() === sReturnType;
+        }), "both empty -> no Description or Return Type condition");
+
+        oControls.filterDescription.setValue("  gh115 ");
+        return oStub.search();
+      }).then(function (aFilters) {
+        var aAdded = fnAdded(aFilters);
+        assert.deepEqual(aAdded, [sDescription + " Contains gh115"], "Description -> contains, trimmed");
+        assert.deepEqual(fnRest(aFilters, aAdded), aBaseline.map(deepShape), "every other filter unchanged, same order");
+        assert.ok(leaves(aFilters).every(function (oFilter) {
+          return oFilter.isCaseSensitive() !== false;
+        }), "never case-insensitive (tolower -> 501)");
+
+        oControls.filterDescription.setValue("");
+        oControls.filterReturnType.setSelectedKey("REPL");
+        return oStub.search();
+      }).then(function (aFilters) {
+        var aAdded = fnAdded(aFilters);
+        assert.deepEqual(aAdded, [sReturnType + " EQ REPL"], "Return Type -> eq");
+        assert.deepEqual(fnRest(aFilters, aAdded), aBaseline.map(deepShape), "every other filter unchanged");
+
+        oControls.filterDescription.setValue("test");
+        return oStub.search();
+      }).then(function (aFilters) {
+        var aAdded = fnAdded(aFilters);
+        assert.deepEqual(aAdded, [sDescription + " Contains test", sReturnType + " EQ REPL"], "both together");
+        assert.deepEqual(fnRest(aFilters, aAdded), aBaseline.map(deepShape), "every other filter unchanged");
+
+        oControls.filterDescription.setValue("*");
+        oControls.filterReturnType.setSelectedKey("");
+        return oStub.search();
+      }).then(function (aFilters) {
+        assert.deepEqual(aFilters.map(deepShape), aBaseline.map(deepShape), "'*' and a cleared Return Type add nothing");
+
+        oControls.filterDescription.setValue("   ");
+        return oStub.search();
+      }).then(function (aFilters) {
+        assert.deepEqual(aFilters.map(deepShape), aBaseline.map(deepShape), "spaces only add nothing");
+
+        oControls.filterDescription.setValue("=GH115");
+        return oStub.search();
+      }).then(function (aFilters) {
+        assert.deepEqual(fnAdded(aFilters), [sDescription + " EQ GH115"], "typed syntax: =x -> eq (as Ship-To)");
+        oStub.destroyControls();
+      });
+    });
+  });
+
+  function availabilityStub(Master) {
+    var oFilterBar = new FilterBar({
+      filterGroupItems: [
+        new FilterGroupItem({ name: "salesOrderType", label: "Sales Order Type", groupName: "default", visibleInFilterBar: true,
+          control: new ComboBox("gh120--filterSalesOrderType") }),
+        new FilterGroupItem({ name: "description", label: "Description", groupName: "default", visibleInFilterBar: true,
+          control: new Input("gh120--filterDescription") }),
+        new FilterGroupItem({ name: "returnType", label: "Return Type", groupName: "default", visibleInFilterBar: true,
+          control: new ComboBox("gh120--filterReturnType") }),
+        new FilterGroupItem({ name: "shipToParty", label: "Ship-To", groupName: "dialog", visibleInFilterBar: false,
+          control: new Input("gh120--filterShipToParty") })
+      ]
+    });
+    var mControls = {
+      filterBar: oFilterBar,
+      filterPriority: new ComboBox(),
+      filterJurisdiction: new Input(),
+      filterDeliveryBlockReason: new ComboBox()
+    };
+    var oStub = stubMaster(Master, mControls);
+    oStub.getView = function () {
+      return {
+        getLocalId: function (sId) {
+          return sId.replace(/^.*--/, "");
+        }
+      };
+    };
+    oStub.hidden = function () {
+      var mHidden = {};
+      oFilterBar.getFilterGroupItems().forEach(function (oItem) {
+        mHidden[oItem.getName()] = oItem.getHiddenFilter();
+      });
+      return mHidden;
+    };
+    oStub.destroyControls = function () {
+      Object.keys(mControls).forEach(function (sId) {
+        mControls[sId].destroy();
+      });
+    };
+    return oStub;
+  }
+
+  QUnit.test("Both filters are hidden on Provider Orders and shown on Manage Returns", function (assert) {
+    return loadMaster().then(function (Master) {
+      ServiceSchema.use(OrdersSchema);
+      var oOrders = availabilityStub(Master);
+      oOrders._applyFilterAvailability();
+      assert.deepEqual(oOrders.hidden(), { salesOrderType: false, description: true, returnType: true, shipToParty: false },
+        "Orders: Description and Return Type hidden (bar and Adapt Filters)");
+      assert.deepEqual(oOrders._mHiddenFilterControls, { filterDescription: true, filterReturnType: true },
+        "Orders: their controls are left out of variants");
+      oOrders.destroyControls();
+
+      ServiceSchema.use(ReturnsSchema);
+      var oReturns = availabilityStub(Master);
+      oReturns._applyFilterAvailability();
+      assert.deepEqual(oReturns.hidden(), { salesOrderType: false, description: false, returnType: false, shipToParty: true },
+        "Returns: both shown; Ship-To stays hidden (#70)");
+      assert.deepEqual(oReturns._mHiddenFilterControls, { filterShipToParty: true }, "Returns: only Ship-To left out of variants");
+      oReturns.destroyControls();
+    });
+  });
+
+  QUnit.test("Return Type items are bound to the provider-order value list only where the filter is shown", function (assert) {
+    return loadMaster().then(function (Master) {
+      var oSchema = ServiceSchema.providerOrderService;
+      var oCombo = new ComboBox();
+      var oStub = stubMaster(Master, { filterReturnType: oCombo });
+      oStub._mHiddenFilterControls = { filterShipToParty: true, filterDeliveryBlockReason: true };
+      oStub._populateReturnTypeItems();
+      var oInfo = oCombo.getBindingInfo("items");
+      assert.ok(oInfo, "Returns: items bound");
+      assert.strictEqual(oInfo.model, "po", "on the provider-order model");
+      assert.strictEqual(oInfo.path, "/" + oSchema.entitySets.vaccineReturnType, "the Return Type value list");
+      var oKeyPart = oInfo.template.getBindingInfo("key").parts[0];
+      var oTextPart = oInfo.template.getBindingInfo("text").parts[0];
+      assert.deepEqual([oKeyPart.model, oKeyPart.path], ["po", oSchema.vaccineReturnTypeProperties.code], "key = code");
+      assert.deepEqual([oTextPart.model, oTextPart.path], ["po", oSchema.vaccineReturnTypeProperties.text], "text = text");
+      oCombo.destroy();
+
+      var oHiddenCombo = new ComboBox();
+      var oHidden = stubMaster(Master, { filterReturnType: oHiddenCombo });
+      oHidden._mHiddenFilterControls = { filterDescription: true, filterReturnType: true };
+      oHidden._populateReturnTypeItems();
+      assert.notOk(oHiddenCombo.getBindingInfo("items"), "Orders: not bound, no request");
+      oHiddenCombo.destroy();
+
+      // The other caller keeps the default model (Delivery Block Reason on Provider Orders).
+      ServiceSchema.use(OrdersSchema);
+      var oBlock = new ComboBox();
+      var oBlockStub = stubMaster(Master, { filterDeliveryBlockReason: oBlock });
+      oBlockStub._populateValueHelp("filterDeliveryBlockReason", ServiceSchema.entitySets.deliveryBlockReason,
+        ServiceSchema.valueHelpProperties.deliveryBlockReasonCode, ServiceSchema.valueHelpProperties.deliveryBlockReasonText);
+      var oBlockInfo = oBlock.getBindingInfo("items");
+      assert.strictEqual(oBlockInfo.model, undefined, "Delivery Block Reason: default model, as before");
+      assert.strictEqual(oBlockInfo.path, "/" + ServiceSchema.entitySets.deliveryBlockReason, "Delivery Block Reason: same path");
+      assert.strictEqual(oBlockInfo.template.getBindingInfo("key").parts[0].path, ServiceSchema.valueHelpProperties.deliveryBlockReasonCode,
+        "Delivery Block Reason: same key");
+      assert.strictEqual(oBlockInfo.template.getBindingInfo("text").parts[0].path, ServiceSchema.valueHelpProperties.deliveryBlockReasonText,
+        "Delivery Block Reason: same text");
+      assert.notOk(oBlockInfo.template.getBindingInfo("key").parts[0].model, "Delivery Block Reason: no model name");
+      oBlock.destroy();
+    });
+  });
+
+  QUnit.test("Variants and Clear: both values are saved, restored and emptied; older variants still load", function (assert) {
+    return loadMaster().then(function (Master) {
+      var mControls = {
+        filterDescription: new Input(),
+        filterReturnType: returnTypeComboBox(),
+        filterEmployeeResponsible: new Input()
+      };
+      var oStub = stubMaster(Master, mControls);
+      oStub.getView = function () {
+        return { byId: oStub.byId };
+      };
+      oStub._mHiddenFilterControls = { filterShipToParty: true, filterDeliveryBlockReason: true };
+      var fnNewDefs = function () {
+        return oStub._getVariantControlDefs().filter(function (oDef) {
+          return oDef.id === "filterDescription" || oDef.id === "filterReturnType";
+        });
+      };
+      assert.deepEqual(fnNewDefs(), [{ id: "filterDescription", type: "value" }, { id: "filterReturnType", type: "key" }],
+        "Returns: both in the variant definitions");
+
+      mControls.filterDescription.setValue("test");
+      mControls.filterReturnType.setSelectedKey("RETO");
+      var oCaptured = oStub._captureVariantValues();
+      assert.strictEqual(oCaptured.filterDescription, "test", "Description saved");
+      assert.strictEqual(oCaptured.filterReturnType, "RETO", "Return Type saved");
+
+      mControls.filterDescription.setValue("other");
+      mControls.filterReturnType.setSelectedKey("RETR");
+      oStub._applyVariantValues(oCaptured);
+      assert.strictEqual(mControls.filterDescription.getValue(), "test", "Description restored");
+      assert.strictEqual(mControls.filterReturnType.getSelectedKey(), "RETO", "Return Type restored");
+
+      oStub._applyVariantValues({});
+      assert.strictEqual(mControls.filterDescription.getValue(), "", "Standard: Description empty");
+      assert.strictEqual(mControls.filterReturnType.getSelectedKey(), "", "Standard: Return Type empty");
+
+      mControls.filterDescription.setValue("test");
+      mControls.filterReturnType.setSelectedKey("RETO");
+      var bSearched = false;
+      oStub.onSearch = function () {
+        bSearched = true;
+      };
+      oStub.onFilterBarClear();
+      assert.strictEqual(mControls.filterDescription.getValue(), "", "onFilterBarClear: Description empty");
+      assert.strictEqual(mControls.filterReturnType.getSelectedKey(), "", "onFilterBarClear: Return Type empty");
+      assert.ok(bSearched, "onFilterBarClear searches");
+
+      mControls.filterDescription.setValue("test");
+      mControls.filterReturnType.setSelectedKey("RETO");
+      oStub._applyVariantValues({ filterEmployeeResponsible: "x" });
+      assert.strictEqual(mControls.filterEmployeeResponsible.getValue(), "x", "older variant: its values apply");
+      assert.strictEqual(mControls.filterDescription.getValue(), "", "older variant: Description empty");
+      assert.strictEqual(mControls.filterReturnType.getSelectedKey(), "", "older variant: Return Type empty");
+
+      oStub._mHiddenFilterControls = { filterDescription: true, filterReturnType: true };
+      assert.deepEqual(fnNewDefs(), [], "Orders: neither in the variant definitions");
+      Object.keys(mControls).forEach(function (sId) {
+        mControls[sId].destroy();
+      });
+    });
+  });
+
+  QUnit.test("Profiles, view and texts: Orders hides both; the bar shows them after Sales Order Type", function (assert) {
+    assert.ok(OrdersSchema.hiddenMasterFilters.indexOf("description") !== -1, "Orders hides description");
+    assert.ok(OrdersSchema.hiddenMasterFilters.indexOf("returnType") !== -1, "Orders hides returnType");
+    assert.strictEqual(ReturnsSchema.hiddenMasterFilters.indexOf("description"), -1, "Returns shows description");
+    assert.strictEqual(ReturnsSchema.hiddenMasterFilters.indexOf("returnType"), -1, "Returns shows returnType");
+    var fnText = function (sPath) {
+      return fetch(sap.ui.require.toUrl(sPath)).then(function (oResponse) {
+        return oResponse.text();
+      });
+    };
+    return Promise.all([fnText("cdc/vaccreq/view/Master.view.xml"), fnText("cdc/vaccreq/i18n/i18n.properties")]).then(function (aTexts) {
+      var oDoc = new DOMParser().parseFromString(aTexts[0], "application/xml");
+      var aItems = Array.prototype.slice.call(oDoc.getElementsByTagNameNS("*", "FilterGroupItem"));
+      var aNames = aItems.map(function (oItem) {
+        return oItem.getAttribute("name");
+      });
+      var iOrderType = aNames.indexOf("salesOrderType");
+      assert.deepEqual(aNames.slice(iOrderType, iOrderType + 3), ["salesOrderType", "description", "returnType"],
+        "directly after Sales Order Type, Description first");
+      var oDescription = aItems[iOrderType + 1];
+      var oReturnType = aItems[iOrderType + 2];
+      [[oDescription, "{i18n>filterDescription}"], [oReturnType, "{i18n>filterReturnType}"]].forEach(function (aCase) {
+        assert.strictEqual(aCase[0].getAttribute("groupName"), "default", aCase[1] + ": filter bar group");
+        assert.strictEqual(aCase[0].getAttribute("visibleInFilterBar"), "true", aCase[1] + ": shown in the bar");
+        assert.strictEqual(aCase[0].getAttribute("label"), aCase[1], aCase[1] + ": label");
+      });
+      var oInput = oDescription.getElementsByTagNameNS("*", "Input")[0];
+      assert.ok(oInput && oInput.getAttribute("id") === "filterDescription", "Description: Input filterDescription");
+      assert.notOk(oInput && oInput.hasAttribute("showValueHelp"), "Description: no value help");
+      var oCombo = oReturnType.getElementsByTagNameNS("*", "ComboBox")[0];
+      assert.ok(oCombo && oCombo.getAttribute("id") === "filterReturnType", "Return Type: ComboBox filterReturnType");
+      assert.strictEqual(oCombo && oCombo.getAttribute("showClearIcon"), "true", "Return Type: clear icon");
+      assert.ok(/^filterDescription=Description\r?$/m.test(aTexts[1]), "i18n filterDescription");
+      assert.ok(/^filterReturnType=Return Type\r?$/m.test(aTexts[1]), "i18n filterReturnType");
     });
   });
 });
