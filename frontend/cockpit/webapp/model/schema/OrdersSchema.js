@@ -1068,7 +1068,8 @@ sap.ui.define([
     // as _Item/any|all lambda filters (see ReturnsSchema for the alternative).
     filterHeadersByItemSet: false,
     // Master FilterGroupItem names this profile removes (see ReturnsSchema).
-    hiddenMasterFilters: [],
+    // GH-120: Description and Return Type are Manage Returns filters.
+    hiddenMasterFilters: ["description", "returnType"],
     statusSource: "e008", // "standard" for temporary service, "e008" for swap-back
 
     buildHeaderPath: function (sOrderId) {
