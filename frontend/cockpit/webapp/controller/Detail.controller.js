@@ -3019,7 +3019,15 @@ sap.ui.define([
       // ancillary/opt-out state afterward.
       var that = this;
       var oBundle = this.getResourceBundle();
-      oRowContext.created()
+      // The post-create refresh replaces row contexts. Block earlier-row edits
+      // until that refresh settles so a PATCH cannot target a recycled context.
+      var oTable = this._bItemsSessionBound
+        ? this._byIdInSection("items", "itemsTable")
+        : null;
+      if (oTable) {
+        oTable.setBusy(true);
+      }
+      return oRowContext.created()
         .then(function () {
           // Issue Batch 9-30-001 \u00a72: the create response itself always
           // reads the six ZZ*QTY fields back as 0 (backend read-path defect,
@@ -3038,6 +3046,11 @@ sap.ui.define([
             that._oSectionFactory.expandSection(sId);
           });
           that._openMessagePopover();
+        })
+        .finally(function () {
+          if (oTable) {
+            oTable.setBusy(false);
+          }
         });
     },
 
