@@ -140,4 +140,44 @@ sap.ui.define([
       });
     });
   });
+
+  // Regression guard: creating row 2 must not let row 1 PATCH a recycled context.
+  QUnit.test("adding item 2 locks the table until its row refresh completes", function (assert) {
+    return loadDetail().then(function (Detail) {
+      var fnCreated;
+      var iRefreshes = 0;
+      var aBusy = [];
+      var oTable = {
+        setBusy: function (bBusy) { aBusy.push(bBusy); }
+      };
+      var oStub = stubController(Detail, {}, null);
+      oStub._bItemsSessionBound = true;
+      oStub._isScratchRowComplete = function () { return true; };
+      oStub._byIdInSection = function () { return oTable; };
+      oStub._refreshItemsBinding = function () {
+        iRefreshes += 1;
+        return Promise.resolve();
+      };
+      oStub.getResourceBundle = function () { return {}; };
+      var oRow = {
+        created: function () {
+          return new Promise(function (resolve) { fnCreated = resolve; });
+        },
+        getPath: function () { return "/Item('20')"; }
+      };
+      var pCreate = oStub._onItemCreateActivate({
+        getParameter: function () { return oRow; },
+        preventDefault: function () {
+          assert.ok(false, "complete item 2 activates");
+        }
+      });
+
+      assert.deepEqual(aBusy, [true], "earlier rows cannot be edited during item 2's context replacement");
+      fnCreated();
+      return pCreate.then(function () {
+        assert.strictEqual(iRefreshes, 1, "item 2 refreshes server truth once");
+        assert.deepEqual(aBusy, [true, false], "editing resumes after the refresh");
+      });
+    });
+  });
 });
