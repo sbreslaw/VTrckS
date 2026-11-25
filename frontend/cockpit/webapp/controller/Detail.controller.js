@@ -3294,7 +3294,9 @@ sap.ui.define([
       var oTable = this._byIdInSection("items", "itemsTable");
       var oOldBinding = ItemsTableAccess.getBinding(oTable);
       var aRowData = ItemsTableAccess.getContexts(oOldBinding)
-        .map(function (oCtx) { return CreateOrderService.cleanItemPayload(oCtx.getObject() || {}); })
+        // GH-115: the Returns item Rejection Reason stays on the local row and is
+        // re-applied when the row is re-posted.
+        .map(function (oCtx) { return CreateOrderService.keptItemPayload(oCtx.getObject() || {}); })
         .concat(this._aPendingIncompleteRows || []);
       this._aPendingIncompleteRows = [];
       this._bItemsSessionBound = false;
