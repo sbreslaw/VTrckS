@@ -92,6 +92,11 @@ sap.ui.define([
             aLog.push(oEntry);
             return outcome("execute", oEntry);
           },
+          invoke: function (sGroupId) {
+            var oEntry = { type: "invoke", path: sPath, context: oContext && oContext.getPath(), group: sGroupId };
+            aLog.push(oEntry);
+            return outcome("invoke", oEntry);
+          },
           getBoundContext: function () {
             return oBoundContext;
           },
@@ -480,6 +485,113 @@ sap.ui.define([
       assert.strictEqual(oModel.log[iExecute + 1].type, "submit", "the fallback's own submit after the create action");
       assert.strictEqual(oModel.log.filter(function (e) { return e.type === "create"; }).length, 0, "no item posted");
       assert.strictEqual(oModel.log.filter(function (e) { return e.type === "set"; }).length, 0, "no Sold-To or header write");
+    });
+  });
+
+  // GH-115: a Rejection Reason kept on a local row after a rejected Save is
+  // re-applied by SetRejectionReason when the row is re-posted.
+  function setRejectionReasonPath() {
+    return ReturnsSchema.itemActions.setRejectionReason + "(...)";
+  }
+
+  function isInvoke(oEntry) {
+    return oEntry.type === "invoke";
+  }
+
+  function returnsRow(sReason) {
+    var oRow = { Product: "49281-0007-10", RequestedQuantity: "4", RequestedQuantityUnit: "DOS", ReasonCode: "G84", ZZ1_LotNumber_SDI: "L1", ZZ1_ExpirationDate_SDI: "2027-06-30" };
+    if (sReason !== undefined) {
+      oRow.SalesDocumentRjcnReason = sReason;
+    }
+    return oRow;
+  }
+
+  QUnit.test("Returns, no session: a row carrying a Rejection Reason gets SetRejectionReason after its PATCHes, before SaveChanges (GH-115)", function (assert) {
+    var oModel = stubModel();
+    var oSession = { opened: false, plainContext: null, pending: null };
+    return CreateOrderService.save(scratch(oModel, returnsScratch()), itemsBinding([returnsRow("05")]), oSession, {}).then(function () {
+      var aLog = oModel.log;
+      var oCreate = aLog.filter(function (e) { return e.type === "create"; })[0];
+      assert.deepEqual(oCreate.body, {}, "empty create body");
+      var iBind = find(aLog, function (e) { return e.type === "bindContext" && e.path === setRejectionReasonPath(); });
+      assert.strictEqual(aLog[iBind].context, oCreate.path, "action bound on the re-posted item");
+      assert.deepEqual(aLog.filter(function (e) { return e.type === "param" && e.path === setRejectionReasonPath(); }).map(function (e) { return e.name + "=" + e.value; }),
+        ["SalesDocumentRjcnReason=05"], "the kept code");
+      var iInvoke = find(aLog, isInvoke);
+      var iLastItemSet = findLast(aLog, function (e) { return e.type === "set" && e.path === oCreate.path; });
+      assert.ok(iInvoke > iLastItemSet, "after the item PATCHes");
+      assert.ok(iInvoke < find(aLog, isSaveBind), "before SaveChanges");
+      assert.strictEqual(aLog.filter(function (e) { return e.type === "set" && e.prop === "SalesDocumentRjcnReason"; }).length, 0, "never PATCHed");
+    });
+  });
+
+  QUnit.test("Returns, no session: only the row that carries a Rejection Reason gets it (GH-115, Acceptance 3)", function (assert) {
+    var oModel = stubModel();
+    var oSession = { opened: false, plainContext: null, pending: null };
+    return CreateOrderService.save(scratch(oModel, returnsScratch()), itemsBinding([returnsRow("05"), returnsRow("")]), oSession, {}).then(function () {
+      var aCreates = oModel.log.filter(function (e) { return e.type === "create"; });
+      var aInvokes = oModel.log.filter(isInvoke);
+      assert.strictEqual(aCreates.length, 2, "two items");
+      assert.strictEqual(aInvokes.length, 1, "one action");
+      assert.strictEqual(aInvokes[0].context, aCreates[0].path, "on the first item");
+    });
+  });
+
+  QUnit.test("Returns, no session: a refused SetRejectionReason discards the session and never sends SaveChanges (GH-115, Q2)", function (assert) {
+    var oActionError = new Error("rejection reason refused");
+    var oModel = stubModel({
+      outcome: function (sKind) {
+        return sKind === "invoke" ? Promise.reject(oActionError) : undefined;
+      }
+    });
+    var oSession = { opened: false, plainContext: null, pending: null };
+    return CreateOrderService.save(scratch(oModel, returnsScratch()), itemsBinding([returnsRow("05")]), oSession, {}).then(function () {
+      assert.ok(false, "must reject");
+    }, function (oActual) {
+      assert.strictEqual(oActual, oActionError, "the original error");
+      assert.notOk("orderCreatedId" in oActual, "nothing was saved");
+      assert.ok(find(oModel.log, function (e) { return e.type === "execute" && e.path === ReturnsSchema.discardAction + "(...)"; }) > -1, "DiscardChanges sent");
+      assert.strictEqual(find(oModel.log, isSaveBind), -1, "SaveChanges never bound");
+      assert.deepEqual([oSession.opened, oSession.plainContext, oSession.pending], [false, null, null], "session reset");
+    });
+  });
+
+  QUnit.test("postItem: no Rejection Reason, no action (GH-115)", function (assert) {
+    var oModel = stubModel();
+    var oSession = openSession(oModel);
+    var oScratch = scratch(oModel, returnsScratch());
+    return CreateOrderService.postItem(oSession, oScratch, returnsRow()).then(function () {
+      return CreateOrderService.postItem(oSession, oScratch, returnsRow(null));
+    }).then(function () {
+      assert.strictEqual(oModel.log.filter(function (e) { return e.type === "create"; }).length, 2, "two items posted");
+      assert.strictEqual(oModel.log.filter(isInvoke).length, 0, "no action");
+      assert.strictEqual(find(oModel.log, function (e) { return e.type === "bindContext" && e.path === setRejectionReasonPath(); }), -1, "no action bound");
+    });
+  });
+
+  QUnit.test("keptItemPayload: Returns keep a non-empty Rejection Reason; empty values and Provider Orders drop it (GH-115)", function (assert) {
+    var oRow = { Product: "49281-0007-10", RequestedQuantity: "4", SalesDocumentRjcnReason: "05", Foo: 1 };
+    assert.deepEqual(CreateOrderService.keptItemPayload(oRow), { Product: "49281-0007-10", RequestedQuantity: "4", SalesDocumentRjcnReason: "05" }, "Returns: kept");
+    assert.deepEqual(CreateOrderService.keptItemPayload({ Product: "P", SalesDocumentRjcnReason: "" }), { Product: "P" }, "Returns: empty dropped");
+    assert.deepEqual(CreateOrderService.keptItemPayload({ Product: "P", SalesDocumentRjcnReason: null }), { Product: "P" }, "Returns: null dropped");
+    assert.deepEqual(CreateOrderService.keptItemPayload(undefined), {}, "no data");
+    ServiceSchema.use(OrdersSchema);
+    var oOrdersRow = { Product: "58160-0821-11", RequestedQuantity: "10", SalesDocumentRjcnReason: "05" };
+    assert.deepEqual(CreateOrderService.keptItemPayload(oOrdersRow), CreateOrderService.cleanItemPayload(oOrdersRow), "Provider Orders: same as cleanItemPayload");
+    assert.notOk("SalesDocumentRjcnReason" in CreateOrderService.keptItemPayload(oOrdersRow), "Provider Orders: not kept");
+  });
+
+  QUnit.test("Provider Orders postItem: unchanged, no action even when the row carries a Rejection Reason (GH-115, Q3)", function (assert) {
+    ServiceSchema.use(OrdersSchema);
+    var oModel = stubModel();
+    var oSession = openSession(oModel);
+    var oRow = { Product: "58160-0821-11", RequestedQuantity: "10", RequestedQuantityUnit: "DOS", SalesDocumentRjcnReason: "05" };
+    return CreateOrderService.postItem(oSession, scratch(oModel, {}), oRow).then(function () {
+      var aCreates = oModel.log.filter(function (e) { return e.type === "create"; });
+      assert.strictEqual(aCreates.length, 1, "one combined create");
+      assert.strictEqual(aCreates[0].body.Product, "58160-0821-11", "combined body");
+      assert.notOk("SalesDocumentRjcnReason" in aCreates[0].body, "not in the body");
+      assert.strictEqual(oModel.log.filter(isInvoke).length, 0, "no action");
     });
   });
 });
