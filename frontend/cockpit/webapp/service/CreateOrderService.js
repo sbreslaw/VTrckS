@@ -192,6 +192,21 @@ sap.ui.define([
     return oClean;
   }
 
+  // GH-115: the local rows rebuilt after a rejected Save keep the item Rejection
+  // Reason on Returns. It is Computed, so it is never sent in a body: postItem
+  // re-applies it through SetRejectionReason when the row is re-posted.
+  function keptItemPayload(oItemData) {
+    var oKept = cleanItemPayload(oItemData);
+    if (ServiceSchema.profileId === "returns") {
+      var sProperty = ServiceSchema.itemProperties.rejectionReason;
+      var sReason = (oItemData || {})[sProperty];
+      if (typeof sReason === "string" && sReason) {
+        oKept[sProperty] = sReason;
+      }
+    }
+    return oKept;
+  }
+
   // GH-111: the header values both header writes send - every
   // createReplayHeaderProperties entry with a scratch value; undefined/""/null
   // are skipped (a null on a Nullable="false" field fails the whole changeset,
@@ -277,6 +292,7 @@ sap.ui.define([
     // exact same whitelist this module itself replays - no second,
     // drift-prone copy of getItemProperties().
     cleanItemPayload: cleanItemPayload,
+    keptItemPayload: keptItemPayload,
 
     // Enter create mode: a transient list-binding context bound to the whole
     // Detail view — a local scratchpad only (see header comment above); no
@@ -437,7 +453,9 @@ sap.ui.define([
     // caller (Detail.controller.js) still owns rebinding the Items table to
     // this session and refreshing the list to pick up any auto-inserted
     // ancillary sibling rows (a single-entity POST response cannot include
-    // them).
+    // them). GH-115: a Returns row that carries a Rejection Reason (kept after
+    // a rejected Save, keptItemPayload) gets it re-applied by SetRejectionReason
+    // after the PATCHes, before this resolves.
     postItem: function (oSession, oScratchContext, oItemData) {
       var oModel = oScratchContext.getModel();
       var bReturns = ServiceSchema.profileId === "returns";
@@ -498,7 +516,16 @@ sap.ui.define([
             });
             return Promise.all(aPatches);
           }).then(function () {
-            return oIncrementalContext;
+            var sReason = (oItemData || {})[ServiceSchema.itemProperties.rejectionReason];
+            if (typeof sReason !== "string" || !sReason) {
+              return oIncrementalContext;
+            }
+            var oActions = ServiceSchema.itemActions;
+            var oAction = oModel.bindContext(oActions.setRejectionReason + "(...)", oIncrementalContext);
+            oAction.setParameter(oActions.setRejectionReasonParameter, sReason);
+            return oAction.invoke(ITEM_GROUP).then(function () {
+              return oIncrementalContext;
+            });
           });
         }
         var oNewItemContext = oItemsBinding.create(cleanItemPayload(oItemData));
