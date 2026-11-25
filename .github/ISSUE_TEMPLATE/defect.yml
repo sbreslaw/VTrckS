@@ -60,6 +60,7 @@ body:
         - "Jigisha (@BO79)"
         - "DJ Fesco (@BN68)"
         - "Anitha (@BN95)"
+        - "Serge (@BU77)"
     validations:
       required: true
   - type: textarea
