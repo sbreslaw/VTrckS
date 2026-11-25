@@ -547,6 +547,11 @@ sap.ui.define([
     // GH-98: General edit changes the AP Contact Person inside an edit session
     // opened at Save (Detail.controller.js#_saveDetailsContactSession).
     contactEditableInEdit: true,
+    // GH-111: create writes the header fields (createReplayHeaderProperties) into the
+    // open create session before SaveChanges, so the backend save checks
+    // (USEREXIT_SAVE_DOCUMENT_PREPARE) see them; after SaveChanges only the ship-to
+    // address is written (CreateOrderService.js#_commitStickySession).
+    createHeaderInSession: true,
 
     // Sold-To partner function (internal code, PartnerFunction_Text "Sold-to party").
     // formatter.mainPartnerText marks it as the Main Partner in the read-only
@@ -734,8 +739,9 @@ sap.ui.define([
     // replay (live-reported: SpecialProcessingCode/CustomerPurchaseOrderDate
     // entered during create were never sent/persisted). returnType's earlier
     // ASSERTION_FAILED crash was from PATCHing it on an EXISTING order in
-    // change-mode - that risk is unrelated to create-time replay (which only
-    // ever runs once, immediately after this same order's own SaveChanges)
+    // change-mode - that risk is unrelated to create-time replay (which runs
+    // once per create - on Returns inside the create session right before
+    // SaveChanges, createHeaderInSession, GH-111)
     // and is already independently blocked at the UI level (the ComboBox is
     // only ever rendered editable in createMode, Details.fragment.xml).
     updatableHeaderProperties: {
